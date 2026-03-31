@@ -121,7 +121,7 @@ $fullName = $_SESSION['full_name'];
                         <thead>
                             <tr>
                                 <th>Ime</th>
-                                <th>Email</th>
+                                <th>Email / Uporabniško ime</th>
                                 <th>Restavracija</th>
                                 <th>Status</th>
                                 <th></th>

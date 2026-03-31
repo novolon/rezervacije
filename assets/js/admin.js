@@ -227,7 +227,7 @@
         tbody.innerHTML = users.map(u => `
             <tr>
                 <td><strong>${h(u.full_name)}</strong></td>
-                <td>${h(u.email)}</td>
+                <td>${u.email ? h(u.email) : `<span style="color:var(--color-muted);font-size:.8rem">👤 ${h(u.username)}</span>`}</td>
                 <td>${u.restaurant_name ? h(u.restaurant_name) : '<span style="color:var(--color-muted)">—</span>'}</td>
                 <td><span class="badge ${u.is_active == 1 ? 'badge-active' : 'badge-inactive'}">${u.is_active == 1 ? 'Aktiven' : 'Neaktiven'}</span></td>
                 <td>
@@ -258,6 +258,9 @@
         overlay.className = 'modal-overlay';
         overlay.id = 'admin-modal';
 
+        // Določi začetni tip prijave (email ali username)
+        const initLoginType = user ? (user.email ? 'email' : 'username') : 'email';
+
         overlay.innerHTML = `
         <div class="modal-box">
             <div class="modal-header">
@@ -269,29 +272,49 @@
             <div class="modal-body">
                 <div id="admin-user-error" class="admin-error"></div>
                 <div class="admin-form">
-                    <div class="admin-field-row">
-                        <div class="admin-field">
-                            <label>Polno ime *</label>
-                            <input id="u-fullname" type="text" value="${h(user?.full_name || '')}">
-                        </div>
-                        <div class="admin-field">
-                            <label>Email *</label>
-                            <input id="u-email" type="email" value="${h(user?.email || '')}" autocomplete="off">
+                    <div class="admin-field">
+                        <label>Polno ime *</label>
+                        <input id="u-fullname" type="text" value="${h(user?.full_name || '')}">
+                    </div>
+
+                    <!-- Tip prijave: email ali username -->
+                    <div class="admin-field">
+                        <label>Tip prijave *</label>
+                        <div style="display:flex;gap:16px;margin-top:4px">
+                            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer">
+                                <input type="radio" name="u-login-type" value="email" ${initLoginType === 'email' ? 'checked' : ''} onchange="AdminUsers.toggleLoginType()">
+                                Email
+                            </label>
+                            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer">
+                                <input type="radio" name="u-login-type" value="username" ${initLoginType === 'username' ? 'checked' : ''} onchange="AdminUsers.toggleLoginType()">
+                                Uporabniško ime
+                            </label>
                         </div>
                     </div>
+
                     <div class="admin-field-row">
+                        <div class="admin-field" id="u-email-field" style="${initLoginType !== 'email' ? 'display:none' : ''}">
+                            <label>Email</label>
+                            <input id="u-email" type="email" value="${h(user?.email || '')}" autocomplete="off">
+                        </div>
+                        <div class="admin-field" id="u-username-field" style="${initLoginType !== 'username' ? 'display:none' : ''}">
+                            <label>Uporabniško ime</label>
+                            <input id="u-username" type="text" value="${h(user?.username || '')}" autocomplete="off" placeholder="npr. janez.novak">
+                        </div>
                         <div class="admin-field">
                             <label>${mode === 'edit' ? 'Novo geslo (prazno = brez menjave)' : 'Geslo *'}</label>
                             <input id="u-password" type="password" autocomplete="new-password">
                         </div>
-                        <div class="admin-field">
-                            <label>Restavracija *</label>
-                            <select id="u-restaurant">
-                                <option value="">— Izberi —</option>
-                                ${buildRestOptions(user?.restaurant_id)}
-                            </select>
-                        </div>
                     </div>
+
+                    <div class="admin-field">
+                        <label>Restavracija *</label>
+                        <select id="u-restaurant">
+                            <option value="">— Izberi —</option>
+                            ${buildRestOptions(user?.restaurant_id)}
+                        </select>
+                    </div>
+
                     ${user ? `<div class="admin-field">
                         <label>Status</label>
                         <select id="u-active">
@@ -311,16 +334,23 @@
         document.body.appendChild(overlay);
 
         document.getElementById('admin-user-save').addEventListener('click', async () => {
-            const fullname = document.getElementById('u-fullname').value.trim();
-            const email    = document.getElementById('u-email').value.trim();
-            const password = document.getElementById('u-password').value;
-            const restId   = document.getElementById('u-restaurant')?.value || null;
-            const active   = user ? parseInt(document.getElementById('u-active').value) : undefined;
-            const errEl    = document.getElementById('admin-user-error');
+            const fullname   = document.getElementById('u-fullname').value.trim();
+            const loginType  = document.querySelector('input[name="u-login-type"]:checked')?.value || 'email';
+            const email      = loginType === 'email'    ? (document.getElementById('u-email')?.value.trim()    || '') : '';
+            const username   = loginType === 'username' ? (document.getElementById('u-username')?.value.trim() || '') : '';
+            const password   = document.getElementById('u-password').value;
+            const restId     = document.getElementById('u-restaurant')?.value || null;
+            const active     = user ? parseInt(document.getElementById('u-active').value) : undefined;
+            const errEl      = document.getElementById('admin-user-error');
 
-            if (!fullname || !email) {
-                errEl.textContent = 'Ime in email sta obvezna.';
-                errEl.style.display = 'block'; return;
+            if (!fullname) {
+                errEl.textContent = 'Ime je obvezno.'; errEl.style.display = 'block'; return;
+            }
+            if (loginType === 'email' && !email) {
+                errEl.textContent = 'Email je obvezen.'; errEl.style.display = 'block'; return;
+            }
+            if (loginType === 'username' && !username) {
+                errEl.textContent = 'Uporabniško ime je obvezno.'; errEl.style.display = 'block'; return;
             }
             if (mode === 'create' && !password) {
                 errEl.textContent = 'Geslo je obvezno.';
@@ -332,7 +362,9 @@
             }
             errEl.style.display = 'none';
 
-            const body = { full_name: fullname, email, role: 'user', restaurant_id: restId };
+            const body = { full_name: fullname, role: 'user', restaurant_id: restId };
+            if (loginType === 'email')    { body.email = email;       body.username = null; }
+            if (loginType === 'username') { body.username = username;  body.email = null; }
             if (password) body.password = password;
             if (active !== undefined) body.is_active = active;
 
@@ -362,6 +394,13 @@
                 toast(`Uporabnik "${name}" deaktiviran.`);
                 loadUsers();
             } catch(e) { toast(e.message, 'error'); }
+        },
+        toggleLoginType: () => {
+            const type = document.querySelector('input[name="u-login-type"]:checked')?.value;
+            const emailField    = document.getElementById('u-email-field');
+            const usernameField = document.getElementById('u-username-field');
+            if (emailField)    emailField.style.display    = type === 'email'    ? '' : 'none';
+            if (usernameField) usernameField.style.display = type === 'username' ? '' : 'none';
         },
     };
     window.AdminUsers = AdminUsers;

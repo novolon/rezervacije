@@ -12,8 +12,9 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- Uporabniki
 CREATE TABLE users (
     id                  INT UNSIGNED      AUTO_INCREMENT PRIMARY KEY,
-    email               VARCHAR(180)      NOT NULL UNIQUE,
+    email               VARCHAR(180)      NULL DEFAULT NULL UNIQUE,
     email_verified_at   DATETIME          NULL DEFAULT NULL,
+    username            VARCHAR(60)       NULL DEFAULT NULL UNIQUE, -- alternativa emailu za userje brez maila
     password_hash       VARCHAR(255)      NOT NULL,
     full_name           VARCHAR(120)      NOT NULL,
     role                ENUM('superadmin','admin','user') NOT NULL DEFAULT 'user',

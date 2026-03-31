@@ -79,14 +79,21 @@ if ($method === 'POST') {
     }
 
     $body      = get_body();
-    $email     = trim($body['email']     ?? '');
+    $email     = trim($body['email']    ?? '') ?: null;
+    $username  = trim($body['username'] ?? '') ?: null;
     $full_name = trim($body['full_name'] ?? '');
     $password  = $body['password']       ?? '';
-    $role      = ($body['role'] ?? '') === 'user' ? 'user' : 'user'; // admin ustvarja samo 'user' role
     $rest_id   = isset($body['restaurant_id']) ? (int)$body['restaurant_id'] : null;
 
-    if (!$email || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        json_response(false, null, 'Veljaven email je obvezen.', 400);
+    // Potreben email ali username (ne oba skupaj obvezna)
+    if (!$email && !$username) {
+        json_response(false, null, 'Vnesite email ali uporabniško ime.', 400);
+    }
+    if ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        json_response(false, null, 'Email naslov ni veljaven.', 400);
+    }
+    if ($username && (strlen($username) < 3 || !preg_match('/^[a-zA-Z0-9._-]+$/', $username))) {
+        json_response(false, null, 'Uporabniško ime mora imeti vsaj 3 znake (a-z, 0-9, . _ -).', 400);
     }
     if (!$full_name || !$password) {
         json_response(false, null, 'Ime in geslo sta obvezna.', 400);
@@ -103,13 +110,14 @@ if ($method === 'POST') {
     try {
         $hash = password_hash($password, PASSWORD_BCRYPT);
         $stmt = $pdo->prepare("
-            INSERT INTO users (email, password_hash, full_name, role, restaurant_id, subscription_status, is_active)
-            VALUES (?, ?, ?, 'user', ?, 'active', 1)
+            INSERT INTO users (email, username, password_hash, full_name, role, restaurant_id,
+                               email_verified_at, subscription_status, is_active)
+            VALUES (?, ?, ?, ?, 'user', ?, NOW(), 'active', 1)
         ");
-        $stmt->execute([$email, $hash, $full_name, $rest_id]);
+        $stmt->execute([$email, $username, $hash, $full_name, $rest_id]);
         $id   = (int) $pdo->lastInsertId();
         $stmt = $pdo->prepare("
-            SELECT u.id, u.email, u.full_name, u.role, u.restaurant_id, u.is_active, u.created_at,
+            SELECT u.id, u.email, u.username, u.full_name, u.role, u.restaurant_id, u.is_active, u.created_at,
                    r.name AS restaurant_name
             FROM users u LEFT JOIN restaurants r ON u.restaurant_id = r.id WHERE u.id = ?
         ");
@@ -117,7 +125,7 @@ if ($method === 'POST') {
         json_response(true, $stmt->fetch(), '', 201);
     } catch (PDOException $e) {
         if ($e->getCode() === '23000') {
-            json_response(false, null, 'Email naslov je že zaseden.', 409);
+            json_response(false, null, 'Email ali uporabniško ime je že zasedeno.', 409);
         }
         error_log('User create error: ' . $e->getMessage());
         json_response(false, null, 'Napaka pri shranjevanju.', 500);
@@ -145,8 +153,19 @@ if ($method === 'PUT') {
     if (isset($body['full_name']) && trim($body['full_name'])) {
         $sets[] = 'full_name = ?'; $params[] = trim($body['full_name']);
     }
-    if (isset($body['email']) && filter_var(trim($body['email']), FILTER_VALIDATE_EMAIL)) {
-        $sets[] = 'email = ?'; $params[] = trim($body['email']);
+    if (array_key_exists('email', $body)) {
+        $newEmail = trim($body['email']) ?: null;
+        if ($newEmail && !filter_var($newEmail, FILTER_VALIDATE_EMAIL)) {
+            json_response(false, null, 'Email naslov ni veljaven.', 400);
+        }
+        $sets[] = 'email = ?'; $params[] = $newEmail;
+    }
+    if (array_key_exists('username', $body)) {
+        $newUsername = trim($body['username']) ?: null;
+        if ($newUsername && (strlen($newUsername) < 3 || !preg_match('/^[a-zA-Z0-9._-]+$/', $newUsername))) {
+            json_response(false, null, 'Uporabniško ime mora imeti vsaj 3 znake (a-z, 0-9, . _ -).', 400);
+        }
+        $sets[] = 'username = ?'; $params[] = $newUsername;
     }
     if (!empty($body['password'])) {
         $sets[] = 'password_hash = ?'; $params[] = password_hash($body['password'], PASSWORD_BCRYPT);

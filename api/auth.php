@@ -10,22 +10,23 @@ $method = $_SERVER['REQUEST_METHOD'];
 // POST = prijava
 if ($method === 'POST') {
     $body     = get_body();
-    $email    = trim($body['email'] ?? '');
+    $login    = trim($body['email'] ?? '');  // sprejme email ali username
     $password = $body['password'] ?? '';
 
-    if (!$email || !$password) {
-        json_response(false, null, 'Vnesite email in geslo.', 400);
+    if (!$login || !$password) {
+        json_response(false, null, 'Vnesite email / uporabniško ime in geslo.', 400);
     }
 
     try {
         $pdo  = getDB();
+        // Išči po emailu ali po usernameu
         $stmt = $pdo->prepare("
             SELECT u.*, r.name AS restaurant_name, r.reservation_duration, r.color AS restaurant_color
             FROM users u
             LEFT JOIN restaurants r ON u.restaurant_id = r.id
-            WHERE u.email = ? AND u.is_active = 1
+            WHERE (u.email = ? OR u.username = ?) AND u.is_active = 1
         ");
-        $stmt->execute([$email]);
+        $stmt->execute([$login, $login]);
         $user = $stmt->fetch();
 
         if (!$user || !password_verify($password, $user['password_hash'])) {

@@ -37,8 +37,8 @@ if (is_logged_in()) {
 
         <form id="login-form" autocomplete="off">
             <div class="form-group">
-                <label for="email">Email</label>
-                <input type="email" id="email" name="email" required autofocus autocomplete="email">
+                <label for="email">Email ali uporabniško ime</label>
+                <input type="text" id="email" name="email" required autofocus autocomplete="username">
             </div>
             <div class="form-group">
                 <label for="password">Geslo</label>
