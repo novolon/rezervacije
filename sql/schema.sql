@@ -13,6 +13,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 CREATE TABLE users (
     id                  INT UNSIGNED      AUTO_INCREMENT PRIMARY KEY,
     email               VARCHAR(180)      NOT NULL UNIQUE,
+    email_verified_at   DATETIME          NULL DEFAULT NULL,
     password_hash       VARCHAR(255)      NOT NULL,
     full_name           VARCHAR(120)      NOT NULL,
     role                ENUM('superadmin','admin','user') NOT NULL DEFAULT 'user',
@@ -22,6 +23,9 @@ CREATE TABLE users (
     is_active           TINYINT(1)        NOT NULL DEFAULT 1,
     remember_token      VARCHAR(255)      NULL DEFAULT NULL,
     remember_expires    DATETIME          NULL DEFAULT NULL,
+    verification_token  VARCHAR(64)       NULL DEFAULT NULL,
+    reset_token         VARCHAR(64)       NULL DEFAULT NULL,
+    reset_token_expires DATETIME          NULL DEFAULT NULL,
     created_at          DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 

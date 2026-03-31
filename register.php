@@ -2,6 +2,7 @@
 require_once 'includes/auth_check.php';
 require_once 'includes/db.php';
 require_once 'includes/functions.php';
+require_once 'includes/mailer.php';
 
 if (is_logged_in()) {
     redirect_to_main();
@@ -34,13 +35,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         try {
             $pdo = getDB();
 
-            $hash      = password_hash($password, PASSWORD_BCRYPT);
-            $trialEnds = date('Y-m-d H:i:s', strtotime('+14 days'));
+            $hash              = password_hash($password, PASSWORD_BCRYPT);
+            $trialEnds         = date('Y-m-d H:i:s', strtotime('+14 days'));
+            $verificationToken = bin2hex(random_bytes(32));
 
             $pdo->prepare("
-                INSERT INTO users (email, password_hash, full_name, role, trial_ends_at, subscription_status, is_active)
-                VALUES (?, ?, ?, 'admin', ?, 'trial', 1)
-            ")->execute([$post['email'], $hash, $post['full_name'], $trialEnds]);
+                INSERT INTO users
+                    (email, password_hash, full_name, role, trial_ends_at, subscription_status,
+                     is_active, verification_token)
+                VALUES (?, ?, ?, 'admin', ?, 'trial', 1, ?)
+            ")->execute([
+                $post['email'], $hash, $post['full_name'], $trialEnds, $verificationToken
+            ]);
+
+            send_verification_email($post['email'], $post['full_name'], $verificationToken);
 
             $success = true;
 
@@ -76,14 +84,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </svg>
         </div>
         <h1><?= APP_NAME ?></h1>
-        <p class="subtitle">Registracija – 14 dni brezplačno</p>
+        <p class="subtitle">Registracija</p>
 
         <?php if ($success): ?>
             <div class="register-success">
-                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
-                <h2>Dobrodošel/a!</h2>
-                <p>Tvoj račun je ustvarjen. 14-dnevni brezplačni preizkus se začne zdaj.</p>
-                <a href="<?= BASE_PATH ?>/login.php" class="btn-register-login">Prijava →</a>
+                <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="1.8"><path d="M3 8l7.89 5.26a2 2 0 0 0 2.22 0L21 8M5 19h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2z"/></svg>
+                <h2>Preverite vaš email!</h2>
+                <p>Poslali smo potrditveno sporočilo na<br><strong><?= h($post['email']) ?></strong></p>
+                <p style="font-size:.8rem;color:#9CA3AF">Kliknite link v emailu, da aktivirate račun. Preverite tudi mapo Spam.</p>
+                <a href="<?= BASE_PATH ?>/login.php" class="btn-register-login">Nazaj na prijavo</a>
             </div>
         <?php else: ?>
 

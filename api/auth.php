@@ -32,6 +32,11 @@ if ($method === 'POST') {
             json_response(false, null, 'Napačen email ali geslo.', 401);
         }
 
+        // Blokiraj nepotrjene emaile (superadmin in user sta vedno potrjena)
+        if ($user['role'] === 'admin' && empty($user['email_verified_at'])) {
+            json_response(false, null, 'email_not_verified', 403);
+        }
+
         // Ustvari novo sejo (preprečimo session fixation)
         session_regenerate_id(true);
 

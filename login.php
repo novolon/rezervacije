@@ -29,6 +29,12 @@ if (is_logged_in()) {
 
         <div id="error-msg" class="error-msg" style="display:none"></div>
 
+        <!-- Opozorilo za nepotrjen email -->
+        <div id="verify-msg" style="display:none;background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:.85rem;color:#92400E;text-align:center">
+            <strong>Preverite vaš email!</strong><br>
+            Pred prijavo potrdite email naslov. Preverite mapo Spam.
+        </div>
+
         <form id="login-form" autocomplete="off">
             <div class="form-group">
                 <label for="email">Email</label>
@@ -38,11 +44,15 @@ if (is_logged_in()) {
                 <label for="password">Geslo</label>
                 <input type="password" id="password" name="password" required autocomplete="current-password">
             </div>
-            <div class="form-group remember-row">
+            <div class="form-group remember-row" style="justify-content:space-between;align-items:center">
                 <label class="remember-label">
                     <input type="checkbox" id="remember-me">
                     Zapomni si me (30 dni)
                 </label>
+                <a href="<?= BASE_PATH ?>/forgot-password.php"
+                   style="font-size:.8rem;color:#F59E0B;text-decoration:none;font-weight:500">
+                    Pozabljeno geslo?
+                </a>
             </div>
             <button type="submit" id="login-btn">
                 <span id="btn-text">Prijava</span>
@@ -61,8 +71,9 @@ if (is_logged_in()) {
 const BASE_PATH = '<?= BASE_PATH ?>';
 document.getElementById('login-form').addEventListener('submit', async function(e) {
     e.preventDefault();
-    const btn      = document.getElementById('login-btn');
-    const errDiv   = document.getElementById('error-msg');
+    const btn        = document.getElementById('login-btn');
+    const errDiv     = document.getElementById('error-msg');
+    const verifyDiv  = document.getElementById('verify-msg');
     const email      = document.getElementById('email').value.trim();
     const password   = document.getElementById('password').value;
     const rememberMe = document.getElementById('remember-me').checked;
@@ -70,7 +81,8 @@ document.getElementById('login-form').addEventListener('submit', async function(
     btn.disabled = true;
     document.getElementById('btn-text').style.display    = 'none';
     document.getElementById('btn-loading').style.display = 'inline';
-    errDiv.style.display = 'none';
+    errDiv.style.display   = 'none';
+    verifyDiv.style.display = 'none';
 
     try {
         const res  = await fetch(BASE_PATH + '/api/auth.php', {
@@ -83,8 +95,13 @@ document.getElementById('login-form').addEventListener('submit', async function(
         if (json.success) {
             window.location.href = json.data.redirect || BASE_PATH + '/pages/main.php';
         } else {
-            errDiv.textContent   = json.error || 'Napaka pri prijavi.';
-            errDiv.style.display = 'block';
+            // Nepotrjen email – posebno sporočilo
+            if (json.error === 'email_not_verified') {
+                verifyDiv.style.display = 'block';
+            } else {
+                errDiv.textContent   = json.error || 'Napaka pri prijavi.';
+                errDiv.style.display = 'block';
+            }
             btn.disabled = false;
             document.getElementById('btn-text').style.display    = 'inline';
             document.getElementById('btn-loading').style.display = 'none';
