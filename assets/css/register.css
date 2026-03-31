@@ -1,0 +1,44 @@
+/* Register page – dopolnilo k login.css */
+
+.register-card {
+    max-width: 420px;
+}
+
+.register-success {
+    text-align: center;
+    padding: 8px 0;
+}
+
+.register-success svg {
+    margin-bottom: 12px;
+}
+
+.register-success h2 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #065F46;
+    margin: 0 0 8px;
+}
+
+.register-success p {
+    font-size: .875rem;
+    color: #374151;
+    margin: 0 0 24px;
+    line-height: 1.5;
+}
+
+.btn-register-login {
+    display: inline-block;
+    background: #F59E0B;
+    color: #fff;
+    font-weight: 600;
+    font-size: .9rem;
+    padding: 10px 28px;
+    border-radius: 8px;
+    text-decoration: none;
+    transition: background .15s;
+}
+
+.btn-register-login:hover {
+    background: #D97706;
+}

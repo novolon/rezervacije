@@ -1,0 +1,224 @@
+/* =============================================
+   Mesečni koledar
+   ============================================= */
+.calendar-wrapper {
+    background: var(--color-surface);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+    max-width: 720px;
+    margin: 0 auto;
+}
+
+/* Navigacija meseca */
+.calendar-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.calendar-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--color-text);
+    letter-spacing: -.01em;
+}
+
+.cal-nav-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1.5px solid var(--color-border);
+    background: transparent;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-muted);
+    transition: all var(--transition);
+}
+
+.cal-nav-btn:hover {
+    background: var(--color-accent-light);
+    border-color: var(--color-accent);
+    color: var(--color-accent);
+}
+
+/* Glave dni */
+.calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+}
+
+.calendar-day-header {
+    text-align: center;
+    padding: 10px 4px;
+    font-size: .72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--color-muted);
+    border-bottom: 1px solid var(--color-border);
+}
+
+/* Celice dni */
+.calendar-cell {
+    min-height: 80px;
+    padding: 8px;
+    border-right: 1px solid var(--color-border);
+    border-bottom: 1px solid var(--color-border);
+    cursor: pointer;
+    transition: background var(--transition);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.calendar-cell:nth-child(7n) { border-right: none; }
+
+/* Prazna celica (dni pred začetkom meseca) */
+.calendar-cell.empty {
+    background: #FAFAFA;
+    cursor: default;
+}
+
+/* Hover */
+.calendar-cell:not(.empty):hover {
+    background: var(--color-accent-light);
+}
+
+/* Pretekli dnevi */
+.calendar-cell.past {
+    background: var(--color-past);
+}
+
+.calendar-cell.past:hover {
+    background: #FCE7E7;
+}
+
+/* Danes */
+.calendar-cell.today {
+    background: var(--color-surface);
+    box-shadow: inset 0 0 0 2px var(--color-accent);
+}
+
+.calendar-cell.today:hover {
+    background: var(--color-accent-light);
+}
+
+/* Izbran dan */
+.calendar-cell.selected {
+    background: var(--color-sidebar);
+}
+
+.calendar-cell.selected:hover {
+    background: var(--color-sidebar-2);
+}
+
+.calendar-cell.selected .cell-day-num,
+.calendar-cell.selected .cell-count,
+.calendar-cell.selected .cell-guests {
+    color: #fff !important;
+}
+
+.calendar-cell.selected .cell-badge {
+    background: var(--color-accent);
+    color: var(--color-sidebar);
+}
+
+/* Dan + danes označba */
+.cell-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+
+.cell-day-num {
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--color-text);
+    line-height: 1;
+}
+
+.calendar-cell.past .cell-day-num { color: var(--color-past-text); }
+.calendar-cell.today .cell-day-num { color: var(--color-accent); }
+
+.cell-badge {
+    background: var(--color-accent);
+    color: #fff;
+    font-size: .65rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 20px;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.cell-count {
+    font-size: .72rem;
+    font-weight: 500;
+    color: var(--color-muted);
+}
+
+.cell-guests {
+    font-size: .68rem;
+    color: var(--color-muted);
+    margin-top: auto;
+}
+
+/* Indikator rezervacij (ikone) */
+.cell-dots {
+    display: flex;
+    gap: 3px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+}
+
+.cell-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--color-accent);
+}
+
+/* Zadnja vrstica brez spodnje mejne črte */
+.calendar-row-last .calendar-cell { border-bottom: none; }
+
+/* Responsive – tablet */
+@media (max-width: 900px) {
+    .calendar-cell { min-height: 60px; padding: 6px; }
+    .calendar-wrapper { max-width: 100%; }
+}
+
+/* Responsive – telefon */
+@media (max-width: 768px) {
+    .calendar-wrapper {
+        border-radius: 10px;
+        margin: 0;
+    }
+
+    .calendar-nav { padding: 12px 16px; }
+    .calendar-title { font-size: .95rem; }
+
+    .calendar-cell {
+        min-height: 48px;
+        padding: 4px;
+    }
+
+    .cell-day-num { font-size: .8rem; }
+    .cell-count   { font-size: .65rem; }
+    .cell-guests  { display: none; }  /* skrij osebe na majhnem zaslonu */
+
+    .cell-badge {
+        font-size: .6rem;
+        padding: 1px 5px;
+    }
+
+    .calendar-day-header {
+        font-size: .65rem;
+        padding: 8px 2px;
+    }
+}
