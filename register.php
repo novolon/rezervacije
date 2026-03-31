@@ -1,6 +1,7 @@
 <?php
 require_once 'includes/auth_check.php';
 require_once 'includes/db.php';
+require_once 'includes/functions.php';
 
 if (is_logged_in()) {
     redirect_to_main();
