@@ -1,6 +1,8 @@
 <?php
 require_once '../includes/auth_check.php';
+require_once '../includes/db.php';
 require_once '../includes/functions.php';
+require_once '../includes/plans.php';
 
 if (!is_logged_in()) {
     redirect_to_login();
@@ -17,6 +19,8 @@ if ($_SESSION['role'] !== 'admin') {
 }
 
 $fullName = $_SESSION['full_name'];
+$pdo = getDB();
+refresh_subscription_session($pdo);
 ?>
 <!DOCTYPE html>
 <html lang="sl">
@@ -32,6 +36,7 @@ $fullName = $_SESSION['full_name'];
 </head>
 <body>
 
+<?php require_once '../includes/trial_banner.php'; ?>
 <!-- ── Header ──────────────────────────────────────────────── -->
 <header class="app-header">
     <a href="<?= BASE_PATH ?>/pages/main.php" class="header-logo">
@@ -51,6 +56,10 @@ $fullName = $_SESSION['full_name'];
         <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
             Razpored
+        </a>
+        <a href="<?= BASE_PATH ?>/pages/billing.php" class="btn-header btn-header-admin">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+            Paketi
         </a>
         <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
     </div>

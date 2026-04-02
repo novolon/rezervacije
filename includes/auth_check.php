@@ -65,6 +65,23 @@ function is_logged_in(): bool {
     return !empty($_SESSION['user_id']);
 }
 
+/**
+ * Osveži podatke o naročnini v session (cache 5 min).
+ * Kliči po vsakem page loadu za admin role.
+ */
+function refresh_subscription_session(PDO $pdo): void {
+    if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'admin') return;
+    $cacheKey = '_sub_cached_at';
+    if (!empty($_SESSION[$cacheKey]) && (time() - $_SESSION[$cacheKey]) < 300) return;
+
+    require_once __DIR__ . '/plans.php';
+    $sub = get_active_subscription($pdo, (int)$_SESSION['user_id']);
+    $_SESSION['plan_slug']       = $sub['plan_slug'] ?? 'trial';
+    $_SESSION['trial_days_left'] = get_trial_days_left($sub);
+    $_SESSION['trial_expired']   = is_trial_expired($sub);
+    $_SESSION[$cacheKey]         = time();
+}
+
 function redirect_to_login(): void {
     header('Location: ' . BASE_PATH . '/login.php');
     exit;

@@ -2,6 +2,7 @@
 require_once '../includes/auth_check.php';
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
+require_once '../includes/plans.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -9,8 +10,52 @@ $session = require_superadmin();
 $pdo     = getDB();
 $method  = $_SERVER['REQUEST_METHOD'];
 
-// ─── POST: testni email ────────────────────────────────────────
+// ─── POST ──────────────────────────────────────────────────────
 if ($method === 'POST') {
+    $body   = get_body();
+    $action = $body['action'] ?? '';
+
+    // Ročno dodeljevanje paketa
+    if ($action === 'assign_plan') {
+        $userId   = isset($body['user_id'])   ? (int)$body['user_id']   : 0;
+        $planSlug = $body['plan_slug'] ?? '';
+        $endsAt   = $body['ends_at']   ?? null; // null = trajno
+
+        if (!$userId) json_response(false, null, 'user_id je obvezen.', 400);
+        if (!array_key_exists($planSlug, PLANS)) json_response(false, null, 'Neveljaven paket.', 400);
+        if ($endsAt && !preg_match('/^\d{4}-\d{2}-\d{2}/', $endsAt)) {
+            json_response(false, null, 'Neveljaven datum poteka.', 400);
+        }
+
+        // Preveri da user obstaja in je admin
+        $chk = $pdo->prepare("SELECT id FROM users WHERE id = ? AND role = 'admin'");
+        $chk->execute([$userId]);
+        if (!$chk->fetchColumn()) json_response(false, null, 'Admin ne obstaja.', 404);
+
+        try {
+            // Deaktiviraj obstoječe aktivne naročnine
+            $pdo->prepare("UPDATE subscriptions SET status = 'canceled' WHERE user_id = ? AND status IN ('trial','active')")
+                ->execute([$userId]);
+
+            // Vstavi novo
+            $status = $planSlug === 'trial' ? 'trial' : 'active';
+            $pdo->prepare("
+                INSERT INTO subscriptions (user_id, plan_slug, status, ends_at, assigned_by)
+                VALUES (?, ?, ?, ?, ?)
+            ")->execute([$userId, $planSlug, $status, $endsAt ?: null, $session['user_id']]);
+
+            // Posodobi users.subscription_status za kompatibilnost
+            $pdo->prepare("UPDATE users SET subscription_status = ? WHERE id = ?")
+                ->execute([$status, $userId]);
+
+            json_response(true, null, 'Paket dodeljen.');
+        } catch (PDOException $e) {
+            error_log('assign_plan error: ' . $e->getMessage());
+            json_response(false, null, 'Napaka pri dodeljevanju.', 500);
+        }
+    }
+
+    // Testni email
     require_once '../includes/mailer.php';
     $body  = get_body();
     $to    = trim($body['email'] ?? '');
@@ -46,9 +91,13 @@ if ($action === 'admins') {
     $stmt = $pdo->query("
         SELECT u.id, u.email, u.full_name, u.is_active,
                u.trial_ends_at, u.subscription_status, u.created_at,
-               COUNT(ra.restaurant_id) AS restaurant_count
+               COUNT(ra.restaurant_id) AS restaurant_count,
+               COALESCE(s.plan_slug, 'trial') AS plan_slug
         FROM users u
         LEFT JOIN restaurant_admins ra ON u.id = ra.user_id
+        LEFT JOIN subscriptions s ON s.user_id = u.id
+                                  AND s.status IN ('trial','active','pending_invoice')
+                                  AND (s.ends_at IS NULL OR s.ends_at > NOW())
         WHERE u.role = 'admin'
         GROUP BY u.id
         ORDER BY u.created_at DESC
@@ -146,6 +195,14 @@ if ($action === 'stats') {
         'today_reservations' => (int)$today_reservations,
         'trials'             => (int)$trials,
     ]);
+}
+
+// ─── Naročnina admina ─────────────────────────────────────────
+if ($action === 'subscription') {
+    $userId = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
+    if (!$userId) json_response(false, null, 'user_id je obvezen.', 400);
+    $sub = get_active_subscription($pdo, $userId);
+    json_response(true, $sub ?: ['plan_slug' => 'brez', 'status' => 'expired']);
 }
 
 json_response(false, null, 'Neznan action parameter.', 400);

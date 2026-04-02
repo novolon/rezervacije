@@ -2,6 +2,7 @@
 require_once '../includes/auth_check.php';
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
+require_once '../includes/plans.php';
 
 if (!is_logged_in()) {
     redirect_to_login();
@@ -14,6 +15,7 @@ if ($_SESSION['role'] === 'superadmin') {
 }
 
 $pdo = getDB();
+refresh_subscription_session($pdo);
 
 // Naloži restavracije glede na vlogo
 if ($_SESSION['role'] === 'admin') {
@@ -55,6 +57,7 @@ $restId   = $_SESSION['restaurant_id'];
 </head>
 <body>
 
+<?php require_once '../includes/trial_banner.php'; ?>
 <!-- ── Header ──────────────────────────────────────────────── -->
 <header class="app-header">
     <a href="<?= BASE_PATH ?>/pages/main.php" class="header-logo">
@@ -85,6 +88,10 @@ $restId   = $_SESSION['restaurant_id'];
             <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
                 Admin
+            </a>
+            <a href="<?= BASE_PATH ?>/pages/billing.php" class="btn-header btn-header-admin">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                Paketi
             </a>
         <?php endif; ?>
         <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
