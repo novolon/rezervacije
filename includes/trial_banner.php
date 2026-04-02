@@ -16,9 +16,14 @@ if ($planSlug !== 'trial') return; // plačljivi paket – ni bannerja
     <span>Vaš brezplačni trial je potekel. Za nadaljevanje izberite paket.</span>
     <a href="<?= BASE_PATH ?>/pages/billing.php" class="trial-banner-btn">Izberi paket</a>
 </div>
-<?php elseif ($daysLeft <= 7): ?>
+<?php elseif ($daysLeft > 0 && $daysLeft <= 7): ?>
 <div class="trial-banner trial-banner-warning">
-    <span>Vaš trial poteče čez <strong><?= $daysLeft ?> <?= $daysLeft === 1 ? 'dan' : ($daysLeft <= 4 ? 'dni' : 'dni') ?></strong>.</span>
+    <span>Vaš trial poteče čez <strong><?= $daysLeft ?> <?= $daysLeft === 1 ? 'dan' : 'dni' ?></strong>.</span>
     <a href="<?= BASE_PATH ?>/pages/billing.php" class="trial-banner-btn">Izberi paket →</a>
+</div>
+<?php else: ?>
+<div class="trial-banner" style="background:#F0FDF4;border-bottom:1px solid #BBF7D0;color:#166534">
+    <span>Brezplačni trial je aktiven.</span>
+    <a href="<?= BASE_PATH ?>/pages/billing.php" class="trial-banner-btn" style="background:rgba(0,0,0,.07)">Poglej pakete →</a>
 </div>
 <?php endif; ?>

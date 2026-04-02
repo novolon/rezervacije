@@ -88,7 +88,8 @@ function require_feature(PDO $pdo, array $session, string $feature): void {
 function get_trial_days_left(?array $sub): int {
     if (!$sub || $sub['plan_slug'] !== 'trial' || !$sub['ends_at']) return 0;
     $diff = (new DateTime($sub['ends_at']))->diff(new DateTime());
-    return max(0, (int)$diff->days * ($diff->invert ? 1 : -1));
+    // invert=1 pomeni ends_at je v prihodnosti (še ni potekel)
+    return $diff->invert === 0 ? 0 : max(0, (int)$diff->days);
 }
 
 // ─── Je trial potekel? ────────────────────────────────────────
