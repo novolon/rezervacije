@@ -36,7 +36,6 @@ refresh_subscription_session($pdo);
 </head>
 <body>
 
-<?php require_once '../includes/trial_banner.php'; ?>
 <!-- ── Header ──────────────────────────────────────────────── -->
 <header class="app-header">
     <a href="<?= BASE_PATH ?>/pages/main.php" class="header-logo">
@@ -65,6 +64,8 @@ refresh_subscription_session($pdo);
         <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
     </div>
 </header>
+
+<?php require_once '../includes/trial_banner.php'; ?>
 
 <!-- ── Vsebina ─────────────────────────────────────────────── -->
 <div class="admin-layout">

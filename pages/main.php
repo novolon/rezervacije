@@ -57,7 +57,6 @@ $restId   = $_SESSION['restaurant_id'];
 </head>
 <body>
 
-<?php require_once '../includes/trial_banner.php'; ?>
 <!-- ── Header ──────────────────────────────────────────────── -->
 <header class="app-header">
     <a href="<?= BASE_PATH ?>/pages/main.php" class="header-logo">
@@ -98,6 +97,8 @@ $restId   = $_SESSION['restaurant_id'];
         <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
     </div>
 </header>
+
+<?php require_once '../includes/trial_banner.php'; ?>
 
 <!-- ── Prazno stanje: admin brez restavracij ──────────────── -->
 <?php if ($isAdmin && empty($restaurants)): ?>

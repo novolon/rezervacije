@@ -37,8 +37,6 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
 </head>
 <body>
 
-<?php require_once '../includes/trial_banner.php'; ?>
-
 <header class="app-header">
     <a href="<?= BASE_PATH ?>/pages/main.php" class="header-logo">
         <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
@@ -60,6 +58,8 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
         <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
     </div>
 </header>
+
+<?php require_once '../includes/trial_banner.php'; ?>
 
 <div class="admin-layout">
 <div class="admin-content" style="max-width:900px">
