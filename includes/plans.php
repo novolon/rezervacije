@@ -99,6 +99,12 @@ function is_trial_expired(?array $sub): bool {
     return strtotime($sub['ends_at']) < time();
 }
 
+// ─── HTML badge za paket ──────────────────────────────────────
+function plan_badge(string $planSlug): string {
+    $label = PLANS[$planSlug]['name'] ?? ucfirst($planSlug);
+    return '<span class="plan-badge plan-badge-' . htmlspecialchars($planSlug, ENT_QUOTES) . '">' . htmlspecialchars($label, ENT_QUOTES) . '</span>';
+}
+
 // ─── Aktivni popust za paket (če obstaja) ─────────────────────
 function get_active_discount(PDO $pdo, string $planSlug): ?array {
     $stmt = $pdo->prepare("

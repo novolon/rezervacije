@@ -46,6 +46,7 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
             <path d="M7 10h14M7 14h14M7 18h9" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
         </svg>
         <?= h(APP_NAME) ?>
+        <?= plan_badge($currentPlan) ?>
     </a>
     <div class="header-restaurant">
         <span style="color:rgba(255,255,255,.5);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;font-weight:600">Paketi</span>
@@ -89,6 +90,9 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
         <?php endif; ?>
     </div>
 
+    <?php $isSubscribed = $currentPlan !== 'trial' && ($sub['status'] ?? '') === 'active'; ?>
+
+    <?php if (!$isSubscribed): ?>
     <!-- Billing cycle toggle -->
     <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:28px">
         <span style="font-size:.9rem;font-weight:500;color:#374151">Mesečno</span>
@@ -164,6 +168,30 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
         Plačilo je varno in šifrirano. Za letno plačilo po predračunu nas kontaktirajte.
         Vsak paket vključuje 30-dnevni trial za testiranje.
     </div>
+
+    <?php else: ?>
+    <!-- Naročnik – prikaz funkcionalnosti trenutnega paketa -->
+    <div style="max-width:480px;margin:0 auto 40px">
+        <h3 style="font-size:.85rem;text-transform:uppercase;letter-spacing:.06em;color:var(--color-muted);font-weight:600;margin-bottom:14px">Vključeno v vašem paketu</h3>
+        <ul class="pricing-features" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:18px 20px;gap:10px">
+            <?php foreach (FEATURE_LABELS as $fSlug => $fLabel):
+                $included = in_array($fSlug, PLANS[$currentPlan]['features']);
+            ?>
+            <li class="<?= $included ? 'feat-yes' : 'feat-no' ?>">
+                <?php if ($included): ?>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                <?php else: ?>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                <?php endif; ?>
+                <?= h($fLabel) ?>
+            </li>
+            <?php endforeach; ?>
+        </ul>
+        <p style="font-size:.8rem;color:var(--color-muted);text-align:center;margin-top:16px">
+            Za spremembo paketa uporabite gumb "Upravljaj naročnino" zgoraj ali nas kontaktirajte.
+        </p>
+    </div>
+    <?php endif; ?>
 
 </div>
 </div>

@@ -2,7 +2,7 @@
 require_once __DIR__ . '/../config.php';
 
 ini_set('session.cookie_httponly', '1');
-ini_set('session.cookie_samesite', 'Strict');
+ini_set('session.cookie_samesite', 'Lax'); // Strict blokira session pri Stripe redirectu
 
 if (session_status() === PHP_SESSION_NONE) {
     session_start();

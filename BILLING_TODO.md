@@ -85,35 +85,31 @@
 > Potrebno: Stripe secret key, publishable key, webhook endpoint URL
 
 ### 2.1 Setup
-- [ ] `composer require stripe/stripe-php`
-- [ ] Dodaj v `config.php`: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`
+- [x] Brez composerja – direktni curl klici (ni dependency)
+- [x] Dodaj v `config.php`: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICES`
 
 ### 2.2 Checkout
-- [ ] `api/billing.php` – POST `create_checkout_session`
-  - parametri: plan_slug, billing_cycle (monthly/yearly)
-  - ustvari Stripe Checkout Session, vrne URL
-- [ ] `pages/billing.php` – gumb "Izberi paket" pokliče API in preusmeri na Stripe
+- [x] `api/billing.php` – POST `create_checkout_session`
+- [x] `pages/billing.php` – gumb pokliče API, preusmeri na Stripe
+- [x] Stripe Checkout v slovenščini (`locale: sl`)
 
 ### 2.3 Uspešno plačilo
-- [ ] `pages/billing-success.php` – stran po uspešnem plačilu (Stripe redirect)
-- [ ] Prikaže potrditev, posodobi session
+- [x] `pages/billing-success.php` – potrditvena stran
+- [x] Fix: SameSite=Lax (Strict blokiralo session pri Stripe redirectu)
 
 ### 2.4 Webhook handler
-- [ ] `api/stripe-webhook.php`
-  - `checkout.session.completed` → aktiviraj naročnino v `subscriptions`
-  - `invoice.payment_succeeded` → podaljšaj `ends_at`
-  - `invoice.payment_failed` → status = 'payment_failed', pošlji email
-  - `customer.subscription.deleted` → status = 'canceled'
-  - `customer.subscription.trial_will_end` → pošlji opozorilo (backup za in-app)
+- [x] `api/stripe-webhook.php` – vsi ključni eventi
 
 ### 2.5 Customer portal
-- [ ] `api/billing.php` – POST `customer_portal` → vrne URL Stripe portala
-- [ ] Gumb "Upravljaj naročnino" v `pages/billing.php`
+- [x] POST `customer_portal` + gumb "Upravljaj naročnino"
 
 ### 2.6 Konfiguracija Stripe
-- [ ] V Stripe dashboardu: ustvari Products + Prices za vse 6 kombinacij (3 paketi × 2 cikla)
-- [ ] Shrani Price ID-je v `config.php` ali `includes/plans.php`
-- [ ] Webhook endpoint registracija v Stripe dashboardu
+- [x] Sandbox produkti + Price ID-ji nastavljeni
+- [x] Webhook endpoint registriran v Stripe dashboardu
+
+### 2.7 UX popravki (narejeno)
+- [x] Obstoječi naročniki ne vidijo pricing kartic (samo current plan + features)
+- [x] Plan badge poleg logotipa v headerju (Trial/Basic/Advanced/Premium)
 
 ---
 
@@ -187,9 +183,11 @@
 - [x] Faza 1.4 – Trial warning banner
 - [x] Faza 1.5 – Billing stran
 - [x] Faza 1.6 – Superadmin: ročno dodeljevanje
-- [ ] Faza 1.7 – Testiranje
-- [ ] Faza 2 – Stripe
-- [ ] Faza 3 – Predračun
-- [ ] Faza 4 – Popusti
-- [ ] Faza 5 – Self-booking
-- [ ] Faza 6 – Embed widget
+- [ ] Faza 1.7 – Testiranje (preveri feature gating, trial warning, superadmin dodeljevanje)
+- [x] Faza 2.1–2.6 – Stripe integracija (sandbox)
+- [x] Faza 2.7 – UX: plan badge, skrij pakete za naročnike, slovenščina
+- [ ] Faza 2.8 – Preklop na live Stripe (po testiranju)
+- [ ] Faza 3 – Predračun (letno plačilo po predračunu)
+- [ ] Faza 4 – Popusti (superadmin)
+- [ ] Faza 5 – Self-booking (Advanced paket)
+- [ ] Faza 6 – Embed widget (Premium paket)

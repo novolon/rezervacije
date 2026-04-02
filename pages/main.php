@@ -66,6 +66,7 @@ $restId   = $_SESSION['restaurant_id'];
             <path d="M7 10h14M7 14h14M7 18h9" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
         </svg>
         <?= h(APP_NAME) ?>
+        <?php if ($isAdmin): ?><?= plan_badge($_SESSION['plan_slug'] ?? 'trial') ?><?php endif; ?>
     </a>
 
     <div class="header-restaurant">

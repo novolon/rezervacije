@@ -329,3 +329,21 @@ html, body {
     color: inherit;
 }
 .trial-banner-btn:hover { background: rgba(0,0,0,.14); }
+
+/* ── Plan badge v headerju ────────────────────────────────────── */
+.plan-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    margin-left: 8px;
+    vertical-align: middle;
+}
+.plan-badge-trial    { background: #FEF3C7; color: #92400E; }
+.plan-badge-basic    { background: #EDE9FE; color: #5B21B6; }
+.plan-badge-advanced { background: #DBEAFE; color: #1D4ED8; }
+.plan-badge-premium  { background: #D1FAE5; color: #065F46; }

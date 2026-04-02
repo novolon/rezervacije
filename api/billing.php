@@ -61,6 +61,7 @@ if ($method === 'POST' && $action === 'create_checkout_session') {
         ]],
         'success_url'         => $baseUrl . '/pages/billing-success.php?session_id={CHECKOUT_SESSION_ID}',
         'cancel_url'          => $baseUrl . '/pages/billing.php?canceled=1',
+        'locale'              => 'sl',
         'subscription_data'   => [
             'metadata' => [
                 'user_id'       => $userId,
