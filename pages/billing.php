@@ -82,8 +82,10 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
                 <?php endif; ?>
             <?php endif; ?>
         </div>
-        <?php if ($currentPlan !== 'trial'): ?>
-            <div style="font-size:.8rem;color:var(--color-muted)">Za spremembe naročnine nas kontaktirajte.</div>
+        <?php if ($currentPlan !== 'trial' && ($sub['payment_method'] ?? '') === 'stripe'): ?>
+            <button onclick="openCustomerPortal()" class="btn btn-ghost" style="font-size:.85rem">
+                Upravljaj naročnino →
+            </button>
         <?php endif; ?>
     </div>
 
@@ -239,9 +241,44 @@ function updatePricing() {
 }
 yearly.addEventListener('change', updatePricing);
 
-function selectPlan(slug) {
-    // Placeholder – Stripe integracija v Fazi 2
-    alert('Plačilni sistem bo kmalu na voljo. Za takojšnjo aktivacijo nas kontaktirajte.');
+async function selectPlan(slug) {
+    const cycle = document.getElementById('billing-yearly').checked ? 'yearly' : 'monthly';
+    const btn   = document.querySelector(`[onclick="selectPlan('${slug}')"]`);
+    if (btn) { btn.disabled = true; btn.textContent = 'Preusmerjam…'; }
+
+    try {
+        const res = await fetch(APP_STATE.base + '/api/billing.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ action: 'create_checkout_session', plan_slug: slug, billing_cycle: cycle }),
+        });
+        const data = await res.json();
+        if (data.success && data.data?.url) {
+            window.location.href = data.data.url;
+        } else {
+            alert(data.error || 'Napaka pri plačilu.');
+            if (btn) { btn.disabled = false; btn.textContent = 'Izberi ' + slug.charAt(0).toUpperCase() + slug.slice(1); }
+        }
+    } catch(e) {
+        alert('Napaka pri povezavi.');
+        if (btn) { btn.disabled = false; }
+    }
+}
+
+async function openCustomerPortal() {
+    try {
+        const res  = await fetch(APP_STATE.base + '/api/billing.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ action: 'customer_portal' }),
+        });
+        const data = await res.json();
+        if (data.success && data.data?.url) {
+            window.location.href = data.data.url;
+        } else {
+            alert(data.error || 'Portal ni na voljo.');
+        }
+    } catch(e) { alert('Napaka pri povezavi.'); }
 }
 </script>
 </body>
