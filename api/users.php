@@ -19,7 +19,7 @@ if ($method === 'GET') {
     if ($id) {
         if ($session['role'] === 'superadmin') {
             $stmt = $pdo->prepare("
-                SELECT u.id, u.email, u.full_name, u.role, u.restaurant_id, u.is_active,
+                SELECT u.id, u.email, u.username, u.full_name, u.role, u.restaurant_id, u.is_active,
                        u.trial_ends_at, u.subscription_status, u.created_at,
                        r.name AS restaurant_name
                 FROM users u LEFT JOIN restaurants r ON u.restaurant_id = r.id
@@ -31,7 +31,7 @@ if ($method === 'GET') {
             if (empty($adminRestIds)) json_response(false, null, 'Uporabnik ne obstaja.', 404);
             $placeholders = implode(',', array_fill(0, count($adminRestIds), '?'));
             $stmt = $pdo->prepare("
-                SELECT u.id, u.email, u.full_name, u.role, u.restaurant_id, u.is_active, u.created_at,
+                SELECT u.id, u.email, u.username, u.full_name, u.role, u.restaurant_id, u.is_active, u.created_at,
                        r.name AS restaurant_name
                 FROM users u LEFT JOIN restaurants r ON u.restaurant_id = r.id
                 WHERE u.id = ? AND u.role = 'user' AND u.restaurant_id IN ($placeholders)
@@ -46,7 +46,7 @@ if ($method === 'GET') {
     // Seznam
     if ($session['role'] === 'superadmin') {
         $stmt = $pdo->query("
-            SELECT u.id, u.email, u.full_name, u.role, u.restaurant_id, u.is_active,
+            SELECT u.id, u.email, u.username, u.full_name, u.role, u.restaurant_id, u.is_active,
                    u.trial_ends_at, u.subscription_status, u.created_at,
                    r.name AS restaurant_name
             FROM users u LEFT JOIN restaurants r ON u.restaurant_id = r.id
@@ -60,7 +60,7 @@ if ($method === 'GET') {
         }
         $placeholders = implode(',', array_fill(0, count($adminRestIds), '?'));
         $stmt = $pdo->prepare("
-            SELECT u.id, u.email, u.full_name, u.role, u.restaurant_id, u.is_active, u.created_at,
+            SELECT u.id, u.email, u.username, u.full_name, u.role, u.restaurant_id, u.is_active, u.created_at,
                    r.name AS restaurant_name
             FROM users u LEFT JOIN restaurants r ON u.restaurant_id = r.id
             WHERE u.role = 'user' AND u.restaurant_id IN ($placeholders)
@@ -191,7 +191,7 @@ if ($method === 'PUT') {
     try {
         $pdo->prepare("UPDATE users SET " . implode(', ', $sets) . " WHERE id = ?")->execute($params);
         $stmt = $pdo->prepare("
-            SELECT u.id, u.email, u.full_name, u.role, u.restaurant_id, u.is_active, u.created_at,
+            SELECT u.id, u.email, u.username, u.full_name, u.role, u.restaurant_id, u.is_active, u.created_at,
                    r.name AS restaurant_name
             FROM users u LEFT JOIN restaurants r ON u.restaurant_id = r.id WHERE u.id = ?
         ");
@@ -208,13 +208,14 @@ if ($method === 'PUT') {
     }
 }
 
-// ─── DELETE (deaktiviraj) ──────────────────────────────────────
+// ─── DELETE (deaktiviraj ali trajno izbriši) ───────────────────
 if ($method === 'DELETE') {
-    $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+    $id    = isset($_GET['id'])    ? (int)$_GET['id']       : 0;
+    $force = isset($_GET['force']) && $_GET['force'] === '1';
     if (!$id) json_response(false, null, 'ID ni določen.', 400);
 
     if ($id === (int)$session['user_id']) {
-        json_response(false, null, 'Ne morete deaktivirati lastnega računa.', 400);
+        json_response(false, null, 'Ne morete ' . ($force ? 'izbrisati' : 'deaktivirati') . ' lastnega računa.', 400);
     }
 
     // Preveri dostop
@@ -227,11 +228,17 @@ if ($method === 'DELETE') {
     }
 
     try {
-        $pdo->prepare("UPDATE users SET is_active = 0 WHERE id = ?")->execute([$id]);
+        if ($force) {
+            // Prepiši created_by na brisalca (FK RESTRICT prepreči brisanje, dokler obstajajo rezervacije)
+            $pdo->prepare("UPDATE reservations SET created_by = ? WHERE created_by = ?")->execute([$session['user_id'], $id]);
+            $pdo->prepare("DELETE FROM users WHERE id = ?")->execute([$id]);
+        } else {
+            $pdo->prepare("UPDATE users SET is_active = 0 WHERE id = ?")->execute([$id]);
+        }
         json_response(true);
     } catch (PDOException $e) {
         error_log('User delete error: ' . $e->getMessage());
-        json_response(false, null, 'Napaka pri deaktiviranju.', 500);
+        json_response(false, null, 'Napaka pri ' . ($force ? 'brisanju' : 'deaktiviranju') . '.', 500);
     }
 }
 

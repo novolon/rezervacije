@@ -142,9 +142,10 @@ if ($method === 'PUT') {
     }
 }
 
-// ─── DELETE (deaktiviraj) ──────────────────────────────────────
+// ─── DELETE (deaktiviraj ali trajno izbriši) ───────────────────
 if ($method === 'DELETE') {
-    $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+    $id    = isset($_GET['id'])    ? (int)$_GET['id']       : 0;
+    $force = isset($_GET['force']) && $_GET['force'] === '1';
     if (!$id) json_response(false, null, 'ID ni določen.', 400);
 
     if (!admin_owns_restaurant($pdo, $session, $id)) {
@@ -152,11 +153,15 @@ if ($method === 'DELETE') {
     }
 
     try {
-        $pdo->prepare("UPDATE restaurants SET is_active = 0 WHERE id = ?")->execute([$id]);
+        if ($force) {
+            $pdo->prepare("DELETE FROM restaurants WHERE id = ?")->execute([$id]);
+        } else {
+            $pdo->prepare("UPDATE restaurants SET is_active = 0 WHERE id = ?")->execute([$id]);
+        }
         json_response(true);
     } catch (PDOException $e) {
         error_log('Restaurant delete error: ' . $e->getMessage());
-        json_response(false, null, 'Napaka pri deaktiviranju.', 500);
+        json_response(false, null, 'Napaka pri ' . ($force ? 'brisanju' : 'deaktiviranju') . '.', 500);
     }
 }
 

@@ -91,6 +91,20 @@ $restId   = $_SESSION['restaurant_id'];
     </div>
 </header>
 
+<!-- ── Prazno stanje: admin brez restavracij ──────────────── -->
+<?php if ($isAdmin && empty($restaurants)): ?>
+<div style="display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 64px);padding:24px">
+    <div style="text-align:center;max-width:400px">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="1.5" style="margin-bottom:20px"><path d="M3 2h18v4H3zM3 10h18v4H3zM3 18h18v4H3z"/></svg>
+        <h2 style="font-size:1.25rem;font-weight:700;color:#111827;margin:0 0 10px">Nimate še nobene restavracije</h2>
+        <p style="color:#6B7280;font-size:.9rem;margin:0 0 24px;line-height:1.5">Dodajte svojo prvo restavracijo in začnite sprejemati rezervacije.</p>
+        <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:8px;text-decoration:none">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+            Dodaj restavracijo
+        </a>
+    </div>
+</div>
+<?php else: ?>
 <!-- ── Dvosteberna postavitev ─────────────────────────────── -->
 <div class="app-layout">
 
@@ -174,3 +188,4 @@ window.APP_STATE = <?= json_encode([
 
 </body>
 </html>
+<?php endif; ?>

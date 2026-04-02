@@ -9,6 +9,32 @@ $session = require_superadmin();
 $pdo     = getDB();
 $method  = $_SERVER['REQUEST_METHOD'];
 
+// ─── POST: testni email ────────────────────────────────────────
+if ($method === 'POST') {
+    require_once '../includes/mailer.php';
+    $body  = get_body();
+    $to    = trim($body['email'] ?? '');
+    $type  = $body['type'] ?? 'verification';
+
+    if (!$to || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        json_response(false, null, 'Vnesite veljaven email.', 400);
+    }
+
+    $name = $session['full_name'] ?? 'Superadmin';
+
+    if ($type === 'reset') {
+        $ok = send_password_reset_email($to, $name, 'TEST_TOKEN_12345');
+    } else {
+        $ok = send_verification_email($to, $name, 'TEST_TOKEN_12345');
+    }
+
+    if ($ok) {
+        json_response(true, null, 'Email poslan na ' . $to);
+    } else {
+        json_response(false, null, 'Pošiljanje ni uspelo. Preverite Mailgun nastavitve.', 500);
+    }
+}
+
 if ($method !== 'GET') {
     json_response(false, null, 'Metoda ni podprta.', 405);
 }

@@ -60,6 +60,7 @@ $fullName = $_SESSION['full_name'];
     <div class="admin-tabs">
         <button class="admin-tab active" data-tab="sa-admins">Admini</button>
         <button class="admin-tab" data-tab="sa-restaurants">Restavracije</button>
+        <button class="admin-tab" data-tab="sa-system">Sistem</button>
     </div>
 
     <!-- Panel: Admini -->
@@ -107,6 +108,29 @@ $fullName = $_SESSION['full_name'];
                         <tr><td colspan="6" class="table-empty">Nalagam…</td></tr>
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+
+
+    <!-- Panel: Sistem -->
+    <div id="panel-sa-system" class="admin-panel">
+        <div class="admin-card" style="max-width:480px">
+            <div class="admin-card-header"><h2>Testni email</h2></div>
+            <div style="padding:20px 0 4px">
+                <div id="test-mail-result" style="display:none;padding:10px 14px;border-radius:8px;font-size:.875rem;margin-bottom:16px"></div>
+                <div class="admin-field" style="margin-bottom:14px">
+                    <label>Prejemnik</label>
+                    <input id="test-mail-to" type="email" placeholder="vas@email.com" style="width:100%;box-sizing:border-box">
+                </div>
+                <div class="admin-field" style="margin-bottom:20px">
+                    <label>Vrsta emaila</label>
+                    <select id="test-mail-type" style="width:100%;box-sizing:border-box">
+                        <option value="verification">Potrditev emaila (ob registraciji)</option>
+                        <option value="reset">Ponastavitev gesla</option>
+                    </select>
+                </div>
+                <button id="test-mail-btn" class="btn btn-primary">Pošlji testni email</button>
             </div>
         </div>
     </div>
@@ -242,6 +266,32 @@ window.APP_STATE = <?= json_encode([
             `).join('');
         } catch(e) { toast(e.message, 'error'); }
     }
+
+    // ── Testni email ──────────────────────────────────────────────
+    document.getElementById('test-mail-btn')?.addEventListener('click', async () => {
+        const email   = document.getElementById('test-mail-to').value.trim();
+        const type    = document.getElementById('test-mail-type').value;
+        const btn     = document.getElementById('test-mail-btn');
+        const result  = document.getElementById('test-mail-result');
+
+        if (!email) { toast('Vnesite email naslov.', 'error'); return; }
+
+        btn.disabled = true;
+        btn.textContent = 'Pošiljam…';
+        result.style.display = 'none';
+
+        try {
+            await API.post('/api/superadmin.php', { email, type });
+            result.textContent = 'Email uspešno poslan na ' + email;
+            result.style.cssText = 'display:block;padding:10px 14px;border-radius:8px;font-size:.875rem;margin-bottom:16px;background:#D1FAE5;color:#065F46;border:1px solid #6EE7B7';
+        } catch(e) {
+            result.textContent = e.message;
+            result.style.cssText = 'display:block;padding:10px 14px;border-radius:8px;font-size:.875rem;margin-bottom:16px;background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5';
+        } finally {
+            btn.disabled = false;
+            btn.textContent = 'Pošlji testni email';
+        }
+    });
 
     // ── Init ──────────────────────────────────────────────────────
     loadStats();

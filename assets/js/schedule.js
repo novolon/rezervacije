@@ -50,8 +50,8 @@ const Schedule = (() => {
   // ── Render ────────────────────────────────────────────────────
   function render(date, reservations, duration, allRestaurants, bounds) {
     duration = Math.max(15, duration || 60);
-    const SCHEDULE_START = bounds ? bounds.start : 480;  // minute (8*60)
-    const SCHEDULE_END   = bounds ? bounds.end   : 1380; // minute (23*60)
+    const SCHEDULE_START = bounds ? bounds.start : 480; // minute (8*60)
+    const SCHEDULE_END = bounds ? bounds.end : 1380; // minute (23*60)
 
     // Glava panela
     const labelEl = document.getElementById("schedule-date-label");
@@ -81,21 +81,19 @@ const Schedule = (() => {
     const isMulti = restIds.length > 1;
 
     // Glava stolpcev (multi-restavracija)
-    if (isMulti) {
-      const rHeader = document.createElement("div");
-      rHeader.className = "tl-rest-header";
-      restIds.forEach((rid) => {
-        const rest = reservations.find(
-          (r) => parseInt(r.restaurant_id) === rid,
-        );
-        const col = document.createElement("div");
-        col.className = "tl-rest-col-label";
-        col.style.borderLeftColor = rest ? rest.restaurant_color : "#ccc";
-        col.textContent = rest ? rest.restaurant_name : `Restavracija ${rid}`;
-        rHeader.appendChild(col);
-      });
-      body.appendChild(rHeader);
-    }
+    // if (isMulti) {
+    const rHeader = document.createElement("div");
+    rHeader.className = "tl-rest-header";
+    restIds.forEach((rid) => {
+      const rest = reservations.find((r) => parseInt(r.restaurant_id) === rid);
+      const col = document.createElement("div");
+      col.className = "tl-rest-col-label";
+      col.style.borderLeftColor = rest ? rest.restaurant_color : "#ccc";
+      col.textContent = rest ? rest.restaurant_name : `Restavracija ${rid}`;
+      rHeader.appendChild(col);
+    });
+    body.appendChild(rHeader);
+    // }
 
     // Zunanji wrapper (os + vsebina)
     const outer = document.createElement("div");
@@ -107,7 +105,7 @@ const Schedule = (() => {
     axis.style.height = totalHeight + "px";
 
     const firstHour = Math.ceil(SCHEDULE_START / 60);
-    const lastHour  = Math.floor(SCHEDULE_END / 60);
+    const lastHour = Math.floor(SCHEDULE_END / 60);
     for (let h = firstHour; h <= lastHour; h++) {
       const hMin = h * 60;
       const lbl = document.createElement("div");
@@ -179,17 +177,35 @@ const Schedule = (() => {
     if (isMulti) {
       // Vsaka restavracija dobi svojo cono, znotraj cone izračunaj prekrivanja
       restIds.forEach((rid, restColIdx) => {
-        const restReservations = reservations.filter(r => parseInt(r.restaurant_id) === rid);
+        const restReservations = reservations.filter(
+          (r) => parseInt(r.restaurant_id) === rid,
+        );
         const layout = computeOverlapLayout(restReservations);
         layout.forEach(({ reservation, subCol, subCols }) => {
-          const card = buildCard(reservation, restColIdx, restIds.length, isPast, subCol, subCols, SCHEDULE_START);
+          const card = buildCard(
+            reservation,
+            restColIdx,
+            restIds.length,
+            isPast,
+            subCol,
+            subCols,
+            SCHEDULE_START,
+          );
           content.appendChild(card);
         });
       });
     } else {
       const layout = computeOverlapLayout(reservations);
       layout.forEach(({ reservation, subCol, subCols }) => {
-        const card = buildCard(reservation, 0, 1, isPast, subCol, subCols, SCHEDULE_START);
+        const card = buildCard(
+          reservation,
+          0,
+          1,
+          isPast,
+          subCol,
+          subCols,
+          SCHEDULE_START,
+        );
         content.appendChild(card);
       });
     }
@@ -217,8 +233,8 @@ const Schedule = (() => {
     if (!reservations.length) return [];
 
     // Razvrsti po začetnem času
-    const sorted = [...reservations].sort((a, b) =>
-      timeToMin(a.reservation_time) - timeToMin(b.reservation_time)
+    const sorted = [...reservations].sort(
+      (a, b) => timeToMin(a.reservation_time) - timeToMin(b.reservation_time),
     );
 
     const result = [];
@@ -229,10 +245,10 @@ const Schedule = (() => {
     function processCluster(cluster) {
       // Dodeli sub-stolpce znotraj klastra
       const cols = []; // cols[i] = konec zadnje rezervacije v stolpcu i
-      cluster.forEach(r => {
+      cluster.forEach((r) => {
         const start = timeToMin(r.reservation_time);
-        const dur   = parseInt(r.reservation_duration) || 60;
-        const end   = start + dur;
+        const dur = parseInt(r.reservation_duration) || 60;
+        const end = start + dur;
         // Poišči prvi prosti stolpec
         let placed = false;
         for (let i = 0; i < cols.length; i++) {
@@ -256,10 +272,10 @@ const Schedule = (() => {
       }
     }
 
-    sorted.forEach(r => {
+    sorted.forEach((r) => {
       const start = timeToMin(r.reservation_time);
-      const dur   = parseInt(r.reservation_duration) || 60;
-      const end   = start + dur;
+      const dur = parseInt(r.reservation_duration) || 60;
+      const end = start + dur;
 
       if (cluster.length === 0 || start < clusterEnd) {
         cluster.push(r);
@@ -276,18 +292,25 @@ const Schedule = (() => {
   }
 
   // ── Zgradi kartico ────────────────────────────────────────────
-  function buildCard(reservation, colIdx, totalCols, isPast, subCol = 0, subCols = 1, schedStart = 480) {
-    const startMin =
-      timeToMin(reservation.reservation_time) - schedStart;
+  function buildCard(
+    reservation,
+    colIdx,
+    totalCols,
+    isPast,
+    subCol = 0,
+    subCols = 1,
+    schedStart = 480,
+  ) {
+    const startMin = timeToMin(reservation.reservation_time) - schedStart;
     const dur = parseInt(reservation.reservation_duration) || 60;
     const top = startMin * PX_PER_MIN;
     const height = Math.max(dur * PX_PER_MIN - 3, 24);
     // Zunanja cona (restavracija v multi načinu)
-    const zoneLeftPct  = (colIdx / totalCols) * 100;
+    const zoneLeftPct = (colIdx / totalCols) * 100;
     const zoneWidthPct = 100 / totalCols;
     // Znotraj cone: sub-stolpec za prekrivanja
-    const subLeftPct   = (subCol / subCols) * zoneWidthPct;
-    const subWidthPct  = zoneWidthPct / subCols;
+    const subLeftPct = (subCol / subCols) * zoneWidthPct;
+    const subWidthPct = zoneWidthPct / subCols;
 
     const card = document.createElement("div");
     card.className = "reservation-card";

@@ -104,7 +104,7 @@ if ($method === 'GET') {
                        res.allow_custom_duration
                 FROM reservations r
                 JOIN restaurants res ON r.restaurant_id = res.id
-                WHERE r.reservation_date = ? AND r.restaurant_id = ?
+                WHERE r.reservation_date = ? AND r.restaurant_id = ? AND res.is_active = 1
                 ORDER BY r.reservation_time, r.guest_name
             ");
             $stmt->execute([$date, $rid]);
@@ -116,7 +116,7 @@ if ($method === 'GET') {
                        res.allow_custom_duration
                 FROM reservations r
                 JOIN restaurants res ON r.restaurant_id = res.id
-                WHERE r.reservation_date = ? AND {$f['where']}
+                WHERE r.reservation_date = ? AND {$f['where']} AND res.is_active = 1
                 ORDER BY r.reservation_time, res.name, r.guest_name
             ");
             $stmt->execute(array_merge([$date], $f['params']));
@@ -152,7 +152,7 @@ if ($method === 'GET') {
                        SUM(r.guest_count) AS total_guests
                 FROM reservations r
                 JOIN restaurants res ON r.restaurant_id = res.id
-                WHERE r.reservation_date BETWEEN ? AND ? AND {$f['where']}
+                WHERE r.reservation_date BETWEEN ? AND ? AND {$f['where']} AND res.is_active = 1
                 GROUP BY r.reservation_date
             ");
             $stmt->execute(array_merge([$from, $to], $f['params']));
