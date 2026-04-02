@@ -1,10 +1,16 @@
 <?php
 require_once __DIR__ . '/../config.php';
 
-ini_set('session.cookie_httponly', '1');
-ini_set('session.cookie_samesite', 'Lax'); // Strict blokira session pri Stripe redirectu
-
 if (session_status() === PHP_SESSION_NONE) {
+    // SameSite=Lax je potreben za Stripe redirect (Strict zlomi session po plačilu).
+    // session_set_cookie_params() je zanesljivejše od ini_set na Synology/shared hostingu.
+    session_set_cookie_params([
+        'lifetime' => 0,
+        'path'     => '/',
+        'secure'   => isset($_SERVER['HTTPS']),
+        'httponly' => true,
+        'samesite' => 'Lax',
+    ]);
     session_start();
 }
 
