@@ -86,6 +86,7 @@ function refresh_subscription_session(PDO $pdo): void {
         $_SESSION['plan_slug']       = $sub['plan_slug'] ?? 'trial';
         $_SESSION['trial_days_left'] = get_trial_days_left($sub);
         $_SESSION['trial_expired']   = is_trial_expired($sub);
+        $_SESSION['payment_failed']  = ($sub['status'] ?? '') === 'payment_failed';
         $_SESSION[$cacheKey]         = time();
     } catch (Throwable $e) {
         // Tabela subscriptions verjetno še ne obstaja – ignoriraj

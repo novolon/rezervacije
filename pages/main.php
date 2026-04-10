@@ -17,10 +17,16 @@ if ($_SESSION['role'] === 'superadmin') {
 $pdo = getDB();
 refresh_subscription_session($pdo);
 
+if (!empty($_SESSION['payment_failed'])) {
+    require_once '../includes/payment_failed_block.php';
+    exit;
+}
+
 // Naloži restavracije glede na vlogo
 if ($_SESSION['role'] === 'admin') {
     $stmt = $pdo->prepare("
-        SELECT r.id, r.name, r.reservation_duration, r.allow_custom_duration, r.schedule_start, r.schedule_end, r.color
+        SELECT r.id, r.name, r.reservation_duration, r.allow_custom_duration, r.schedule_start, r.schedule_end, r.color,
+               r.booking_token, r.booking_enabled
         FROM restaurants r
         JOIN restaurant_admins ra ON r.id = ra.restaurant_id
         WHERE ra.user_id = ? AND r.is_active = 1
@@ -30,7 +36,8 @@ if ($_SESSION['role'] === 'admin') {
     $restaurants = $stmt->fetchAll();
 } else {
     $stmt = $pdo->prepare("
-        SELECT id, name, reservation_duration, allow_custom_duration, schedule_start, schedule_end, color
+        SELECT id, name, reservation_duration, allow_custom_duration, schedule_start, schedule_end, color,
+               booking_token, booking_enabled
         FROM restaurants WHERE id = ? AND is_active = 1
     ");
     $stmt->execute([$_SESSION['restaurant_id']]);
@@ -41,6 +48,36 @@ $isAdmin  = $_SESSION['role'] === 'admin';
 $today    = date('Y-m-d');
 $fullName = $_SESSION['full_name'];
 $restId   = $_SESSION['restaurant_id'];
+
+// Pending count (admin in user)
+$pendingCount = 0;
+if ($isAdmin) {
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) FROM reservations r
+        JOIN restaurant_admins ra ON r.restaurant_id = ra.restaurant_id
+        WHERE ra.user_id = ? AND r.status = 'pending'
+    ");
+    $stmt->execute([$_SESSION['user_id']]);
+    $pendingCount = (int) $stmt->fetchColumn();
+} elseif ($restId) {
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM reservations WHERE restaurant_id = ? AND status = 'pending'");
+    $stmt->execute([$restId]);
+    $pendingCount = (int) $stmt->fetchColumn();
+}
+
+// Naloži day_schedules za vse restavracije
+$daySchedulesMap = [];
+if ($restaurants) {
+    try {
+        $restIds = array_column($restaurants, 'id');
+        $placeholders = implode(',', array_fill(0, count($restIds), '?'));
+        $dsStmt = $pdo->prepare("SELECT restaurant_id, day_of_week, is_open, start_time, end_time FROM restaurant_day_schedules WHERE restaurant_id IN ($placeholders) ORDER BY restaurant_id, day_of_week");
+        $dsStmt->execute($restIds);
+        foreach ($dsStmt->fetchAll() as $ds) {
+            $daySchedulesMap[$ds['restaurant_id']][] = $ds;
+        }
+    } catch (PDOException $e) { /* tabela še ne obstaja */ }
+}
 ?>
 <!DOCTYPE html>
 <html lang="sl">
@@ -50,16 +87,16 @@ $restId   = $_SESSION['restaurant_id'];
     <title><?= h(APP_NAME) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/calendar.css">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/schedule.css">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/modal.css">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css?v=4">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/calendar.css?v=2">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/schedule.css?v=2">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/modal.css?v=2">
 </head>
 <body>
 
 <!-- ── Header ──────────────────────────────────────────────── -->
 <header class="app-header">
-    <a href="<?= BASE_PATH ?>/pages/main.php" class="header-logo">
+    <a href="<?= BASE_PATH ?>/pages/main.php" class="header-logo" style="flex-shrink:0">
         <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
             <rect width="28" height="28" rx="7" fill="#F59E0B"/>
             <path d="M7 10h14M7 14h14M7 18h9" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
@@ -83,7 +120,17 @@ $restId   = $_SESSION['restaurant_id'];
     </div>
 
     <div class="header-actions">
+        <?php if ($pendingCount > 0): ?>
+        <button id="btn-pending" class="btn-header btn-header-admin" onclick="PendingSection.loadAndScroll()" style="position:relative;gap:6px">
+            ⏳ Čakajoče
+            <span id="pending-badge" style="background:#EF4444;color:#fff;border-radius:999px;font-size:.7rem;font-weight:700;padding:1px 7px;min-width:20px;display:inline-flex;align-items:center;justify-content:center"><?= $pendingCount ?></span>
+        </button>
+        <?php endif; ?>
         <span class="header-user">👤 <?= h($fullName) ?></span>
+        <a href="<?= BASE_PATH ?>/pages/stats.php" class="btn-header btn-header-admin">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Statistika
+        </a>
         <?php if ($isAdmin): ?>
             <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
@@ -94,9 +141,35 @@ $restId   = $_SESSION['restaurant_id'];
                 Paketi
             </a>
         <?php endif; ?>
+        <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header" title="Nastavitve profila">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+            Profil
+        </a>
         <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
     </div>
+
+    <!-- Hamburger (mobile) -->
+    <button class="hamburger-btn" id="hamburger-btn" onclick="document.getElementById('mobile-nav').classList.toggle('open')">
+        <span></span><span></span><span></span>
+    </button>
 </header>
+
+<!-- Mobile nav -->
+<div class="mobile-nav" id="mobile-nav">
+    <div class="mobile-nav-user">👤 <?= h($fullName) ?></div>
+    <?php if ($pendingCount > 0): ?>
+    <a href="#" class="btn-header btn-header-admin" onclick="document.getElementById('mobile-nav').classList.remove('open');setTimeout(()=>PendingSection.loadAndScroll(),200)">
+        ⏳ Čakajoče <span style="background:#EF4444;color:#fff;border-radius:999px;font-size:.7rem;font-weight:700;padding:1px 7px;margin-left:4px"><?= $pendingCount ?></span>
+    </a>
+    <?php endif; ?>
+    <a href="<?= BASE_PATH ?>/pages/stats.php" class="btn-header btn-header-admin">Statistika</a>
+    <?php if ($isAdmin): ?>
+    <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">Admin</a>
+    <a href="<?= BASE_PATH ?>/pages/billing.php" class="btn-header btn-header-admin">Paketi</a>
+    <?php endif; ?>
+    <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header">Profil</a>
+    <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
+</div>
 
 <?php require_once '../includes/trial_banner.php'; ?>
 
@@ -158,6 +231,21 @@ $restId   = $_SESSION['restaurant_id'];
                 <!-- Dinamično generirano z JS -->
             </div>
         </div>
+
+        <!-- ── Čakajoče rezervacije ──────────────────────── -->
+        <div id="pending-section" class="pending-section" style="display:none">
+            <div class="pending-section-header">
+                <div class="pending-section-title">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    Čakajoče rezervacije
+                    <span id="pending-section-badge" class="pending-section-badge">0</span>
+                </div>
+                <button class="btn btn-ghost btn-sm" onclick="PendingSection.load()" title="Osveži seznam">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                </button>
+            </div>
+            <div id="pending-list"></div>
+        </div>
     </main>
 
 </div>
@@ -181,19 +269,31 @@ window.APP_STATE = <?= json_encode([
             'schedule_start'        => (int)$r['schedule_start'],
             'schedule_end'          => (int)$r['schedule_end'],
             'color'                 => $r['color'],
+            'booking_token'         => $r['booking_token'] ?? null,
+            'booking_enabled'       => (bool)($r['booking_enabled'] ?? false),
+            'day_schedules'         => array_map(function($ds) {
+                return [
+                    'day_of_week' => (int)$ds['day_of_week'],
+                    'is_open'     => (bool)$ds['is_open'],
+                    'start_time'  => (int)$ds['start_time'],
+                    'end_time'    => (int)$ds['end_time'],
+                ];
+            }, $daySchedulesMap[(int)$r['id']] ?? []),
         ];
     }, $restaurants),
+    'pendingCount' => $pendingCount,
     'today'        => $today,
     'base'         => BASE_PATH,
+    'hasSurvey'    => $isAdmin ? user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey') : false,
 ], JSON_UNESCAPED_UNICODE) ?>;
 </script>
 
 <!-- ── JavaScript ─────────────────────────────────────────── -->
-<script src="<?= BASE_PATH ?>/assets/js/api.js"></script>
-<script src="<?= BASE_PATH ?>/assets/js/calendar.js"></script>
-<script src="<?= BASE_PATH ?>/assets/js/schedule.js"></script>
-<script src="<?= BASE_PATH ?>/assets/js/modal.js"></script>
-<script src="<?= BASE_PATH ?>/assets/js/app.js"></script>
+<script src="<?= BASE_PATH ?>/assets/js/api.js?v=3"></script>
+<script src="<?= BASE_PATH ?>/assets/js/calendar.js?v=2"></script>
+<script src="<?= BASE_PATH ?>/assets/js/schedule.js?v=3"></script>
+<script src="<?= BASE_PATH ?>/assets/js/modal.js?v=6"></script>
+<script src="<?= BASE_PATH ?>/assets/js/app.js?v=4"></script>
 
 </body>
 </html>

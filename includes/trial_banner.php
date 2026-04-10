@@ -27,3 +27,4 @@ if ($planSlug !== 'trial') return; // plačljivi paket – ni bannerja
     <a href="<?= BASE_PATH ?>/pages/billing.php" class="trial-banner-btn" style="background:rgba(0,0,0,.07)">Poglej pakete →</a>
 </div>
 <?php endif; ?>
+<script>document.body.classList.add('has-trial-banner');</script>

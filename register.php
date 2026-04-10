@@ -12,14 +12,23 @@ $errors  = [];
 $success = false;
 $post    = [];
 
+$validPlans    = ['trial', 'basic', 'advanced', 'premium'];
+$selectedPlan  = in_array($_GET['plan'] ?? '', $validPlans) ? $_GET['plan'] : 'trial';
+$planNames     = ['trial' => 'Trial', 'basic' => 'Basic', 'advanced' => 'Advanced', 'premium' => 'Premium'];
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $post['full_name'] = trim($_POST['full_name'] ?? '');
-    $post['email']     = trim($_POST['email']     ?? '');
-    $password          = $_POST['password']        ?? '';
-    $confirm           = $_POST['password_confirm'] ?? '';
+    $post['full_name']         = trim($_POST['full_name']         ?? '');
+    $post['email']             = trim($_POST['email']             ?? '');
+    $post['company_name']      = trim($_POST['company_name']      ?? '');
+    $post['company_address']   = trim($_POST['company_address']   ?? '');
+    $post['tax_number']        = trim($_POST['tax_number']        ?? '');
+    $post['is_vat_registered'] = !empty($_POST['is_vat_registered']);
+    $post['vat_id']            = strtoupper(trim($_POST['vat_id'] ?? ''));
+    $password                  = $_POST['password']               ?? '';
+    $confirm                   = $_POST['password_confirm']       ?? '';
 
     if (!$post['full_name']) {
-        $errors[] = 'Polno ime je obvezno.';
+        $errors[] = 'Ime in priimek sta obvezna.';
     }
     if (!$post['email'] || !filter_var($post['email'], FILTER_VALIDATE_EMAIL)) {
         $errors[] = 'Vnesite veljaven email naslov.';
@@ -30,23 +39,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($password !== $confirm) {
         $errors[] = 'Gesli se ne ujemata.';
     }
+    if (!$post['company_name']) {
+        $errors[] = 'Naziv podjetja je obvezen.';
+    }
+    if (!$post['company_address']) {
+        $errors[] = 'Naslov podjetja je obvezen.';
+    }
+    if (empty($_POST['gdpr_consent'])) {
+        $errors[] = 'Strinjanje s pogoji uporabe in politiko zasebnosti je obvezno.';
+    }
+    if ($post['is_vat_registered']) {
+        if (!$post['vat_id']) {
+            $errors[] = 'ID za DDV je obvezen za davčne zavezance.';
+        } elseif (!preg_match('/^[A-Z]{2}[A-Z0-9]{2,15}$/', $post['vat_id'])) {
+            $errors[] = 'ID za DDV ni veljavne oblike (npr. SI12345678).';
+        }
+    } else {
+        if (!$post['tax_number']) {
+            $errors[] = 'Davčna številka je obvezna.';
+        } elseif (!preg_match('/^[A-Z0-9]{4,20}$/i', $post['tax_number'])) {
+            $errors[] = 'Davčna številka ni veljavna (4–20 alfanumeričnih znakov).';
+        }
+    }
 
     if (empty($errors)) {
         try {
             $pdo = getDB();
 
             $hash              = password_hash($password, PASSWORD_BCRYPT);
-            $trialEnds         = date('Y-m-d H:i:s', strtotime('+14 days'));
+            $trialEnds         = date('Y-m-d H:i:s', strtotime('+30 days'));
             $verificationToken = bin2hex(random_bytes(32));
+            $gdprIp            = $_SERVER['REMOTE_ADDR'] ?? null;
+            $gdprNow           = date('Y-m-d H:i:s');
+            $marketingConsent  = !empty($_POST['marketing_consent']) ? 1 : 0;
 
             $pdo->prepare("
                 INSERT INTO users
-                    (email, password_hash, full_name, role, trial_ends_at, subscription_status,
-                     is_active, verification_token)
-                VALUES (?, ?, ?, 'admin', ?, 'trial', 1, ?)
+                    (email, password_hash, full_name, company_name, company_address,
+                     tax_number, is_vat_registered, vat_id,
+                     role, trial_ends_at, subscription_status, is_active, verification_token,
+                     gdpr_consent_at, gdpr_consent_ip, dpa_consent_at,
+                     marketing_consent, marketing_consent_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'admin', ?, 'trial', 1, ?,
+                        ?, ?, ?, ?, ?)
             ")->execute([
-                $post['email'], $hash, $post['full_name'], $trialEnds, $verificationToken
+                $post['email'], $hash, $post['full_name'],
+                $post['company_name'], $post['company_address'],
+                $post['is_vat_registered'] ? null : $post['tax_number'],
+                $post['is_vat_registered'] ? 1 : 0,
+                $post['is_vat_registered'] ? $post['vat_id'] : null,
+                $trialEnds, $verificationToken,
+                $gdprNow, $gdprIp, $gdprNow,
+                $marketingConsent, $marketingConsent ? $gdprNow : null,
             ]);
+
+            $newUserId = (int) $pdo->lastInsertId();
+
+            // Ustvari trial subscription – plan_slug je izbrani paket (ali 'trial' če ni izbran)
+            // status ostane 'trial' ves čas brezplačnega obdobja
+            $pdo->prepare("
+                INSERT INTO subscriptions (user_id, plan_slug, status, ends_at)
+                VALUES (?, ?, 'trial', ?)
+            ")->execute([$newUserId, $selectedPlan, $trialEnds]);
 
             send_verification_email($post['email'], $post['full_name'], $verificationToken);
 
@@ -86,6 +140,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <h1><?= APP_NAME ?></h1>
         <p class="subtitle">Registracija</p>
 
+        <?php if ($selectedPlan !== 'trial'): ?>
+        <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:10px;padding:12px 16px;margin-bottom:20px;text-align:center;font-size:.875rem">
+            Začeli boste z <strong>30-dnevnim brezplačnim preizkusom</strong> paketa <strong><?= h($planNames[$selectedPlan]) ?></strong>.
+        </div>
+        <?php endif; ?>
+
         <?php if ($success): ?>
             <div class="register-success">
                 <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="1.8"><path d="M3 8l7.89 5.26a2 2 0 0 0 2.22 0L21 8M5 19h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2z"/></svg>
@@ -121,6 +181,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <label for="password_confirm">Potrdi geslo</label>
                 <input type="password" id="password_confirm" name="password_confirm" required>
             </div>
+
+            <div class="billing-section-title">Podatki o podjetju</div>
+
+            <div class="form-group">
+                <label for="company_name">Naziv podjetja / organizacije</label>
+                <input type="text" id="company_name" name="company_name"
+                       value="<?= h($post['company_name'] ?? '') ?>" required>
+            </div>
+            <div class="form-group">
+                <label for="company_address">Naslov podjetja</label>
+                <input type="text" id="company_address" name="company_address"
+                       value="<?= h($post['company_address'] ?? '') ?>"
+                       placeholder="Ulica 1, 1000 Ljubljana" required>
+            </div>
+            <div class="vat-checkbox-row">
+                <input type="checkbox" id="is_vat_registered" name="is_vat_registered"
+                       <?= !empty($post['is_vat_registered']) ? 'checked' : '' ?>>
+                <label for="is_vat_registered">Sem zavezanec za DDV</label>
+            </div>
+            <div class="form-group" id="tax-number-group">
+                <label for="tax_number">Davčna številka</label>
+                <input type="text" id="tax_number" name="tax_number"
+                       value="<?= h($post['tax_number'] ?? '') ?>"
+                       inputmode="numeric" maxlength="20" placeholder="12345678" required>
+            </div>
+            <div class="form-group" id="vat-id-group" style="display:none">
+                <label for="vat_id">ID za DDV</label>
+                <input type="text" id="vat_id" name="vat_id"
+                       value="<?= h($post['vat_id'] ?? '') ?>"
+                       placeholder="SI12345678" maxlength="30"
+                       style="text-transform:uppercase">
+            </div>
+
+            <div style="border-top:1px solid #E5E7EB;margin:20px 0 16px"></div>
+
+            <div class="vat-checkbox-row" style="align-items:flex-start;gap:10px;margin-bottom:10px">
+                <input type="checkbox" id="gdpr_consent" name="gdpr_consent"
+                       <?= !empty($_POST['gdpr_consent']) ? 'checked' : '' ?> required
+                       style="margin-top:3px;flex-shrink:0">
+                <label for="gdpr_consent" style="font-size:.83rem;color:#374151;cursor:pointer">
+                    Strinjam se s <a href="<?= BASE_PATH ?>/pages/terms.php" target="_blank" style="color:#F59E0B">Pogoji uporabe</a>,
+                    <a href="<?= BASE_PATH ?>/pages/privacy.php" target="_blank" style="color:#F59E0B">Politiko zasebnosti</a>
+                    in Pogodbo o obdelavi podatkov (DPA). <span style="color:#EF4444">*</span>
+                </label>
+            </div>
+
+            <div class="vat-checkbox-row" style="align-items:flex-start;gap:10px;margin-bottom:20px">
+                <input type="checkbox" id="marketing_consent" name="marketing_consent"
+                       <?= !empty($_POST['marketing_consent']) ? 'checked' : '' ?>
+                       style="margin-top:3px;flex-shrink:0">
+                <label for="marketing_consent" style="font-size:.83rem;color:#374151;cursor:pointer">
+                    Strinjam se s prejemanjem novic, nasvetov in ponudb (neobvezno).
+                </label>
+            </div>
+
             <button type="submit">Ustvari brezplačen račun</button>
         </form>
 
@@ -132,5 +247,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
     </div>
 </div>
+<script>
+(function () {
+    const chk      = document.getElementById('is_vat_registered');
+    const taxGroup = document.getElementById('tax-number-group');
+    const vatGroup = document.getElementById('vat-id-group');
+    const taxInput = document.getElementById('tax_number');
+    const vatInput = document.getElementById('vat_id');
+    if (!chk) return;
+    function toggle() {
+        const isDDV = chk.checked;
+        taxGroup.style.display = isDDV ? 'none' : 'block';
+        vatGroup.style.display = isDDV ? 'block' : 'none';
+        taxInput.required = !isDDV;
+        vatInput.required = isDDV;
+    }
+    chk.addEventListener('change', toggle);
+    toggle();
+})();
+</script>
 </body>
 </html>

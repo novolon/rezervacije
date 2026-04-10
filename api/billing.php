@@ -28,6 +28,30 @@ if ($method === 'POST' && $action === 'create_checkout_session') {
     $userId  = (int)$session['user_id'];
     $email   = $session['email'] ?? '';
 
+    // Preveri aktivni popust in ustvari Stripe coupon
+    $couponId = null;
+    $discount = get_active_discount($pdo, $planSlug);
+    if ($discount) {
+        $discPrice = $billingCycle === 'yearly'
+            ? ($discount['discounted_yearly']  ?? null)
+            : ($discount['discounted_monthly'] ?? null);
+        $origPrice = PLANS[$planSlug][$billingCycle . '_price'];
+        if ($discPrice !== null && (float)$discPrice < (float)$origPrice) {
+            $amountOff = (int)round(((float)$origPrice - (float)$discPrice) * 100); // v centih
+            $coupon = stripe_request('POST', '/coupons', [
+                'amount_off' => $amountOff,
+                'currency'   => 'eur',
+                'duration'   => 'once',
+                'name'       => $discount['label'],
+            ]);
+            if (isset($coupon['id'])) {
+                $couponId = $coupon['id'];
+            } else {
+                error_log('Stripe coupon creation failed: ' . json_encode($coupon));
+            }
+        }
+    }
+
     // Pridobi ali ustvari stripe_customer_id
     $sub = get_active_subscription($pdo, $userId);
     $customerId = $sub['stripe_customer_id'] ?? null;
@@ -51,18 +75,18 @@ if ($method === 'POST' && $action === 'create_checkout_session') {
 
     $baseUrl = APP_URL . BASE_PATH;
 
-    $checkoutData = stripe_request('POST', '/checkout/sessions', [
-        'customer'            => $customerId,
+    $checkoutParams = [
+        'customer'             => $customerId,
         'payment_method_types' => ['card'],
-        'mode'                => 'subscription',
-        'line_items'          => [[
+        'mode'                 => 'subscription',
+        'line_items'           => [[
             'price'    => $priceId,
             'quantity' => 1,
         ]],
-        'success_url'         => $baseUrl . '/pages/billing-success.php?session_id={CHECKOUT_SESSION_ID}',
-        'cancel_url'          => $baseUrl . '/pages/billing.php?canceled=1',
-        'locale'              => 'sl',
-        'subscription_data'   => [
+        'success_url'          => $baseUrl . '/pages/billing-success.php?session_id={CHECKOUT_SESSION_ID}',
+        'cancel_url'           => $baseUrl . '/pages/billing.php?canceled=1',
+        'locale'               => 'sl',
+        'subscription_data'    => [
             'metadata' => [
                 'user_id'       => $userId,
                 'plan_slug'     => $planSlug,
@@ -74,7 +98,13 @@ if ($method === 'POST' && $action === 'create_checkout_session') {
             'plan_slug'     => $planSlug,
             'billing_cycle' => $billingCycle,
         ],
-    ]);
+    ];
+
+    if ($couponId) {
+        $checkoutParams['discounts'] = [['coupon' => $couponId]];
+    }
+
+    $checkoutData = stripe_request('POST', '/checkout/sessions', $checkoutParams);
 
     if (!isset($checkoutData['url'])) {
         error_log('Stripe checkout error: ' . json_encode($checkoutData));
@@ -103,6 +133,54 @@ if ($method === 'POST' && $action === 'customer_portal') {
     }
 
     json_response(true, ['url' => $portal['url']]);
+}
+
+// ─── POST: zahtevek za predračun (letno plačilo) ─────────────
+if ($method === 'POST' && $action === 'request_invoice') {
+    require_once '../includes/mailer.php';
+
+    $planSlug     = $body['plan_slug'] ?? '';
+    $billingCycle = $body['billing_cycle'] ?? '';
+
+    if (!isset(PLANS[$planSlug]) || $planSlug === 'trial') {
+        json_response(false, null, 'Neveljaven paket.', 400);
+    }
+    if ($billingCycle !== 'yearly') {
+        json_response(false, null, 'Predračun je možen samo za letno plačilo.', 400);
+    }
+
+    $userId = (int)$session['user_id'];
+    $email  = $session['email'] ?? '';
+    $name   = $session['full_name'] ?? '';
+
+    $sub = get_active_subscription($pdo, $userId);
+    if ($sub && $sub['status'] === 'active') {
+        json_response(false, null, 'Že imate aktivno naročnino.', 400);
+    }
+    if ($sub && $sub['status'] === 'pending_invoice' && $sub['plan_slug'] === $planSlug) {
+        json_response(false, null, 'Zahtevek za ta paket je že bil poslan. Kmalu vas bomo kontaktirali.', 400);
+    }
+
+    try {
+        $pdo->prepare("UPDATE subscriptions SET status = 'canceled' WHERE user_id = ? AND status IN ('trial','pending_invoice')")
+            ->execute([$userId]);
+
+        $pdo->prepare("
+            INSERT INTO subscriptions (user_id, plan_slug, status, billing_cycle, payment_method)
+            VALUES (?, ?, 'pending_invoice', 'yearly', 'invoice')
+        ")->execute([$userId, $planSlug]);
+
+        $superadminEmail = $pdo->query("SELECT email FROM users WHERE role = 'superadmin' LIMIT 1")->fetchColumn();
+        if ($superadminEmail) {
+            $yearlyPrice = PLANS[$planSlug]['yearly_price'];
+            send_invoice_request_email($superadminEmail, $name, $email, $planSlug, $yearlyPrice);
+        }
+
+        json_response(true, null, 'Zahtevek poslan! Kontaktirali vas bomo v kratkem s predračunom.');
+    } catch (PDOException $e) {
+        error_log('request_invoice error: ' . $e->getMessage());
+        json_response(false, null, 'Napaka pri oddaji zahtevka.', 500);
+    }
 }
 
 json_response(false, null, 'Neznan action.', 400);

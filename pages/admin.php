@@ -21,6 +21,11 @@ if ($_SESSION['role'] !== 'admin') {
 $fullName = $_SESSION['full_name'];
 $pdo = getDB();
 refresh_subscription_session($pdo);
+
+if (!empty($_SESSION['payment_failed'])) {
+    require_once '../includes/payment_failed_block.php';
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html lang="sl">
@@ -30,9 +35,9 @@ refresh_subscription_session($pdo);
     <title>Admin panel – <?= h(APP_NAME) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/admin.css">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/modal.css">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css?v=3">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/admin.css?v=2">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/modal.css?v=2">
 </head>
 <body>
 
@@ -57,13 +62,34 @@ refresh_subscription_session($pdo);
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
             Razpored
         </a>
+        <a href="<?= BASE_PATH ?>/pages/stats.php" class="btn-header btn-header-admin">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+            Statistika
+        </a>
         <a href="<?= BASE_PATH ?>/pages/billing.php" class="btn-header btn-header-admin">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
             Paketi
         </a>
+        <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header" title="Nastavitve profila">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+            Profil
+        </a>
         <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
     </div>
+
+    <button class="hamburger-btn" id="hamburger-btn" onclick="document.getElementById('mobile-nav').classList.toggle('open')">
+        <span></span><span></span><span></span>
+    </button>
 </header>
+
+<div class="mobile-nav" id="mobile-nav">
+    <div class="mobile-nav-user">👤 <?= h($fullName) ?></div>
+    <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin">Razpored</a>
+    <a href="<?= BASE_PATH ?>/pages/stats.php" class="btn-header btn-header-admin">Statistika</a>
+    <a href="<?= BASE_PATH ?>/pages/billing.php" class="btn-header btn-header-admin">Paketi</a>
+    <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header">Profil</a>
+    <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
+</div>
 
 <?php require_once '../includes/trial_banner.php'; ?>
 
@@ -102,11 +128,12 @@ refresh_subscription_session($pdo);
                                 <th>Trajanje rez.</th>
                                 <th>Barva</th>
                                 <th>Status</th>
+                                <th>Booking</th>
                                 <th></th>
                             </tr>
                         </thead>
                         <tbody id="rest-tbody">
-                            <tr><td colspan="5" class="table-empty">Nalagam...</td></tr>
+                            <tr><td colspan="6" class="table-empty">Nalagam...</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -166,8 +193,8 @@ window.APP_STATE = <?= json_encode([
 ], JSON_UNESCAPED_UNICODE) ?>;
 </script>
 
-<script src="<?= BASE_PATH ?>/assets/js/api.js"></script>
-<script src="<?= BASE_PATH ?>/assets/js/admin.js"></script>
+<script src="<?= BASE_PATH ?>/assets/js/api.js?v=2"></script>
+<script src="<?= BASE_PATH ?>/assets/js/admin.js?v=7"></script>
 
 </body>
 </html>

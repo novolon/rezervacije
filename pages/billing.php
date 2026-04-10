@@ -158,6 +158,10 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
                         onclick="selectPlan('<?= $slug ?>')">
                     Izberi <?= h($plan['name']) ?>
                 </button>
+                <button class="btn-invoice" data-invoice-plan="<?= $slug ?>"
+                        onclick="requestInvoice('<?= $slug ?>')" style="display:none">
+                    ali po predračunu →
+                </button>
             <?php endif; ?>
         </div>
         <?php endforeach; ?>
@@ -165,7 +169,7 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
 
     <!-- Opomba -->
     <div style="text-align:center;font-size:.8rem;color:var(--color-muted);margin-bottom:40px">
-        Plačilo je varno in šifrirano. Za letno plačilo po predračunu nas kontaktirajte.
+        Plačilo je varno in šifrirano.
         Vsak paket vključuje 30-dnevni trial za testiranje.
     </div>
 
@@ -239,6 +243,22 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
     font-size:.875rem; font-weight:600; cursor:pointer;
 }
 .btn-outline:hover { background:rgba(245,158,11,.08); }
+.btn-invoice {
+    display: block;
+    width: 100%;
+    margin-top: 8px;
+    padding: .42rem 1rem;
+    border: 1.5px dashed #D1D5DB;
+    border-radius: var(--radius);
+    background: transparent;
+    color: var(--color-muted);
+    font-size: .78rem;
+    font-weight: 500;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color .15s, color .15s;
+}
+.btn-invoice:hover { border-color: #9CA3AF; color: #374151; }
 </style>
 
 <script>
@@ -266,8 +286,45 @@ function updatePricing() {
         }
     });
     periods.forEach(el => { el.textContent = isYearly ? '/leto' : '/mesec'; });
+    document.querySelectorAll('.btn-invoice').forEach(el => {
+        el.style.display = isYearly ? 'block' : 'none';
+    });
 }
 yearly.addEventListener('change', updatePricing);
+
+function toast(msg, type = 'success') {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = `toast toast-${type}`;
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; setTimeout(() => t.remove(), 300); }, 3200);
+}
+
+async function requestInvoice(slug) {
+    const btn  = document.querySelector(`[data-invoice-plan="${slug}"]`);
+    const orig = btn?.textContent;
+    if (btn) { btn.disabled = true; btn.textContent = 'Pošiljam…'; }
+
+    try {
+        const res  = await fetch(APP_STATE.base + '/api/billing.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ action: 'request_invoice', plan_slug: slug, billing_cycle: 'yearly' }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            toast(data.message || 'Zahtevek poslan!');
+            if (btn) { btn.textContent = 'Zahtevek poslan ✓'; }
+        } else {
+            toast(data.error || 'Napaka.', 'error');
+            if (btn) { btn.disabled = false; btn.textContent = orig; }
+        }
+    } catch(e) {
+        toast('Napaka pri povezavi.', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = orig; }
+    }
+}
 
 async function selectPlan(slug) {
     const cycle = document.getElementById('billing-yearly').checked ? 'yearly' : 'monthly';
@@ -292,6 +349,15 @@ async function selectPlan(slug) {
         if (btn) { btn.disabled = false; }
     }
 }
+
+// Auto-select paket ob prihodu z landing page
+(function () {
+    const autoselect = <?= json_encode($_GET['autoselect'] ?? '') ?>;
+    const valid = ['basic', 'advanced', 'premium'];
+    if (autoselect && valid.includes(autoselect)) {
+        selectPlan(autoselect);
+    }
+})();
 
 async function openCustomerPortal() {
     try {

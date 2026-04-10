@@ -139,17 +139,30 @@
         return 60;
     }
 
-    // ── Začetek/konec razporeda aktivne restavracije ──────────────
+    // ── Začetek/konec razporeda za določen dan ────────────────────
+    function getDayBounds(r, dayIdx) {
+        if (r.day_schedules && r.day_schedules.length) {
+            const ds = r.day_schedules.find(d => d.day_of_week === dayIdx);
+            if (ds) return ds.is_open ? { start: ds.start_time, end: ds.end_time } : null;
+        }
+        return { start: r.schedule_start, end: r.schedule_end };
+    }
+
     function getActiveScheduleBounds() {
+        const dayIdx = (state.currentDate.getDay() + 6) % 7; // 0=Pon
+
         if (state.restaurantId) {
             const r = APP_STATE.restaurants.find(x => x.id === state.restaurantId);
-            if (r) return { start: r.schedule_start, end: r.schedule_end };
+            if (r) return getDayBounds(r, dayIdx) || { start: 480, end: 1380 };
         }
-        // Admin z vsemi restavracijami — vzemi min/max med vsemi
+        // Admin z vsemi restavracijami — vzemi min/max med vsemi odprtimi za ta dan
         if (APP_STATE.restaurants.length > 0) {
-            const start = Math.min(...APP_STATE.restaurants.map(r => r.schedule_start));
-            const end   = Math.max(...APP_STATE.restaurants.map(r => r.schedule_end));
-            return { start, end };
+            const starts = [], ends = [];
+            APP_STATE.restaurants.forEach(r => {
+                const b = getDayBounds(r, dayIdx);
+                if (b) { starts.push(b.start); ends.push(b.end); }
+            });
+            if (starts.length) return { start: Math.min(...starts), end: Math.max(...ends) };
         }
         return { start: 480, end: 1380 };
     }
@@ -185,11 +198,12 @@
         Calendar.loadMonth(state.calendarYear, state.calendarMonth);
     }
 
-    // ── Po uspešni akciji (create/edit/delete) ───────────────────
+    // ── Po uspešni akciji (create/edit/delete/approve/reject) ───────────────────
     function afterReservationChange(msg) {
-        showToast(msg);
+        if (msg) showToast(msg);
         Calendar.loadMonth(state.calendarYear, state.calendarMonth);
         loadSchedule();
+        if (window.PendingSection) PendingSection.load();
     }
 
     // ── Inicializacija ───────────────────────────────────────────
@@ -236,6 +250,8 @@
         // Inicializiraj month baseline po prvem loadu
         await initMonthBaseline();
         updateTodayBtn();
+        // Naloži čakajoče rezervacije
+        if (window.PendingSection) PendingSection.load();
 
         // Polling – ustavi ko je tab skrit, nadaljuj ko se vrne
         startPolling();

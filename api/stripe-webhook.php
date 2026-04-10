@@ -48,6 +48,11 @@ switch ($event['type']) {
         handle_invoice_failed($pdo, $event['data']['object']);
         break;
 
+    // Opomnik teden pred plačilom
+    case 'invoice.upcoming':
+        handle_invoice_upcoming($pdo, $event['data']['object']);
+        break;
+
     // Naročnina preklicana (admin prekliče v portalu)
     case 'customer.subscription.deleted':
         handle_subscription_deleted($pdo, $event['data']['object']);
@@ -118,13 +123,33 @@ function handle_invoice_paid(PDO $pdo, array $invoice): void {
 }
 
 function handle_invoice_failed(PDO $pdo, array $invoice): void {
+    require_once __DIR__ . '/../includes/mailer.php';
+    require_once __DIR__ . '/../includes/plans.php';
+
     $subscriptionId = $invoice['subscription'] ?? null;
     if (!$subscriptionId) return;
 
-    $pdo->prepare("
-        UPDATE subscriptions SET status = 'payment_failed'
-        WHERE stripe_subscription_id = ?
-    ")->execute([$subscriptionId]);
+    $attemptCount  = (int)($invoice['attempt_count'] ?? 1);
+    $amountDue     = (float)(($invoice['amount_due'] ?? 0) / 100);
+    $nextAttemptAt = isset($invoice['next_payment_attempt']) ? (int)$invoice['next_payment_attempt'] : null;
+
+    // Status pustimo 'active' – Stripe sam dela retrie, dostop ohranimo.
+    // Blokada pride šele ob customer.subscription.deleted.
+
+    // Pridobi user podatke za email
+    $stmt = $pdo->prepare("
+        SELECT u.email, u.full_name, s.plan_slug
+        FROM subscriptions s
+        JOIN users u ON s.user_id = u.id
+        WHERE s.stripe_subscription_id = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$subscriptionId]);
+    $user = $stmt->fetch();
+    if (!$user) return;
+
+    $planName = PLANS[$user['plan_slug']]['name'] ?? ucfirst($user['plan_slug']);
+    send_payment_failed_email($user['email'], $user['full_name'], $planName, $amountDue, $attemptCount, $nextAttemptAt);
 }
 
 function handle_subscription_deleted(PDO $pdo, array $stripeSub): void {
@@ -141,6 +166,31 @@ function handle_subscription_deleted(PDO $pdo, array $stripeSub): void {
         $pdo->prepare("UPDATE users SET subscription_status = 'inactive' WHERE id = ?")
             ->execute([(int)$userId]);
     }
+}
+
+function handle_invoice_upcoming(PDO $pdo, array $invoice): void {
+    require_once __DIR__ . '/../includes/mailer.php';
+    require_once __DIR__ . '/../includes/plans.php';
+
+    $subscriptionId = $invoice['subscription'] ?? null;
+    if (!$subscriptionId) return;
+
+    $amountDue  = (float)(($invoice['amount_due'] ?? 0) / 100);
+    $billingAt  = (int)($invoice['period_end'] ?? time() + 604800);
+
+    $stmt = $pdo->prepare("
+        SELECT u.email, u.full_name, s.plan_slug
+        FROM subscriptions s
+        JOIN users u ON s.user_id = u.id
+        WHERE s.stripe_subscription_id = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$subscriptionId]);
+    $user = $stmt->fetch();
+    if (!$user) return;
+
+    $planName = PLANS[$user['plan_slug']]['name'] ?? ucfirst($user['plan_slug']);
+    send_upcoming_invoice_email($user['email'], $user['full_name'], $planName, $amountDue, $billingAt);
 }
 
 // ─── Stripe helpers ───────────────────────────────────────────

@@ -25,6 +25,7 @@
     --shadow-lg:          0 8px 32px rgba(0,0,0,.14);
     --transition:         .18s ease;
     --header-h:           58px;
+    --banner-h:           44px;
 }
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -252,16 +253,70 @@ html, body {
 .btn-sm { padding: 6px 12px; font-size: .8rem; }
 
 /* =============================================
+   Hamburger meni (mobile nav)
+   ============================================= */
+.hamburger-btn {
+    display: none;
+    flex-direction: column;
+    justify-content: center;
+    gap: 5px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 6px;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+.hamburger-btn span {
+    display: block;
+    width: 22px;
+    height: 2px;
+    background: rgba(255,255,255,.8);
+    border-radius: 2px;
+    transition: all .2s;
+}
+
+.mobile-nav {
+    display: none;
+    position: fixed;
+    top: var(--header-h);
+    left: 0; right: 0;
+    background: var(--color-sidebar);
+    border-top: 1px solid rgba(255,255,255,.07);
+    padding: 10px 14px 14px;
+    z-index: 98;
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+    flex-direction: column;
+    gap: 3px;
+}
+.mobile-nav.open { display: flex; }
+.mobile-nav .btn-header {
+    width: 100%;
+    justify-content: flex-start;
+    padding: 10px 14px;
+    font-size: .875rem;
+}
+.mobile-nav-user {
+    color: rgba(255,255,255,.45);
+    font-size: .775rem;
+    font-weight: 500;
+    padding: 6px 14px 8px;
+    border-bottom: 1px solid rgba(255,255,255,.07);
+    margin-bottom: 4px;
+}
+
+/* =============================================
    Responsive – telefon (< 768px)
    ============================================= */
 @media (max-width: 768px) {
 
     :root { --header-h: 52px; }
 
-    /* Header – skrij ime in restaurant label, ostane logo + odjava */
+    /* Header – skrij akcije, prikaži hamburger */
     .header-restaurant { display: none; }
     .header-user { display: none; }
-    .btn-header-admin { display: none; }
+    .header-actions { display: none; }
+    .hamburger-btn { display: flex; }
 
     /* Layout: navpično namesto vodoravno */
     .app-layout {
@@ -298,6 +353,10 @@ html, body {
 
 /* ── Trial warning banner ─────────────────────────────────────── */
 .trial-banner {
+    position: fixed;
+    top: var(--header-h);
+    left: 0; right: 0;
+    z-index: 99;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -306,6 +365,11 @@ html, body {
     font-size: .8rem;
     font-weight: 500;
     text-align: center;
+}
+
+body.has-trial-banner .app-layout,
+body.has-trial-banner .admin-layout {
+    padding-top: calc(var(--header-h) + var(--banner-h));
 }
 .trial-banner-warning {
     background: #FEF3C7;
@@ -347,3 +411,117 @@ html, body {
 .plan-badge-basic    { background: #EDE9FE; color: #5B21B6; }
 .plan-badge-advanced { background: #DBEAFE; color: #1D4ED8; }
 .plan-badge-premium  { background: #D1FAE5; color: #065F46; }
+
+/* ── Čakajoče rezervacije (sekcija pod koledarjem) ─────────── */
+.pending-section {
+    margin-top: 24px;
+    background: var(--color-surface);
+    border: 1px solid #FED7AA;
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+.pending-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 13px 18px;
+    background: #FFF7ED;
+    border-bottom: 1px solid #FED7AA;
+    gap: 12px;
+}
+
+.pending-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: .875rem;
+    font-weight: 700;
+    color: #92400E;
+}
+
+.pending-section-badge {
+    background: #EF4444;
+    color: #fff;
+    border-radius: 999px;
+    font-size: .68rem;
+    font-weight: 700;
+    padding: 1px 8px;
+    min-width: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.6;
+}
+
+.pending-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--color-border);
+    transition: background var(--transition);
+}
+
+.pending-item:last-child { border-bottom: none; }
+.pending-item:hover { background: #FFFBF5; }
+
+.pending-item-info { flex: 1; min-width: 0; }
+
+.pending-item-when {
+    font-size: .75rem;
+    font-weight: 600;
+    color: var(--color-muted);
+    margin-bottom: 3px;
+}
+
+.pending-item-guest {
+    font-size: .875rem;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-bottom: 2px;
+}
+
+.pending-item-rest {
+    font-size: .775rem;
+    color: var(--color-muted);
+    margin-bottom: 2px;
+}
+
+.pending-item-contact {
+    font-size: .775rem;
+    color: var(--color-muted);
+}
+
+.pending-item-notes {
+    font-size: .775rem;
+    color: var(--color-muted);
+    font-style: italic;
+    margin-top: 2px;
+}
+
+.pending-item-extra {
+    font-size: .775rem;
+    color: var(--color-text);
+    margin-top: 2px;
+}
+
+.pending-item-label {
+    color: var(--color-muted);
+    font-weight: 500;
+}
+
+.pending-item-actions {
+    display: flex;
+    gap: 6px;
+    flex-shrink: 0;
+    align-items: center;
+    padding-top: 2px;
+}
+
+@media (max-width: 768px) {
+    .pending-section { margin-top: 16px; }
+    .pending-item { flex-direction: column; gap: 10px; }
+    .pending-item-actions { width: 100%; }
+    .pending-item-actions .btn { flex: 1; justify-content: center; }
+}

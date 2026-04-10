@@ -74,9 +74,9 @@
 - [x] V `api/superadmin.php` – GET action `subscription` za prikaz trenutnega paketa v tabeli
 
 ### 1.7 Testiranje faze 1
-- [ ] Ročno dodeli paket adminu via superadmin
+- [x] Ročno dodeli paket adminu via superadmin
 - [ ] Preveri feature gating (trial admin ne sme videti advanced funkcij)
-- [ ] Preveri trial warning (nastavi trial_ends_at na jutri in preveri banner)
+- [x] Preveri trial warning (nastavi trial_ends_at na jutri in preveri banner)
 
 ---
 
@@ -118,25 +118,25 @@
 > Potrebno: email naslov za prejem zahtevkov
 
 ### 3.1 Flow
-- [ ] V `pages/billing.php` – za letni plan dodaj opcijo "Plačilo po predračunu"
-- [ ] `api/billing.php` – POST `request_invoice`
+- [x] V `pages/billing.php` – za letni plan dodaj opcijo "Plačilo po predračunu"
+- [x] `api/billing.php` – POST `request_invoice`
   - shrani zahtevek v `subscriptions` (status = 'pending_invoice')
   - pošlji email na superadmin email z podatki (admin ime, paket, znesek)
-- [ ] Superadmin v panelu vidi pending_invoice račune in jih ročno aktivira (assign_plan)
+- [x] Superadmin v panelu vidi pending_invoice račune in jih ročno aktivira (assign_plan)
 
 ---
 
 ## FAZA 4 – Začasni popusti (superadmin)
 
 ### 4.1 UI
-- [ ] V `pages/superadmin.php` – nov tab "Popusti"
-- [ ] Forma: paket, opis akcije, znižana cena mesečno, znižana cena letno, datum od–do
+- [x] V `pages/superadmin.php` – nov tab "Popusti"
+- [x] Forma: paket, opis akcije, znižana cena mesečno, znižana cena letno, datum od–do
 
 ### 4.2 API
-- [ ] `api/superadmin.php` – POST `create_discount`, GET `discounts`, DELETE `discount`
+- [x] `api/superadmin.php` – POST `create_discount`, GET `discounts`, DELETE `discount`
 
 ### 4.3 Prikaz
-- [ ] `pages/billing.php` – prikaže znižano ceno kadar je aktiven popust (prečrtaj originalno)
+- [x] `pages/billing.php` – prikaže znižano ceno kadar je aktiven popust (prečrtaj originalno)
 
 ---
 
@@ -144,22 +144,36 @@
 
 > Opomba: kompleksna funkionalnost, planirati ločeno
 
-- [ ] Javna rezervacijska stran (`/book/{token}`)
-- [ ] Admin nastavi delovne dni + rezervacijske čase po dnevih
-- [ ] Korak 1: izbira datuma
-- [ ] Korak 2: izbira ure
-- [ ] Korak 3: podatki gosta
-- [ ] Email potrditvi (gostu + restavraciji)
-- [ ] Admin odobri/zavrne rezervacijo
+- [x] Javna rezervacijska stran (`/book/{token}`)
+- [x] Admin nastavi delovne dni + rezervacijske čase po dnevih
+- [x] Korak 1: izbira datuma
+- [x] Korak 2: izbira ure
+- [x] Korak 3: podatki gosta
+- [x] Email potrditvi (gostu + restavraciji)
+- [x] Admin odobri/zavrne rezervacijo
 - [ ] Opomnik 24h pred rezervacijo (cron job)
 
 ---
 
 ## FAZA 6 – Premium paket: embed widget (ločen branch)
 
-- [ ] `GET /widget/{token}` vrne JS snippet
-- [ ] Widget se renderira znotraj div-a na zunanji strani
-- [ ] Isti booking flow kot Faza 5, v iframu ali shadow DOM
+- [x] `GET /widget/{token}` vrne JS snippet
+- [x] Widget se renderira znotraj div-a na zunanji strani
+- [x] Isti booking flow kot Faza 5, v iframu ali shadow DOM
+
+---
+
+## Integracija za izstavitev računov – Čebelica.biz
+
+> Slovensko SaaS orodje za izstavitev računov: https://cebelica.biz
+
+- [ ] Registracija in API ključ (Čebelica.biz → Nastavitve → API)
+- [ ] `api/invoice.php` – ob aktivaciji plačljive naročnine (webhook `checkout.session.completed`) samodejno ustvari račun prek Čebelica API
+  - Podatki kupca: `company_name`, `tax_number`, `vat_id` iz tabele `users`
+  - Postavka: paket (Basic/Advanced/Premium), znesek, mesečno ali letno
+  - Pošlji račun kupcu na email
+- [ ] Za predračune (status `pending_invoice`): ustvari predračun prek API ob zahtevku
+- [ ] Shranjuj `invoice_id` (Čebelica ID) v tabeli `subscriptions` za kasnejši pregled
 
 ---
 
@@ -172,6 +186,7 @@
 | 3 | Email za predračunske zahtevke | ⏳ čaka |
 | 4 | Stripe Price ID-ji (po setupu) | ⏳ čaka |
 | 5 | SMS provider za Premium (Twilio?) | ⏳ čaka |
+| 6 | Čebelica.biz API ključ | ⏳ čaka |
 
 ---
 
@@ -183,11 +198,11 @@
 - [x] Faza 1.4 – Trial warning banner
 - [x] Faza 1.5 – Billing stran
 - [x] Faza 1.6 – Superadmin: ročno dodeljevanje
-- [ ] Faza 1.7 – Testiranje (preveri feature gating, trial warning, superadmin dodeljevanje)
+- [ ] Faza 1.7 – Testiranje: feature gating (ostalo opravljeno)
 - [x] Faza 2.1–2.6 – Stripe integracija (sandbox)
 - [x] Faza 2.7 – UX: plan badge, skrij pakete za naročnike, slovenščina
 - [ ] Faza 2.8 – Preklop na live Stripe (po testiranju)
-- [ ] Faza 3 – Predračun (letno plačilo po predračunu)
-- [ ] Faza 4 – Popusti (superadmin)
+- [x] Faza 3 – Predračun (letno plačilo po predračunu)
+- [x] Faza 4 – Popusti (superadmin)
 - [ ] Faza 5 – Self-booking (Advanced paket)
-- [ ] Faza 6 – Embed widget (Premium paket)
+- [x] Faza 6 – Embed widget (Premium paket)

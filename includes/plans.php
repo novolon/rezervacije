@@ -23,7 +23,8 @@ const PLANS = [
         'yearly_price'    => 69.99,
         'features'        => ['reservations', 'restaurants', 'staff',
                               'guest_emails', 'guest_reminders',
-                              'public_booking', 'booking_approval'],
+                              'public_booking', 'booking_approval',
+                              'survey'],
     ],
     'premium' => [
         'name'            => 'Premium',
@@ -33,7 +34,8 @@ const PLANS = [
                               'guest_emails', 'guest_reminders',
                               'public_booking', 'booking_approval',
                               'embed_widget', 'branding',
-                              'auto_confirm', 'sms_notifications'],
+                              'auto_confirm', 'sms_notifications',
+                              'survey', 'survey_edit', 'survey_export'],
     ],
 ];
 
@@ -50,6 +52,9 @@ const FEATURE_LABELS = [
     'branding'        => 'Branding restavracije',
     'auto_confirm'    => 'Samodejno potrjevanje z omejitvijo gostov',
     'sms_notifications'=> 'SMS obvestila',
+    'survey'          => 'Pregled ankete o zadovoljstvu',
+    'survey_edit'     => 'Urejanje ankete in vprašanj',
+    'survey_export'   => 'CSV izvoz anket',
 ];
 
 // ─── Pridobi aktivno naročnino admina ─────────────────────────
@@ -57,7 +62,7 @@ function get_active_subscription(PDO $pdo, int $userId): ?array {
     $stmt = $pdo->prepare("
         SELECT * FROM subscriptions
         WHERE user_id = ?
-          AND status IN ('trial', 'active', 'pending_invoice')
+          AND status IN ('trial', 'active', 'pending_invoice', 'payment_failed')
           AND (ends_at IS NULL OR ends_at > NOW())
         ORDER BY created_at DESC
         LIMIT 1
@@ -70,6 +75,7 @@ function get_active_subscription(PDO $pdo, int $userId): ?array {
 function user_has_feature(PDO $pdo, int $userId, string $feature): bool {
     $sub = get_active_subscription($pdo, $userId);
     if (!$sub) return false;
+    if ($sub['status'] === 'payment_failed') return false;
     $plan = PLANS[$sub['plan_slug']] ?? null;
     if (!$plan) return false;
     return in_array($feature, $plan['features']);

@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="sl">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>mKitchen</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        html {
+            scroll-behavior: smooth;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #ffffff;
+            color: #111111;
+            line-height: 1.6;
+        }
+
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        img {
+            max-width: 100%;
+            display: block;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 14px 28px;
+            border-radius: 999px;
+            font-weight: 600;
+            transition: 0.25s ease;
+        }
+
+        .btn-primary {
+            background: #f59e0b;
+            color: #ffffff;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            opacity: 0.95;
+        }
+
+        .btn-secondary {
+            border: 1px solid #e5e5e5;
+            background: #ffffff;
+            color: #111111;
+        }
+
+        .btn-secondary:hover {
+            background: #f5f5f5;
+        }
+
+        .site-header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            backdrop-filter: blur(12px);
+            background: rgba(255, 255, 255, 0.9);
+            border-bottom: 1px solid #eeeeee;
+        }
+
+        .header-inner {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            min-height: 80px;
+            gap: 24px;
+        }
+
+        .logo {
+            font-size: 28px;
+            font-weight: 800;
+            letter-spacing: -0.03em;
+        }
+
+        .logo span {
+            color: #f59e0b;
+        }
+
+        .nav {
+            display: flex;
+            gap: 28px;
+            align-items: center;
+        }
+
+        .nav a {
+            color: #666666;
+            font-size: 15px;
+            transition: 0.25s ease;
+        }
+
+        .nav a:hover {
+            color: #111111;
+        }
+
+        .hero {
+            position: relative;
+            overflow: hidden;
+            padding: 80px 0;
+            background:
+                radial-gradient(circle at top right, rgba(245, 158, 11, 0.15), transparent 30%),
+                radial-gradient(circle at left center, rgba(0, 0, 0, 0.04), transparent 25%),
+                #ffffff;
+        }
+
+        .hero-grid {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 60px;
+            align-items: center;
+            min-height: calc(100vh - 80px);
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 8px 14px;
+            border-radius: 999px;
+            font-size: 14px;
+            color: #f59e0b;
+            border: 1px solid #ffe5b5;
+            background: #fff7e6;
+            margin-bottom: 20px;
+        }
+
+        .hero h1 {
+            font-size: 64px;
+            line-height: 1.05;
+            letter-spacing: -0.04em;
+            margin-bottom: 24px;
+        }
+
+        .hero h1 .accent {
+            color: #f59e0b;
+            display: block;
+        }
+
+        .hero p {
+            font-size: 18px;
+            color: #555555;
+            max-width: 620px;
+            margin-bottom: 32px;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            margin-bottom: 40px;
+        }
+
+        .hero-stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+            padding-top: 24px;
+            border-top: 1px solid #eeeeee;
+            max-width: 520px;
+        }
+
+        .stat strong {
+            display: block;
+            font-size: 28px;
+            color: #f59e0b;
+            margin-bottom: 4px;
+        }
+
+        .stat span {
+            font-size: 14px;
+            color: #777777;
+        }
+
+        .hero-image-card {
+            position: relative;
+            border-radius: 32px;
+            overflow: hidden;
+            border: 1px solid #eeeeee;
+            background: #ffffff;
+            padding: 16px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.08);
+        }
+
+        .hero-image-card img {
+            width: 100%;
+            height: 680px;
+            object-fit: cover;
+            border-radius: 24px;
+        }
+
+        .floating-card {
+            position: absolute;
+            left: 36px;
+            right: 36px;
+            bottom: 36px;
+            background: #ffffff;
+            border: 1px solid #eeeeee;
+            border-radius: 24px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08);
+        }
+
+        .floating-card small {
+            color: #777777;
+            font-size: 13px;
+        }
+
+        .floating-card h3 {
+            margin-top: 8px;
+            margin-bottom: 6px;
+            font-size: 24px;
+        }
+
+        .floating-card p {
+            margin: 0;
+            font-size: 15px;
+            color: #555555;
+        }
+
+        .section {
+            padding: 100px 0;
+        }
+
+        .section-dark {
+            background: #fafafa;
+            border-top: 1px solid #eeeeee;
+            border-bottom: 1px solid #eeeeee;
+        }
+
+        .section-label {
+            color: #f59e0b;
+            text-transform: uppercase;
+            letter-spacing: 0.22em;
+            font-size: 13px;
+            margin-bottom: 14px;
+        }
+
+        .section h2 {
+            font-size: 42px;
+            line-height: 1.1;
+            letter-spacing: -0.03em;
+            margin-bottom: 18px;
+        }
+
+        .section-intro {
+            color: #666666;
+            max-width: 700px;
+            font-size: 17px;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+
+        .card {
+            background: #ffffff;
+            border: 1px solid #eeeeee;
+            border-radius: 28px;
+            padding: 32px;
+            transition: 0.25s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.08);
+        }
+
+        .card h3 {
+            font-size: 22px;
+            margin-bottom: 12px;
+        }
+
+        .card p {
+            color: #555555;
+            font-size: 16px;
+        }
+
+        .menu-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 24px;
+            margin-top: 40px;
+        }
+
+        .menu-item {
+            background: #ffffff;
+            border: 1px solid #eeeeee;
+            border-radius: 28px;
+            padding: 28px;
+            transition: 0.25s ease;
+        }
+
+        .menu-item:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.08);
+        }
+
+        .menu-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .menu-top h3 {
+            font-size: 22px;
+            line-height: 1.25;
+        }
+
+        .price {
+            background: #fff3d9;
+            color: #f59e0b;
+            padding: 7px 12px;
+            border-radius: 999px;
+            font-size: 14px;
+            font-weight: 600;
+            white-space: nowrap;
+        }
+
+        .menu-item p {
+            color: #555555;
+            font-size: 16px;
+        }
+
+        .visit-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 32px;
+            align-items: stretch;
+        }
+
+        .form-card {
+            background: #ffffff;
+            border: 1px solid #eeeeee;
+            border-radius: 28px;
+            padding: 32px;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+        .form-grid input,
+        .form-grid textarea {
+            width: 100%;
+            background: #ffffff;
+            border: 1px solid #e5e5e5;
+            border-radius: 18px;
+            padding: 14px 16px;
+            color: #111111;
+            font-family: inherit;
+            font-size: 15px;
+        }
+
+        .footer {
+            padding: 32px 0 50px;
+            border-top: 1px solid #eeeeee;
+            color: #777777;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        @media (max-width: 1024px) {
+
+            .hero-grid,
+            .visit-grid,
+            .features,
+            .menu-grid {
+                grid-template-columns: 1fr 1fr;
+            }
+
+            .hero h1 {
+                font-size: 50px;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .nav {
+                display: none;
+            }
+
+            .hero-grid,
+            .visit-grid,
+            .features,
+            .menu-grid,
+            .form-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .hero h1 {
+                font-size: 40px;
+            }
+        }
+    </style>
+
+</head>
+
+<body>
+
+    <header class="site-header">
+        <div class="container header-inner">
+            <a href="#" class="logo"><span>m</span>Kitchen</a>
+
+            <nav class="nav">
+                <a href="#about">O nas</a>
+                <a href="#menu">Meni</a>
+                <a href="#visit">Obiščite nas</a>
+            </nav>
+
+            <a href="#reservation" class="btn btn-secondary">Rezervacija</a>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="container hero-grid">
+            <div>
+                <div class="badge">Moderna kuhinja. Sveže sestavine. Toplo vzdušje.</div>
+                <h1>
+                    Okusi, ki naredijo
+                    <span class="accent">vtis že ob prvem grižljaju.</span>
+                </h1>
+                <p>
+                    Dobrodošli v restavraciji mKitchen, kjer združujemo sodoben pristop,
+                    vrhunske sestavine in sproščeno urbano izkušnjo obedovanja.
+                </p>
+
+                <div class="hero-actions">
+                    <a href="#menu" class="btn btn-primary">Poglej meni</a>
+                    <a href="#visit" class="btn btn-secondary">Kje smo</a>
+                </div>
+
+                <div class="hero-stats">
+                    <div class="stat">
+                        <strong>4.9</strong>
+                        <span>Ocena gostov</span>
+                    </div>
+                    <div class="stat">
+                        <strong>100%</strong>
+                        <span>Sveže pripravljeno</span>
+                    </div>
+                    <div class="stat">
+                        <strong>7 dni</strong>
+                        <span>Na voljo za vas</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="hero-image-card">
+                <img src="https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?q=80&w=1200&auto=format&fit=crop" alt="mKitchen restavracija">
+                <div class="floating-card">
+                    <small>Danes priporočamo</small>
+                    <h3>Kremna rižota z jurčki</h3>
+                    <p>Parmezan, sveža zelišča, hrustljavi orehi</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section section-dark" id="about">
+        <div class="container">
+            <div class="features">
+                <div class="card">
+                    <h3>Sezonske sestavine</h3>
+                    <p>Naš meni se prilagaja letnim časom in najboljšim lokalnim sestavinam.</p>
+                </div>
+                <div class="card">
+                    <h3>Sodoben ambient</h3>
+                    <p>Topel interier, prijetna svetloba in prostor za sproščeno druženje.</p>
+                </div>
+                <div class="card">
+                    <h3>Izkušnja z značajem</h3>
+                    <p>Od hitrega kosila do večerne degustacije, vsak obisk naj bo poseben.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section" id="menu">
+        <div class="container">
+            <div class="section-label">Meni</div>
+            <h2>Najbolj priljubljene izbire</h2>
+            <p class="section-intro">
+                Preprost izbor jedi, ki združuje sodobne okuse, kakovostne sestavine
+                in estetsko postrežbo.
+            </p>
+
+            <div class="menu-grid">
+                <div class="menu-item">
+                    <div class="menu-top">
+                        <h3>Burrata &amp; paradižnik</h3>
+                        <span class="price">12 €</span>
+                    </div>
+                    <p>Sveža burrata, pesto bazilike, češnjev paradižnik.</p>
+                </div>
+
+                <div class="menu-item">
+                    <div class="menu-top">
+                        <h3>Goveji steak</h3>
+                        <span class="price">28 €</span>
+                    </div>
+                    <p>Pečena zelenjava, pire krompir, omaka popra.</p>
+                </div>
+
+                <div class="menu-item">
+                    <div class="menu-top">
+                        <h3>Losos teriyaki</h3>
+                        <span class="price">24 €</span>
+                    </div>
+                    <p>Jasminov riž, sezonska zelenjava, sezam.</p>
+                </div>
+
+                <div class="menu-item">
+                    <div class="menu-top">
+                        <h3>Čokoladni mousse</h3>
+                        <span class="price">8 €</span>
+                    </div>
+                    <p>Maline, hrustljav lešnik, nežna morska sol.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="section section-dark" id="visit">
+        <div class="container visit-grid">
+            <div class="info-block">
+                <div class="section-label">Obiščite nas</div>
+                <h2>mKitchen v središču mesta</h2>
+                <p>
+                    Idealna izbira za kosilo, večerjo ali sproščen večer ob dobri hrani in pijači.
+                    Pridite na okusno izkušnjo v modernem prostoru, kjer se udobje sreča s stilom.
+                </p>
+
+                <div class="details" style="line-height: 3em;">
+                    <div><strong>Naslov:</strong> Mestna ulica 12, Ljubljana</div>
+                    <div><strong>Odprto:</strong> Pon–Ned, 12:00–22:00</div>
+                    <div><strong>Telefon:</strong> +386 40 123 456</div>
+                    <div><strong>Email:</strong> info@mkitchen.si</div>
+                </div>
+            </div>
+
+            <div class="form-card" id="reservation">
+                <h2>Rezerviraj svojo mizo</h2>
+
+                <div id="rez-widget"></div>
+                <script src="https://dev.novolon.com/rezervacije-saas/widget.js" data-token="6109dd09311f11f1b8a5001132a7435e6109dd0c311f11f1b8a5001132a7435e" data-container="#rez-widget"></script>
+            </div>
+        </div>
+    </section>
+
+    <footer class="footer">
+        <div class="container">
+            © 2026 mKitchen. Vse pravice pridržane.
+        </div>
+    </footer>
+
+</body>
+
+</html>

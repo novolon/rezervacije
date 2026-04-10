@@ -7,8 +7,27 @@ const ReservationModal = (() => {
     let currentData = null;
     let submitted   = false;
 
+    // ── Cache za zaposlene in custom fields po restaurant_id ─────
+    const _extrasCache = {};
+
+    async function fetchExtras(restId) {
+        if (!restId) return { staff: [], fields: [] };
+        const rid = parseInt(restId);
+        if (_extrasCache[rid]) return _extrasCache[rid];
+        const [staff, fields] = await Promise.all([
+            API.get(`/api/staff.php?restaurant_id=${rid}`).catch(() => []),
+            API.get(`/api/customfields.php?restaurant_id=${rid}`).catch(() => []),
+        ]);
+        _extrasCache[rid] = { staff: staff || [], fields: fields || [] };
+        return _extrasCache[rid];
+    }
+
+    function clearExtrasCache(restId) {
+        if (restId) delete _extrasCache[parseInt(restId)];
+    }
+
     // ── Odpri ─────────────────────────────────────────────────────
-    function open(mode, data = {}) {
+    async function open(mode, data = {}) {
         // Prepreči ustvarjanje/urejanje rezervacij v preteklosti
         if (mode === 'create') {
             const d = data.date || data.reservation_date || '';
@@ -20,7 +39,30 @@ const ReservationModal = (() => {
         currentMode = mode;
         currentData = data;
         submitted   = false;
-        buildModal(mode, data);
+
+        // Pridobi restaurant_id za fetchExtras
+        let restIdForExtras = null;
+        if (mode === 'create') {
+            restIdForExtras = data.restaurantId || (APP_STATE.role !== 'admin' ? APP_STATE.restaurantId : null);
+        } else {
+            restIdForExtras = data.restaurant_id;
+        }
+
+        // Za view/edit: naloži polne podatke (field_values, staff_name)
+        if (mode !== 'create' && data.id) {
+            try {
+                const full = await API.get(`/api/reservations.php?id=${data.id}`);
+                if (full) data = { ...data, ...full };
+            } catch (e) { /* fallback na obstoječe podatke */ }
+        }
+
+        // Naloži zaposlene in custom fields (async, pred gradnjo modala)
+        let extras = { staff: [], fields: [] };
+        if (restIdForExtras) {
+            extras = await fetchExtras(restIdForExtras).catch(() => ({ staff: [], fields: [] }));
+        }
+
+        buildModal(mode, data, extras);
     }
 
     // ── Zapri ─────────────────────────────────────────────────────
@@ -30,7 +72,7 @@ const ReservationModal = (() => {
     }
 
     // ── Zgradi modal ──────────────────────────────────────────────
-    function buildModal(mode, data) {
+    function buildModal(mode, data, extras = { staff: [], fields: [] }) {
         // Odstrani obstoječe
         const existing = document.getElementById('modal-overlay');
         if (existing) existing.remove();
@@ -62,9 +104,9 @@ const ReservationModal = (() => {
         body.className = 'modal-body';
 
         if (mode === 'view') {
-            body.appendChild(buildViewContent(data));
+            body.appendChild(buildViewContent(data, extras));
         } else {
-            body.appendChild(buildFormContent(data));
+            body.appendChild(buildFormContent(data, extras));
         }
 
         // Footer
@@ -85,6 +127,33 @@ const ReservationModal = (() => {
             closeFooter.addEventListener('click', close);
 
             footer.appendChild(delBtn);
+
+            // ── Gost je prišel + Pošlji anketo (samo za potrjene z emailom) ──
+            if (APP_STATE.hasSurvey && data.email && data.status === 'confirmed') {
+                const arrivedBtn = document.createElement('button');
+                const isArrived = !!data.arrived_at;
+                arrivedBtn.className = 'btn btn-ghost';
+                arrivedBtn.id = 'btn-arrived';
+                arrivedBtn.style.cssText = isArrived
+                    ? 'color:#065F46;border-color:#6EE7B7;background:#ECFDF5'
+                    : 'color:#374151';
+                arrivedBtn.innerHTML = isArrived
+                    ? `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg> Prišel`
+                    : `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6 9 17l-5-5"/></svg> Gost je prišel`;
+                arrivedBtn.addEventListener('click', () => handleMarkArrived(data, arrivedBtn, box));
+                footer.appendChild(arrivedBtn);
+
+                if (isArrived) {
+                    const sendBtn = document.createElement('button');
+                    sendBtn.className = 'btn btn-ghost';
+                    sendBtn.id = 'btn-send-survey';
+                    sendBtn.style.cssText = 'color:#92400E;border-color:#FDE68A;background:#FFFBEB';
+                    sendBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2 15 22 11 13 2 9l20-7z"/></svg> Pošlji anketo`;
+                    sendBtn.addEventListener('click', () => handleSendSurvey(data, sendBtn));
+                    footer.appendChild(sendBtn);
+                }
+            }
+
             footer.appendChild(closeFooter);
 
             if (!isPast) {
@@ -134,7 +203,7 @@ const ReservationModal = (() => {
     }
 
     // ── Prikaz podatkov (view mode) ───────────────────────────────
-    function buildViewContent(r) {
+    function buildViewContent(r, extras = { staff: [], fields: [] }) {
         const wrap = document.createElement('div');
 
         // Restavracija badge
@@ -162,7 +231,21 @@ const ReservationModal = (() => {
         if (r.duration) fields.push({ label: 'Trajanje', value: r.duration + ' min' });
         if (r.email) fields.push({ label: 'E-pošta', value: r.email });
         if (r.phone) fields.push({ label: 'Telefon', value: r.phone });
+        if (r.staff_name) fields.push({ label: 'Sprejel', value: r.staff_name });
         if (r.notes) fields.push({ label: 'Opomba', value: r.notes, full: true });
+        if (r.arrived_at) {
+            const d = new Date(r.arrived_at.replace(' ','T'));
+            fields.push({ label: 'Prišel ob', value: d.toLocaleTimeString('sl-SI', { hour:'2-digit', minute:'2-digit' }) });
+        }
+
+        // Custom field vrednosti
+        const fieldValues = Array.isArray(r.field_values) ? r.field_values : [];
+        fieldValues.forEach(fv => {
+            if (fv.value !== null && fv.value !== '') {
+                const displayVal = fv.value === '1' ? 'Da' : (fv.value === '0' ? 'Ne' : fv.value);
+                fields.push({ label: fv.label, value: displayVal, full: true });
+            }
+        });
 
         fields.forEach(f => {
             const item = document.createElement('div');
@@ -177,7 +260,7 @@ const ReservationModal = (() => {
     }
 
     // ── Forma (create / edit) ─────────────────────────────────────
-    function buildFormContent(data) {
+    function buildFormContent(data, extras = { staff: [], fields: [] }) {
         const wrap = document.createElement('div');
 
         // Restaurant selector (admin in create mode)
@@ -309,6 +392,93 @@ const ReservationModal = (() => {
         notesField.appendChild(makeError(''));
         wrap.appendChild(notesField);
 
+        // ── Zaposleni (samo če restaurant ima vsaj enega) ──────────
+        const activeStaff = (extras.staff || []).filter(s => s.is_active != 0);
+        if (activeStaff.length > 0) {
+            const staffField = makeField('staff_id', 'Sprejel');
+            const staffSel = document.createElement('select');
+            staffSel.name = 'staff_id';
+            const noOpt = document.createElement('option');
+            noOpt.value = ''; noOpt.textContent = '— Nihče / neznano —';
+            staffSel.appendChild(noOpt);
+            activeStaff.forEach(s => {
+                const opt = document.createElement('option');
+                opt.value = s.id;
+                opt.textContent = s.name;
+                if (data.staff_id && parseInt(data.staff_id) === parseInt(s.id)) opt.selected = true;
+                staffSel.appendChild(opt);
+            });
+            staffField.appendChild(staffSel);
+            staffField.appendChild(makeError(''));
+            wrap.appendChild(staffField);
+        }
+
+        // ── Polja po meri (internal ali both) ─────────────────────
+        const internalFields = (extras.fields || []).filter(
+            f => f.applies_to === 'internal' || f.applies_to === 'both'
+        );
+        internalFields.forEach(f => {
+            const fieldEl = makeField('cf_' + f.id, f.label, !!f.is_required);
+
+            // Najdi obstoječo vrednost
+            const existingFV = Array.isArray(data.field_values)
+                ? data.field_values.find(fv => fv.label === f.label)
+                : null;
+            const existingVal = existingFV ? existingFV.value : '';
+
+            let inputEl;
+            if (f.field_type === 'checkbox') {
+                const label = document.createElement('label');
+                label.style.display = 'flex';
+                label.style.alignItems = 'center';
+                label.style.gap = '8px';
+                label.style.cursor = 'pointer';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.name = 'cf_' + f.id;
+                cb.value = '1';
+                cb.checked = existingVal === '1';
+                cb.style.width = '16px';
+                cb.style.height = '16px';
+                cb.style.accentColor = '#F59E0B';
+                cb.style.cursor = 'pointer';
+                cb.style.flexShrink = '0';
+                const span = document.createElement('span');
+                span.textContent = f.label;
+                span.style.fontSize = '.875rem';
+                label.appendChild(cb);
+                label.appendChild(span);
+                // Za checkbox ne prikažemo ponovne oznake – preskočimo label
+                const cbWrap = makeField('cf_' + f.id, '', false);
+                cbWrap.style.marginTop = '4px';
+                cbWrap.appendChild(label);
+                cbWrap.appendChild(makeError(''));
+                wrap.appendChild(cbWrap);
+                return;
+            } else if (f.field_type === 'select' && f.options && f.options.length) {
+                inputEl = document.createElement('select');
+                inputEl.name = 'cf_' + f.id;
+                const empty = document.createElement('option');
+                empty.value = ''; empty.textContent = '— Izberi —';
+                inputEl.appendChild(empty);
+                f.options.forEach(opt => {
+                    const o = document.createElement('option');
+                    o.value = opt; o.textContent = opt;
+                    if (existingVal === opt) o.selected = true;
+                    inputEl.appendChild(o);
+                });
+            } else {
+                inputEl = document.createElement('input');
+                inputEl.type = 'text';
+                inputEl.name = 'cf_' + f.id;
+                inputEl.value = existingVal;
+                if (f.is_required) inputEl.required = true;
+            }
+            fieldEl.appendChild(inputEl);
+            fieldEl.appendChild(makeError(f.is_required ? `${f.label} je obvezno.` : ''));
+            wrap.appendChild(fieldEl);
+        });
+
         return wrap;
     }
 
@@ -351,6 +521,19 @@ const ReservationModal = (() => {
             const val = input.value.trim();
             if (!val || (name === 'guest_count' && parseInt(val) < 1)) {
                 input.closest('.field').classList.add('invalid');
+                valid = false;
+            }
+        });
+
+        // Validacija obveznih custom fields
+        overlay.querySelectorAll('[name^="cf_"]').forEach(input => {
+            const field = input.closest('.field');
+            if (!field) return;
+            const lbl = field.querySelector('label');
+            if (!lbl || !lbl.querySelector('.req')) return; // ni obvezno
+            if (input.type === 'checkbox') return; // checkboxes so vedno OK
+            if (!input.value.trim()) {
+                field.classList.add('invalid');
                 valid = false;
             }
         });
@@ -398,10 +581,27 @@ const ReservationModal = (() => {
 
         const overlay  = document.getElementById('modal-overlay');
         const formData = {};
+        const customFields = {};
 
         overlay.querySelectorAll('input, select, textarea').forEach(el => {
-            formData[el.name] = el.value.trim();
+            if (!el.name) return;
+            if (el.name.startsWith('cf_')) {
+                const fieldId = el.name.replace('cf_', '');
+                if (el.type === 'checkbox') {
+                    customFields[fieldId] = el.checked ? '1' : '0';
+                } else {
+                    customFields[fieldId] = el.value.trim();
+                }
+            } else {
+                if (el.type !== 'checkbox') {
+                    formData[el.name] = el.value.trim();
+                }
+            }
         });
+
+        if (Object.keys(customFields).length > 0) {
+            formData.custom_fields = customFields;
+        }
 
         const saveBtn = document.getElementById('modal-save-btn');
         if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '...'; }
@@ -426,6 +626,57 @@ const ReservationModal = (() => {
         } catch (e) {
             if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = mode === 'edit' ? 'Shrani spremembe' : 'Shrani rezervacijo'; }
             if (window.App) App.showToast(e.message, 'error');
+        }
+    }
+
+    // ── Mark arrived ──────────────────────────────────────────────
+    async function handleMarkArrived(data, btn, box) {
+        const isArrived = !!data.arrived_at;
+        if (isArrived) {
+            if (!confirm('Odznačiti gosta kot prišlega? S tem bo izbrisano tudi morebitno načrtovano pošiljanje ankete.')) return;
+        }
+        btn.disabled = true;
+        try {
+            const res = await API.post(
+                `/api/reservations.php?action=mark_arrived&id=${data.id}`,
+                { undo: isArrived }
+            );
+            data.arrived_at = res.arrived_at || null;
+            if (window.App) App.showToast(isArrived ? 'Prihod odznačen.' : 'Gost označen kot prišel!', 'success');
+            // Osveži footer – znova odpri view modal
+            open('view', data);
+        } catch (e) {
+            btn.disabled = false;
+            if (window.App) App.showToast(e.message || 'Napaka.', 'error');
+        }
+    }
+
+    // ── Send survey now ───────────────────────────────────────────
+    async function handleSendSurvey(data, btn) {
+        btn.disabled = true;
+        btn.textContent = 'Pošiljam...';
+        try {
+            const res = await API.post(`/api/survey.php?action=send_now`, { reservation_id: data.id, force: false });
+            if (window.App) App.showToast('Anketa poslana!', 'success');
+            btn.textContent = 'Poslano ✓';
+            btn.style.cssText = 'color:#065F46;border-color:#6EE7B7;background:#ECFDF5;cursor:default';
+        } catch (e) {
+            // Preverimo ali je bila že poslana
+            if (e.data && e.data.already_sent) {
+                const sentAt = e.data.sent_at ? new Date(e.data.sent_at.replace(' ','T')).toLocaleString('sl-SI') : '';
+                if (confirm(`Anketa je bila že poslana (${sentAt}). Poslati znova?`)) {
+                    try {
+                        await API.post(`/api/survey.php?action=send_now`, { reservation_id: data.id, force: true });
+                        if (window.App) App.showToast('Anketa znova poslana!', 'success');
+                        btn.textContent = 'Poslano ✓';
+                        btn.style.cssText = 'color:#065F46;border-color:#6EE7B7;background:#ECFDF5;cursor:default';
+                        return;
+                    } catch (e2) { /* pade spodaj */ }
+                }
+            }
+            btn.disabled = false;
+            btn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2 11 13M22 2 15 22 11 13 2 9l20-7z"/></svg> Pošlji anketo`;
+            if (window.App) App.showToast(e.message || 'Pošiljanje ni uspelo.', 'error');
         }
     }
 
@@ -463,4 +714,295 @@ const ReservationModal = (() => {
     }
 
     return { open, close };
+})();
+
+/**
+ * Modal za odobritev/zavrnitev pending rezervacij.
+ */
+const PendingModal = (() => {
+    function escText(str) {
+        const d = document.createElement('div');
+        d.textContent = str || '';
+        return d.innerHTML;
+    }
+
+    function formatDate(ds) {
+        if (!ds) return '';
+        const [y, m, d] = ds.split('-');
+        const months = ['jan','feb','mar','apr','maj','jun','jul','avg','sep','okt','nov','dec'];
+        return `${parseInt(d)}. ${months[parseInt(m)-1]} ${y}`;
+    }
+
+    function open(pendingList) {
+        const existing = document.getElementById('pending-modal-overlay');
+        if (existing) existing.remove();
+
+        const first = pendingList[0];
+        const time  = first.reservation_time ? first.reservation_time.substring(0,5) : '';
+        const label = `${time} – ${formatDate(first.reservation_date)}`;
+
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.id = 'pending-modal-overlay';
+
+        const box = document.createElement('div');
+        box.className = 'modal-box';
+        box.style.maxWidth = '520px';
+
+        // Glava
+        box.innerHTML = `
+            <div class="modal-header">
+                <div class="modal-title">Čakajoče rezervacije – ${escText(label)}</div>
+                <button class="modal-close" id="pending-modal-close">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="modal-body" id="pending-modal-body"></div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" id="pending-modal-close-btn">Zapri</button>
+            </div>`;
+
+        overlay.appendChild(box);
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+
+        box.querySelector('#pending-modal-close').addEventListener('click', () => overlay.remove());
+        box.querySelector('#pending-modal-close-btn').addEventListener('click', () => overlay.remove());
+
+        renderList(pendingList, box.querySelector('#pending-modal-body'));
+    }
+
+    function renderList(pendingList, container) {
+        container.innerHTML = '';
+        if (pendingList.length === 0) {
+            container.innerHTML = '<p style="text-align:center;color:var(--color-muted);padding:16px 0">Ni čakajočih rezervacij.</p>';
+            return;
+        }
+        pendingList.forEach(r => {
+            const row = document.createElement('div');
+            row.id = `pending-row-${r.id}`;
+            row.style.cssText = 'border:1px solid #E5E7EB;border-radius:10px;padding:14px 16px;margin-bottom:12px;background:#FAFAFA';
+
+            const cfRows = (r.field_values || []).map(fv =>
+                `<div style="grid-column:1/-1"><span style="color:#6B7280;font-size:.75rem;display:block">${escText(fv.label)}</span>${escText(fv.value === '1' ? 'Da' : fv.value === '0' ? 'Ne' : fv.value)}</div>`
+            ).join('');
+
+            row.innerHTML = `
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;margin-bottom:10px;font-size:.875rem">
+                    <div><span style="color:#6B7280;font-size:.75rem;display:block">Ime</span><strong>${escText(r.guest_name)}</strong></div>
+                    <div><span style="color:#6B7280;font-size:.75rem;display:block">Gostov</span><strong>${escText(String(r.guest_count))}</strong></div>
+                    <div><span style="color:#6B7280;font-size:.75rem;display:block">Email</span>${r.email ? escText(r.email) : '<span style="color:#9CA3AF">—</span>'}</div>
+                    <div><span style="color:#6B7280;font-size:.75rem;display:block">Telefon</span>${r.phone ? escText(r.phone) : '<span style="color:#9CA3AF">—</span>'}</div>
+                    ${r.staff_name ? `<div style="grid-column:1/-1"><span style="color:#6B7280;font-size:.75rem;display:block">Sprejel/a</span>${escText(r.staff_name)}</div>` : ''}
+                    ${r.notes ? `<div style="grid-column:1/-1"><span style="color:#6B7280;font-size:.75rem;display:block">Opomba</span>${escText(r.notes)}</div>` : ''}
+                    ${cfRows}
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn-primary" style="background:#16a34a;flex:1" data-action="approve" data-id="${r.id}">✓ Potrdi</button>
+                    <button class="btn btn-ghost" style="color:#dc2626;border-color:#dc2626;flex:1" data-action="reject" data-id="${r.id}">✗ Zavrni</button>
+                </div>`;
+
+            row.querySelectorAll('[data-action]').forEach(btn => {
+                btn.addEventListener('click', () => handleAction(btn.dataset.action, parseInt(btn.dataset.id), row));
+            });
+
+            container.appendChild(row);
+        });
+    }
+
+    async function handleAction(action, id, rowEl) {
+        const btns = rowEl.querySelectorAll('button');
+        btns.forEach(b => { b.disabled = true; });
+
+        try {
+            await API.put(`/api/reservations.php?id=${id}&action=${action}`, {});
+            const msg = action === 'approve' ? 'Rezervacija potrjena!' : 'Rezervacija zavrnjena.';
+            if (window.App) App.showToast(msg, action === 'approve' ? 'success' : 'error');
+
+            // Animiraj izginotje vrstice
+            rowEl.style.transition = 'opacity .3s';
+            rowEl.style.opacity = '0';
+            setTimeout(() => {
+                rowEl.remove();
+                // Osveži razpored in badge
+                if (window.App) App.afterReservationChange(null);
+                updatePendingBadge();
+                // Zapri modal če ni več vrstic
+                const body = document.getElementById('pending-modal-body');
+                if (body && body.children.length === 0) {
+                    const overlay = document.getElementById('pending-modal-overlay');
+                    if (overlay) overlay.remove();
+                }
+            }, 300);
+        } catch (e) {
+            btns.forEach(b => { b.disabled = false; });
+            if (window.App) App.showToast(e.message, 'error');
+        }
+    }
+
+    function updatePendingBadge() {
+        const badge = document.getElementById('pending-badge');
+        if (!badge) return;
+        const current = parseInt(badge.textContent) || 0;
+        const next = Math.max(0, current - 1);
+        if (window.PendingSection) {
+            PendingSection.updateGlobalBadge(next);
+        } else {
+            badge.textContent = next;
+            badge.style.display = next > 0 ? 'inline-flex' : 'none';
+            const btn = document.getElementById('btn-pending');
+            if (btn) btn.style.display = next > 0 ? '' : 'none';
+        }
+    }
+
+    return { open };
+})();
+
+/**
+ * Inline sekcija čakajočih rezervacij (ne modal).
+ */
+const PendingSection = (() => {
+    function escText(str) {
+        const d = document.createElement('div');
+        d.textContent = str || '';
+        return d.innerHTML;
+    }
+
+    function formatDate(ds) {
+        if (!ds) return '';
+        const days   = ['ned', 'pon', 'tor', 'sre', 'čet', 'pet', 'sob'];
+        const months = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'avg', 'sep', 'okt', 'nov', 'dec'];
+        const dt = new Date(ds + 'T00:00:00');
+        return `${days[dt.getDay()]}, ${dt.getDate()}. ${months[dt.getMonth()]}`;
+    }
+
+    async function load() {
+        try {
+            const list = await API.get('/api/reservations.php?pending=1');
+            render(list || []);
+        } catch (e) {
+            // tiha napaka – ne moti uporabnika
+        }
+    }
+
+    function render(list) {
+        const section   = document.getElementById('pending-section');
+        const container = document.getElementById('pending-list');
+        const badge     = document.getElementById('pending-section-badge');
+        if (!section || !container) return;
+
+        if (badge) badge.textContent = list.length;
+        updateGlobalBadge(list.length);
+
+        if (list.length === 0) {
+            section.style.display = 'none';
+            return;
+        }
+
+        section.style.display = '';
+        container.innerHTML = '';
+
+        const showRest = APP_STATE.restaurants && APP_STATE.restaurants.length > 1;
+
+        list.forEach(r => {
+            const item = document.createElement('div');
+            item.className = 'pending-item';
+            item.id = `pending-item-${r.id}`;
+
+            const time  = r.reservation_time ? r.reservation_time.substring(0, 5) : '';
+            const cnt   = parseInt(r.guest_count);
+            const cntTxt = cnt === 1 ? '1 oseba' : `${cnt} oseb`;
+
+            let infoHtml = `
+                <div class="pending-item-when">${escText(formatDate(r.reservation_date))} · ${escText(time)}</div>
+                <div class="pending-item-guest">${escText(r.guest_name)} · ${escText(cntTxt)}</div>`;
+
+            if (showRest && r.restaurant_name) {
+                infoHtml += `<div class="pending-item-rest">🍽 ${escText(r.restaurant_name)}</div>`;
+            }
+
+            const contacts = [];
+            if (r.email) contacts.push(`📧 ${escText(r.email)}`);
+            if (r.phone) contacts.push(`📞 ${escText(r.phone)}`);
+            if (contacts.length) {
+                infoHtml += `<div class="pending-item-contact">${contacts.join(' · ')}</div>`;
+            }
+
+            if (r.notes) {
+                infoHtml += `<div class="pending-item-notes">"${escText(r.notes)}"</div>`;
+            }
+
+            if (r.staff_name) {
+                infoHtml += `<div class="pending-item-extra"><span class="pending-item-label">Sprejel/a:</span> ${escText(r.staff_name)}</div>`;
+            }
+
+            (r.field_values || []).forEach(fv => {
+                const val = fv.value === '1' ? 'Da' : fv.value === '0' ? 'Ne' : fv.value;
+                infoHtml += `<div class="pending-item-extra"><span class="pending-item-label">${escText(fv.label)}:</span> ${escText(val)}</div>`;
+            });
+
+            item.innerHTML = `
+                <div class="pending-item-info">${infoHtml}</div>
+                <div class="pending-item-actions">
+                    <button class="btn btn-sm" style="background:#16a34a;color:#fff;border:none" data-action="approve" data-id="${r.id}">✓ Potrdi</button>
+                    <button class="btn btn-sm btn-ghost" style="color:#dc2626;border-color:#fca5a5" data-action="reject" data-id="${r.id}">✗ Zavrni</button>
+                </div>`;
+
+            item.querySelectorAll('[data-action]').forEach(btn => {
+                btn.addEventListener('click', () => handleAction(btn.dataset.action, parseInt(btn.dataset.id), item));
+            });
+
+            container.appendChild(item);
+        });
+    }
+
+    async function handleAction(action, id, itemEl) {
+        const btns = itemEl.querySelectorAll('button');
+        btns.forEach(b => { b.disabled = true; });
+
+        try {
+            await API.put(`/api/reservations.php?id=${id}&action=${action}`, {});
+
+            itemEl.style.transition = 'opacity .25s';
+            itemEl.style.opacity = '0';
+            setTimeout(() => {
+                itemEl.remove();
+                const remaining = document.querySelectorAll('#pending-list .pending-item').length;
+                const badge = document.getElementById('pending-section-badge');
+                if (badge) badge.textContent = remaining;
+                if (remaining === 0) {
+                    const section = document.getElementById('pending-section');
+                    if (section) section.style.display = 'none';
+                }
+                updateGlobalBadge(remaining);
+                const msg = action === 'approve' ? 'Rezervacija potrjena!' : 'Rezervacija zavrnjena.';
+                if (window.App) App.afterReservationChange(msg);
+            }, 250);
+        } catch (e) {
+            btns.forEach(b => { b.disabled = false; });
+            if (window.App) App.showToast(e.message, 'error');
+        }
+    }
+
+    function updateGlobalBadge(count) {
+        const badge = document.getElementById('pending-badge');
+        if (badge) {
+            badge.textContent = count;
+            badge.style.display = count > 0 ? 'inline-flex' : 'none';
+        }
+        const btn = document.getElementById('btn-pending');
+        if (btn) btn.style.display = count > 0 ? '' : 'none';
+    }
+
+    async function loadAndScroll() {
+        await load();
+        const section = document.getElementById('pending-section');
+        if (section && section.style.display !== 'none') {
+            section.scrollIntoView({ behavior: 'smooth' });
+        } else if (window.App) {
+            App.showToast('Ni čakajočih rezervacij.', 'info');
+        }
+    }
+
+    return { load, render, updateGlobalBadge, loadAndScroll };
 })();

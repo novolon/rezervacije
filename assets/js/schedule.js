@@ -173,11 +173,33 @@ const Schedule = (() => {
       });
     }
 
+    // Grupiraj pending rezervacije po (restaurant_id, reservation_time)
+    const pendingGroups = {};
+    const nonPending = [];
+    reservations.forEach(r => {
+      if (r.status === 'pending') {
+        const key = `${r.restaurant_id}|${r.reservation_time}`;
+        if (!pendingGroups[key]) pendingGroups[key] = [];
+        pendingGroups[key].push(r);
+      } else {
+        nonPending.push(r);
+      }
+    });
+    // Vsaka pending skupina → en reprezentativni zapis (za layout)
+    const pendingReps = Object.values(pendingGroups).map(group => {
+      if (group.length === 1) {
+        return { ...group[0], _pendingGroup: group };
+      }
+      // Skupina: vzami prvi zapis kot osnovo, dodaj skupino
+      return { ...group[0], _pendingGroup: group, _groupCount: group.length };
+    });
+    const allForLayout = [...nonPending, ...pendingReps];
+
     // Rezervacijske kartice – z detekcijo prekrivanj
     if (isMulti) {
       // Vsaka restavracija dobi svojo cono, znotraj cone izračunaj prekrivanja
       restIds.forEach((rid, restColIdx) => {
-        const restReservations = reservations.filter(
+        const restReservations = allForLayout.filter(
           (r) => parseInt(r.restaurant_id) === rid,
         );
         const layout = computeOverlapLayout(restReservations);
@@ -195,7 +217,7 @@ const Schedule = (() => {
         });
       });
     } else {
-      const layout = computeOverlapLayout(reservations);
+      const layout = computeOverlapLayout(allForLayout);
       layout.forEach(({ reservation, subCol, subCols }) => {
         const card = buildCard(
           reservation,
@@ -312,23 +334,31 @@ const Schedule = (() => {
     const subLeftPct = (subCol / subCols) * zoneWidthPct;
     const subWidthPct = zoneWidthPct / subCols;
 
+    const isPending = reservation.status === 'pending' || !!reservation._pendingGroup;
+    const groupCount = reservation._groupCount || 0;
+
     const card = document.createElement("div");
-    card.className = "reservation-card";
+    card.className = "reservation-card" + (isPending ? " res-pending" : "");
     card.style.cssText = `
             position: absolute;
             top: ${top}px;
             height: ${height}px;
             left: calc(${zoneLeftPct + subLeftPct}% + 4px);
             width: calc(${subWidthPct}% - 8px);
-            border-left-color: ${reservation.restaurant_color || "#F59E0B"};
+            border-left-color: ${isPending ? "#9CA3AF" : (reservation.restaurant_color || "#F59E0B")};
             overflow: hidden;
             z-index: 2;
+            ${isPending ? "background:#F3F4F6;border-left-style:dashed;" : ""}
             ${isPast ? "opacity:.75;" : ""}
         `;
 
     const nameEl = document.createElement("div");
     nameEl.className = "card-name";
-    nameEl.textContent = reservation.guest_name;
+    if (isPending && groupCount > 1) {
+      nameEl.textContent = `⏳ ${groupCount} čakajočih`;
+    } else {
+      nameEl.textContent = (isPending ? "⏳ " : "") + reservation.guest_name;
+    }
 
     // Prikaži meta podatke samo če je kartica dovolj visoka
     if (height >= 36) {
@@ -340,12 +370,14 @@ const Schedule = (() => {
       timeEl.className = "card-time";
       timeEl.textContent = `${minToTime(absStart)} – ${minToTime(absStart + dur)}`;
 
-      const guestEl = document.createElement("span");
-      guestEl.className = "card-guests";
-      guestEl.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>${reservation.guest_count}`;
+      if (!isPending || groupCount <= 1) {
+        const guestEl = document.createElement("span");
+        guestEl.className = "card-guests";
+        guestEl.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>${reservation.guest_count}`;
+        meta.appendChild(guestEl);
+      }
 
       meta.appendChild(timeEl);
-      meta.appendChild(guestEl);
       card.appendChild(nameEl);
       card.appendChild(meta);
     } else {
@@ -365,7 +397,11 @@ const Schedule = (() => {
 
     card.addEventListener("click", (e) => {
       e.stopPropagation();
-      ReservationModal.open("view", reservation);
+      if (isPending && reservation._pendingGroup) {
+        PendingModal.open(reservation._pendingGroup);
+      } else {
+        ReservationModal.open("view", reservation);
+      }
     });
 
     return card;

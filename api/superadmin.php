@@ -55,6 +55,49 @@ if ($method === 'POST') {
         }
     }
 
+    // Ustvari popust
+    if ($action === 'create_discount') {
+        $planSlug    = $body['plan_slug'] ?? '';
+        $label       = trim($body['label'] ?? '');
+        $discMonthly = isset($body['discounted_monthly']) && $body['discounted_monthly'] !== '' ? (float)$body['discounted_monthly'] : null;
+        $discYearly  = isset($body['discounted_yearly'])  && $body['discounted_yearly']  !== '' ? (float)$body['discounted_yearly']  : null;
+        $validFrom   = $body['valid_from']  ?? null;
+        $validUntil  = $body['valid_until'] ?? null;
+
+        if (!array_key_exists($planSlug, PLANS) || $planSlug === 'trial') {
+            json_response(false, null, 'Neveljaven paket.', 400);
+        }
+        if (!$label) json_response(false, null, 'Opis je obvezen.', 400);
+        if (!$validFrom || !preg_match('/^\d{4}-\d{2}-\d{2}/', $validFrom)) {
+            json_response(false, null, 'Datum začetka je obvezen.', 400);
+        }
+        if (!$validUntil || !preg_match('/^\d{4}-\d{2}-\d{2}/', $validUntil)) {
+            json_response(false, null, 'Datum konca je obvezen.', 400);
+        }
+        if ($discMonthly === null && $discYearly === null) {
+            json_response(false, null, 'Vsaj ena znižana cena je obvezna.', 400);
+        }
+
+        try {
+            $pdo->prepare("
+                INSERT INTO plan_discounts (plan_slug, label, discounted_monthly, discounted_yearly, valid_from, valid_until, is_active)
+                VALUES (?, ?, ?, ?, ?, ?, 1)
+            ")->execute([$planSlug, $label, $discMonthly, $discYearly, $validFrom, $validUntil]);
+            json_response(true, null, 'Popust ustvarjen.');
+        } catch (PDOException $e) {
+            error_log('create_discount error: ' . $e->getMessage());
+            json_response(false, null, 'Napaka pri shranjevanju.', 500);
+        }
+    }
+
+    // Izbriši popust
+    if ($action === 'delete_discount') {
+        $id = isset($body['id']) ? (int)$body['id'] : 0;
+        if (!$id) json_response(false, null, 'id je obvezen.', 400);
+        $pdo->prepare("DELETE FROM plan_discounts WHERE id = ?")->execute([$id]);
+        json_response(true, null, 'Popust izbrisan.');
+    }
+
     // Testni email
     require_once '../includes/mailer.php';
     $body  = get_body();
@@ -69,6 +112,10 @@ if ($method === 'POST') {
 
     if ($type === 'reset') {
         $ok = send_password_reset_email($to, $name, 'TEST_TOKEN_12345');
+    } elseif ($type === 'payment_failed') {
+        $ok = send_payment_failed_email($to, $name, 'Advanced', 6.99, 2, time() + 86400 * 3);
+    } elseif ($type === 'upcoming_invoice') {
+        $ok = send_upcoming_invoice_email($to, $name, 'Advanced', 69.99, time() + 86400 * 7);
     } else {
         $ok = send_verification_email($to, $name, 'TEST_TOKEN_12345');
     }
@@ -90,13 +137,14 @@ $action = $_GET['action'] ?? '';
 if ($action === 'admins') {
     $stmt = $pdo->query("
         SELECT u.id, u.email, u.full_name, u.is_active,
-               u.trial_ends_at, u.subscription_status, u.created_at,
+               u.trial_ends_at, u.created_at,
                COUNT(ra.restaurant_id) AS restaurant_count,
-               COALESCE(s.plan_slug, 'trial') AS plan_slug
+               COALESCE(s.plan_slug, 'trial') AS plan_slug,
+               COALESCE(s.status, u.subscription_status) AS subscription_status
         FROM users u
         LEFT JOIN restaurant_admins ra ON u.id = ra.user_id
         LEFT JOIN subscriptions s ON s.user_id = u.id
-                                  AND s.status IN ('trial','active','pending_invoice')
+                                  AND s.status IN ('trial','active','pending_invoice','payment_failed')
                                   AND (s.ends_at IS NULL OR s.ends_at > NOW())
         WHERE u.role = 'admin'
         GROUP BY u.id
@@ -195,6 +243,12 @@ if ($action === 'stats') {
         'today_reservations' => (int)$today_reservations,
         'trials'             => (int)$trials,
     ]);
+}
+
+// ─── Vsi popusti ──────────────────────────────────────────────
+if ($action === 'discounts') {
+    $stmt = $pdo->query("SELECT * FROM plan_discounts ORDER BY valid_until DESC");
+    json_response(true, $stmt->fetchAll());
 }
 
 // ─── Naročnina admina ─────────────────────────────────────────

@@ -32,7 +32,9 @@ const API = (() => {
         const json = await res.json().catch(() => ({ success: false, error: 'Neveljaven odgovor strežnika.' }));
 
         if (!json.success) {
-            throw new Error(json.error || 'Neznana napaka.');
+            const err = new Error(json.error || 'Neznana napaka.');
+            err.data = json.data || null;
+            throw err;
         }
 
         return json.data;

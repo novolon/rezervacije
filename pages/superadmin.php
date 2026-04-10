@@ -61,7 +61,9 @@ $fullName = $_SESSION['full_name'];
     <div class="admin-tabs">
         <button class="admin-tab active" data-tab="sa-admins">Admini</button>
         <button class="admin-tab" data-tab="sa-restaurants">Restavracije</button>
+        <button class="admin-tab" data-tab="sa-discounts">Popusti</button>
         <button class="admin-tab" data-tab="sa-system">Sistem</button>
+        <a href="<?= BASE_PATH ?>/pages/gdpr.php" class="admin-tab" style="text-decoration:none">GDPR zahtevki</a>
     </div>
 
     <!-- Panel: Admini -->
@@ -115,6 +117,35 @@ $fullName = $_SESSION['full_name'];
     </div>
 
 
+    <!-- Panel: Popusti -->
+    <div id="panel-sa-discounts" class="admin-panel">
+        <div class="admin-card">
+            <div class="admin-card-header" style="display:flex;align-items:center;justify-content:space-between">
+                <h2>Aktivni popusti</h2>
+                <button class="btn btn-primary btn-sm" onclick="openCreateDiscount()">+ Nov popust</button>
+            </div>
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Paket</th>
+                            <th>Opis akcije</th>
+                            <th>Mesečno</th>
+                            <th>Letno</th>
+                            <th>Velja od</th>
+                            <th>Velja do</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody id="sa-discounts-tbody">
+                        <tr><td colspan="8" class="table-empty">Nalagam…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <!-- Panel: Sistem -->
     <div id="panel-sa-system" class="admin-panel">
         <div class="admin-card" style="max-width:480px">
@@ -130,6 +161,8 @@ $fullName = $_SESSION['full_name'];
                     <select id="test-mail-type" style="width:100%;box-sizing:border-box">
                         <option value="verification">Potrditev emaila (ob registraciji)</option>
                         <option value="reset">Ponastavitev gesla</option>
+                        <option value="payment_failed">Neuspelo plačilo</option>
+                        <option value="upcoming_invoice">Opomnik pred plačilom</option>
                     </select>
                 </div>
                 <button id="test-mail-btn" class="btn btn-primary">Pošlji testni email</button>
@@ -164,9 +197,11 @@ $fullName = $_SESSION['full_name'];
     letter-spacing: .05em;
     font-weight: 600;
 }
-.badge-trial   { background: #FEF3C7; color: #92400E; }
-.badge-active  { background: #D1FAE5; color: #065F46; }
-.badge-inactive{ background: #F3F4F6; color: #6B7280; }
+.badge-trial           { background: #FEF3C7; color: #92400E; }
+.badge-active          { background: #D1FAE5; color: #065F46; }
+.badge-inactive        { background: #F3F4F6; color: #6B7280; }
+.badge-pending_invoice { background: #EDE9FE; color: #5B21B6; }
+.badge-payment_failed  { background: #FEE2E2; color: #991B1B; }
 </style>
 
 <script>
@@ -224,7 +259,8 @@ window.APP_STATE = <?= json_encode([
         } catch(e) { toast(e.message, 'error'); }
     }
 
-    const PLAN_LABELS = { trial:'Trial', basic:'Basic', advanced:'Advanced', premium:'Premium' };
+    const PLAN_LABELS   = { trial:'Trial', basic:'Basic', advanced:'Advanced', premium:'Premium' };
+    const STATUS_LABELS = { trial:'Trial', active:'Aktiven', pending_invoice:'Čaka predračun', payment_failed:'Plačilo spodletelo', canceled:'Preklican', expired:'Potekel' };
 
     // ── Admini ────────────────────────────────────────────────────
     async function loadAdmins() {
@@ -240,7 +276,7 @@ window.APP_STATE = <?= json_encode([
                     <td><strong>${h(a.full_name)}</strong></td>
                     <td>${h(a.email)}</td>
                     <td style="text-align:center">${a.restaurant_count}</td>
-                    <td><span class="badge badge-${h(a.subscription_status)}">${PLAN_LABELS[a.plan_slug] ?? h(a.subscription_status)}</span></td>
+                    <td><span class="badge badge-${h(a.subscription_status)}">${STATUS_LABELS[a.subscription_status] ?? h(a.subscription_status)} – ${PLAN_LABELS[a.plan_slug] ?? h(a.plan_slug)}</span></td>
                     <td>${fmtDate(a.trial_ends_at)}</td>
                     <td><span class="badge ${a.is_active==1?'badge-active':'badge-inactive'}">${a.is_active==1?'Aktiven':'Neaktiven'}</span></td>
                     <td>${fmtDate(a.created_at)}</td>
@@ -369,6 +405,155 @@ window.APP_STATE = <?= json_encode([
         } finally {
             btn.disabled = false;
             btn.textContent = 'Pošlji testni email';
+        }
+    });
+
+    // ── Popusti ───────────────────────────────────────────────────
+    const PLAN_NAMES = { basic: 'Basic', advanced: 'Advanced', premium: 'Premium' };
+
+    async function loadDiscounts() {
+        try {
+            const discounts = await API.get('/api/superadmin.php?action=discounts');
+            const tbody = document.getElementById('sa-discounts-tbody');
+            if (!discounts.length) {
+                tbody.innerHTML = `<tr><td colspan="8" class="table-empty">Ni popustov.</td></tr>`;
+                return;
+            }
+            const now = new Date();
+            tbody.innerHTML = discounts.map(d => {
+                const from  = new Date(d.valid_from);
+                const until = new Date(d.valid_until);
+                const active = d.is_active == 1 && from <= now && until >= now;
+                return `
+                <tr>
+                    <td><strong>${h(PLAN_NAMES[d.plan_slug] ?? d.plan_slug)}</strong></td>
+                    <td>${h(d.label)}</td>
+                    <td>${d.discounted_monthly ? d.discounted_monthly + ' €' : '—'}</td>
+                    <td>${d.discounted_yearly  ? d.discounted_yearly  + ' €' : '—'}</td>
+                    <td>${fmtDate(d.valid_from)}</td>
+                    <td>${fmtDate(d.valid_until)}</td>
+                    <td><span class="badge ${active ? 'badge-active' : 'badge-inactive'}">${active ? 'Aktiven' : 'Neaktiven'}</span></td>
+                    <td>
+                        <button class="btn btn-sm btn-ghost" style="font-size:.75rem;padding:4px 10px;color:#991B1B"
+                                onclick="deleteDiscount(${d.id}, '${h(d.label)}')">
+                            Izbriši
+                        </button>
+                    </td>
+                </tr>`;
+            }).join('');
+        } catch(e) { toast(e.message, 'error'); }
+    }
+
+    async function deleteDiscount(id, label) {
+        if (!confirm(`Izbriši popust "${label}"?`)) return;
+        try {
+            await API.post('/api/superadmin.php', { action: 'delete_discount', id });
+            toast('Popust izbrisan.');
+            loadDiscounts();
+        } catch(e) { toast(e.message, 'error'); }
+    }
+    window.deleteDiscount = deleteDiscount;
+
+    function openCreateDiscount() {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.id = 'create-discount-modal';
+        overlay.innerHTML = `
+        <div class="modal-box" style="max-width:440px">
+            <div class="modal-header">
+                <div class="modal-title">Nov popust</div>
+                <button class="modal-close" onclick="document.getElementById('create-discount-modal').remove()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+                <div class="admin-field">
+                    <label>Paket</label>
+                    <select id="cd-plan">
+                        <option value="basic">Basic</option>
+                        <option value="advanced">Advanced</option>
+                        <option value="premium">Premium</option>
+                    </select>
+                </div>
+                <div class="admin-field">
+                    <label>Opis akcije (prikaže se pri paketu)</label>
+                    <input type="text" id="cd-label" placeholder="Pomladna akcija" style="width:100%;box-sizing:border-box">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div class="admin-field">
+                        <label>Znižana cena mesečno (€)</label>
+                        <input type="number" id="cd-monthly" step="0.01" min="0" placeholder="npr. 3.99" style="width:100%;box-sizing:border-box">
+                    </div>
+                    <div class="admin-field">
+                        <label>Znižana cena letno (€)</label>
+                        <input type="number" id="cd-yearly" step="0.01" min="0" placeholder="npr. 39.99" style="width:100%;box-sizing:border-box">
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div class="admin-field">
+                        <label>Velja od</label>
+                        <input type="date" id="cd-from" style="width:100%;box-sizing:border-box">
+                    </div>
+                    <div class="admin-field">
+                        <label>Velja do</label>
+                        <input type="date" id="cd-until" style="width:100%;box-sizing:border-box">
+                    </div>
+                </div>
+                <div id="cd-error" style="display:none;color:#991B1B;font-size:.83rem"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="document.getElementById('create-discount-modal').remove()">Prekliči</button>
+                <button class="btn btn-primary" id="cd-save">Ustvari popust</button>
+            </div>
+        </div>`;
+
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+
+        // Nastavi today kot privzeti datum začetka
+        document.getElementById('cd-from').value = APP_STATE.today;
+
+        document.getElementById('cd-save').addEventListener('click', async () => {
+            const planSlug = document.getElementById('cd-plan').value;
+            const label    = document.getElementById('cd-label').value.trim();
+            const monthly  = document.getElementById('cd-monthly').value;
+            const yearly   = document.getElementById('cd-yearly').value;
+            const validFrom  = document.getElementById('cd-from').value;
+            const validUntil = document.getElementById('cd-until').value;
+            const errEl    = document.getElementById('cd-error');
+            errEl.style.display = 'none';
+
+            if (!label)      { errEl.textContent = 'Opis je obvezen.'; errEl.style.display='block'; return; }
+            if (!validFrom || !validUntil) { errEl.textContent = 'Oba datuma sta obvezna.'; errEl.style.display='block'; return; }
+            if (!monthly && !yearly) { errEl.textContent = 'Vsaj ena cena je obvezna.'; errEl.style.display='block'; return; }
+
+            const btn = document.getElementById('cd-save');
+            btn.disabled = true; btn.textContent = 'Shranjujem…';
+
+            try {
+                await API.post('/api/superadmin.php', {
+                    action: 'create_discount',
+                    plan_slug: planSlug, label,
+                    discounted_monthly: monthly || null,
+                    discounted_yearly:  yearly  || null,
+                    valid_from: validFrom, valid_until: validUntil,
+                });
+                toast('Popust ustvarjen.');
+                overlay.remove();
+                loadDiscounts();
+            } catch(e) {
+                errEl.textContent = e.message;
+                errEl.style.display = 'block';
+                btn.disabled = false; btn.textContent = 'Ustvari popust';
+            }
+        });
+    }
+    window.openCreateDiscount = openCreateDiscount;
+
+    // Naloži popuste ko se odpre tab
+    document.querySelectorAll('.admin-tab').forEach(tab => {
+        if (tab.dataset.tab === 'sa-discounts') {
+            tab.addEventListener('click', loadDiscounts);
         }
     });
 
