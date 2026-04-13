@@ -221,6 +221,22 @@ $hasSurveyEdit = user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey_edit'
                 </div>
             </div>
         </div>
+        <div class="re-section">
+            <div class="re-section-title">Kontaktni podatki</div>
+            <p style="font-size:.825rem;color:var(--color-muted);margin:0 0 14px;line-height:1.5">Prikazani gostom v potrditvenih emailih in na strani za urejanje rezervacije.</p>
+            <div class="admin-form">
+                <div class="admin-field-row">
+                    <div class="admin-field">
+                        <label>Kontaktni email</label>
+                        <input id="r-contact-email" type="email" placeholder="info@restavracija.si" value="<?= h($rest['contact_email'] ?? '') ?>">
+                    </div>
+                    <div class="admin-field">
+                        <label>Kontaktna telefonska</label>
+                        <input id="r-contact-phone" type="tel" placeholder="+386 1 234 56 78" value="<?= h($rest['contact_phone'] ?? '') ?>">
+                    </div>
+                </div>
+            </div>
+        </div>
         <div class="re-save-bar">
             <button class="btn btn-primary" id="btn-save-splosno">Shrani</button>
         </div>
@@ -295,6 +311,70 @@ $hasSurveyEdit = user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey_edit'
                     </div>
                 </div>
             </div>
+        </div>
+
+        <!-- ── Samourejanje rezervacij (gost) ──────────────── -->
+        <div class="re-section">
+            <div class="re-section-title">Samourejanje (gost) <span style="background:#DBEAFE;color:#1D4ED8;font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:4px">Advanced+</span></div>
+            <p style="font-size:.825rem;color:var(--color-muted);margin:0 0 14px;line-height:1.5">
+                Gost dobi link za urejanje/odpoved v potrditvenem emailu. Nastavite rok, do kdaj je to mogoče.
+            </p>
+            <div class="admin-form">
+                <div class="admin-field-row" style="align-items:flex-start;gap:16px">
+                    <div class="admin-field" style="flex:1">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                            <label style="margin:0">Gost lahko uredi</label>
+                            <label class="toggle-wrap" style="cursor:pointer;margin:0">
+                                <span class="toggle">
+                                    <input type="checkbox" id="r-allow-edit" <?= ($rest['allow_guest_edit'] ?? 1) ? 'checked' : '' ?>>
+                                    <span class="toggle-track"></span>
+                                </span>
+                            </label>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px" id="edit-cutoff-wrap">
+                            <input type="number" id="r-edit-cutoff" min="1" max="168" style="width:70px;border:1.5px solid var(--color-border);border-radius:8px;padding:7px 10px;font-size:.875rem;font-family:var(--font);outline:none" value="<?= (int)($rest['guest_edit_cutoff_hours'] ?? 24) ?>">
+                            <span style="font-size:.825rem;color:var(--color-muted)">ur pred terminom</span>
+                        </div>
+                    </div>
+                    <div class="admin-field" style="flex:1">
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                            <label style="margin:0">Gost lahko odpove</label>
+                            <label class="toggle-wrap" style="cursor:pointer;margin:0">
+                                <span class="toggle">
+                                    <input type="checkbox" id="r-allow-cancel" <?= ($rest['allow_guest_cancel'] ?? 1) ? 'checked' : '' ?>>
+                                    <span class="toggle-track"></span>
+                                </span>
+                            </label>
+                        </div>
+                        <div style="display:flex;align-items:center;gap:8px" id="cancel-cutoff-wrap">
+                            <input type="number" id="r-cancel-cutoff" min="1" max="168" style="width:70px;border:1.5px solid var(--color-border);border-radius:8px;padding:7px 10px;font-size:.875rem;font-family:var(--font);outline:none" value="<?= (int)($rest['guest_cancel_cutoff_hours'] ?? 4) ?>">
+                            <span style="font-size:.825rem;color:var(--color-muted)">ur pred terminom</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Čakalna lista ────────────────────────────────────── -->
+        <div class="re-section">
+            <div class="re-section-title">Čakalna lista <span style="background:#FEF3C7;color:#92400E;font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:4px">Advanced+</span></div>
+            <p style="font-size:.825rem;color:var(--color-muted);margin:0 0 14px;line-height:1.5">
+                Ko za izbrani datum ni prostih terminov, se gostom ponudi vpis na čakalno listo. Ko se sprosti termin, jih sistem samodejno obvesti.
+            </p>
+            <?php if (!user_has_feature($pdo, (int)$_SESSION['user_id'], 'waitlist')): ?>
+            <p style="font-size:.825rem;color:#92400E;background:#FEF3C7;border-radius:8px;padding:10px 14px;margin:0">
+                Čakalna lista je na voljo v paketu <strong>Advanced</strong> ali višjem.
+                <a href="<?= BASE_PATH ?>/pages/billing.php" style="color:#92400E;font-weight:600">Nadgradi →</a>
+            </p>
+            <?php else: ?>
+            <label class="toggle-wrap" style="cursor:pointer">
+                <span class="toggle">
+                    <input type="checkbox" id="r-waitlist-enabled" <?= ($rest['waitlist_enabled'] ?? 1) ? 'checked' : '' ?>>
+                    <span class="toggle-track"></span>
+                </span>
+                <span class="toggle-label">Omogoči čakalno listo za javno rezervacijo</span>
+            </label>
+            <?php endif; ?>
         </div>
 
         <?php if ($rest['booking_token']): ?>
@@ -600,11 +680,13 @@ document.querySelectorAll('.re-tab').forEach(tab => {
 
 // ── Splošno – shrani ──────────────────────────────────────────
 document.getElementById('btn-save-splosno').addEventListener('click', async () => {
-    const name        = document.getElementById('r-name').value.trim();
-    const color       = document.getElementById('r-color').value;
-    const duration    = parseInt(document.getElementById('r-duration').value)||60;
-    const allowCustom = document.getElementById('r-allow-custom').checked ? 1 : 0;
-    const active      = parseInt(document.getElementById('r-active').value);
+    const name         = document.getElementById('r-name').value.trim();
+    const color        = document.getElementById('r-color').value;
+    const duration     = parseInt(document.getElementById('r-duration').value)||60;
+    const allowCustom  = document.getElementById('r-allow-custom').checked ? 1 : 0;
+    const active       = parseInt(document.getElementById('r-active').value);
+    const contactEmail = document.getElementById('r-contact-email').value.trim();
+    const contactPhone = document.getElementById('r-contact-phone').value.trim();
     if (!name) { showPageErr('Ime je obvezno.'); return; }
     const btn = document.getElementById('btn-save-splosno');
     btn.disabled=true; btn.textContent='...';
@@ -612,6 +694,7 @@ document.getElementById('btn-save-splosno').addEventListener('click', async () =
         await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}`, {
             name, color, reservation_duration: duration,
             allow_custom_duration: allowCustom, is_active: active,
+            contact_email: contactEmail, contact_phone: contactPhone,
         });
         document.querySelector('.rest-edit-title').innerHTML =
             `<span class="rest-color-dot" id="hdr-color-dot" style="background:${color}"></span>${h(name)}`;
@@ -743,11 +826,15 @@ window.copyEmbed = () => {
 };
 
 document.getElementById('btn-save-booking').addEventListener('click', async () => {
-    const enabled  = document.getElementById('r-booking-enabled').checked ? 1 : 0;
-    const interval = parseInt(document.getElementById('r-slot-interval')?.value||'60');
-    const autoConf = document.getElementById('r-auto-confirm')?.checked ? 1 : 0;
-    const minG     = parseInt(document.getElementById('r-min-guests')?.value||'2');
-    const maxG     = parseInt(document.getElementById('r-max-guests')?.value||'10');
+    const enabled     = document.getElementById('r-booking-enabled').checked ? 1 : 0;
+    const interval    = parseInt(document.getElementById('r-slot-interval')?.value||'60');
+    const autoConf    = document.getElementById('r-auto-confirm')?.checked ? 1 : 0;
+    const minG        = parseInt(document.getElementById('r-min-guests')?.value||'2');
+    const maxG        = parseInt(document.getElementById('r-max-guests')?.value||'10');
+    const allowEdit   = document.getElementById('r-allow-edit')?.checked ? 1 : 0;
+    const editCutoff  = parseInt(document.getElementById('r-edit-cutoff')?.value||'24');
+    const allowCancel = document.getElementById('r-allow-cancel')?.checked ? 1 : 0;
+    const cancelCutoff = parseInt(document.getElementById('r-cancel-cutoff')?.value||'4');
     if (enabled && minG > maxG) { showPageErr('Min. gostov ne more biti večje od max.'); return; }
     const btn = document.getElementById('btn-save-booking');
     btn.disabled=true; btn.textContent='...';
@@ -755,6 +842,9 @@ document.getElementById('btn-save-booking').addEventListener('click', async () =
         await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}`, {
             booking_enabled: enabled, booking_slot_interval: interval,
             booking_auto_confirm: autoConf, booking_min_guests: minG, booking_max_guests: maxG,
+            allow_guest_edit: allowEdit, guest_edit_cutoff_hours: editCutoff,
+            allow_guest_cancel: allowCancel, guest_cancel_cutoff_hours: cancelCutoff,
+            waitlist_enabled: document.getElementById('r-waitlist-enabled')?.checked ? 1 : 0,
         });
         showPageOk('Shranjeno!');
     } catch(e) { showPageErr(e.message); }

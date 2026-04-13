@@ -3,6 +3,8 @@ require_once '../includes/auth_check.php';
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/mailer.php';
+require_once '../includes/guest_helper.php';
+require_once '../includes/waitlist_notifier.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -410,6 +412,17 @@ if ($method === 'POST') {
             save_field_values($pdo, $id, $body['custom_fields']);
         }
 
+        // Posodobi bazo gostov (Advanced/Premium)
+        $guestEmail = trim($body['email'] ?? '');
+        if ($guestEmail) {
+            upsert_guest($pdo, $rest_id, $guestEmail, [
+                'guest_name'       => $name,
+                'phone'            => trim($body['phone'] ?? ''),
+                'reservation_date' => $date,
+                'guest_count'      => $count,
+            ]);
+        }
+
         $stmt = $pdo->prepare("
             SELECT r.*, res.name AS restaurant_name, res.color AS restaurant_color,
                    COALESCE(r.duration, res.reservation_duration) AS reservation_duration,
@@ -438,7 +451,7 @@ if ($method === 'PUT') {
     $action = trim($_GET['action'] ?? '');
     if (!$id) json_response(false, null, 'ID ni določen.', 400);
 
-    $stmt = $pdo->prepare("SELECT r.*, res.name AS restaurant_name, res.reservation_duration AS restaurant_duration FROM reservations r JOIN restaurants res ON r.restaurant_id = res.id WHERE r.id = ?");
+    $stmt = $pdo->prepare("SELECT r.*, res.name AS restaurant_name, res.reservation_duration AS restaurant_duration, res.contact_email, res.contact_phone FROM reservations r JOIN restaurants res ON r.restaurant_id = res.id WHERE r.id = ?");
     $stmt->execute([$id]);
     $existing = $stmt->fetch();
     if (!$existing) json_response(false, null, 'Rezervacija ne obstaja.', 404);
@@ -457,14 +470,26 @@ if ($method === 'PUT') {
             json_response(false, null, 'Rezervacija ni v čakanju.', 400);
         }
         try {
-            $pdo->prepare("UPDATE reservations SET status = 'confirmed' WHERE id = ?")->execute([$id]);
+            // Ustvari edit_token ob potrditvi
+            $editToken = bin2hex(random_bytes(32));
+            $resDate   = $existing['reservation_date'];
+            $resTime   = substr($existing['reservation_time'], 0, 5);
+            $editExpires = date('Y-m-d H:i:s', strtotime("{$resDate} {$resTime}") + 3600);
+            try {
+                $pdo->prepare("UPDATE reservations SET status = 'confirmed', edit_token = ?, edit_token_expires = ? WHERE id = ?")
+                    ->execute([$editToken, $editExpires, $id]);
+            } catch (PDOException $e2) {
+                // Stolpec morda še ne obstaja – samo posodobi status
+                $pdo->prepare("UPDATE reservations SET status = 'confirmed' WHERE id = ?")->execute([$id]);
+                $editToken = '';
+            }
             if ($existing['email']) {
-                $time     = substr($existing['reservation_time'], 0, 5);
                 $duration = (int)($existing['duration'] ?? $existing['restaurant_duration'] ?? 60);
                 send_booking_confirmed_guest(
                     $existing['email'], $existing['guest_name'],
                     $existing['restaurant_name'],
-                    $existing['reservation_date'], $time, (int)$existing['guest_count'], $duration
+                    $resDate, $resTime, (int)$existing['guest_count'], $duration, $editToken,
+                    $existing['contact_email'] ?? '', $existing['contact_phone'] ?? ''
                 );
             }
             json_response(true, ['status' => 'confirmed']);
@@ -486,9 +511,12 @@ if ($method === 'PUT') {
                 send_booking_rejected_guest(
                     $existing['email'], $existing['guest_name'],
                     $existing['restaurant_name'],
-                    $existing['reservation_date'], $time, (int)$existing['guest_count']
+                    $existing['reservation_date'], $time, (int)$existing['guest_count'],
+                    $existing['contact_email'] ?? '', $existing['contact_phone'] ?? ''
                 );
             }
+            // Zavrnjena rezervacija = sproščen termin → obvesti čakalno listo
+            try { notify_waitlist($pdo, (int)$existing['restaurant_id'], $existing['reservation_date']); } catch (Throwable $e) { /* tiho */ }
             json_response(true, ['status' => 'rejected']);
         } catch (PDOException $e) {
             error_log('Reject error: ' . $e->getMessage());
@@ -592,7 +620,11 @@ if ($method === 'DELETE') {
     }
 
     try {
+        $restId = (int)$existing['restaurant_id'];
+        $date   = $existing['reservation_date'];
         $pdo->prepare("DELETE FROM reservations WHERE id = ?")->execute([$id]);
+        // Obvesti čakalno listo (ko se termin sprosti)
+        try { notify_waitlist($pdo, $restId, $date); } catch (Throwable $e) { /* tiho */ }
         json_response(true);
     } catch (PDOException $e) {
         error_log('Reservation delete error: ' . $e->getMessage());

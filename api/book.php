@@ -10,6 +10,7 @@ require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/plans.php';
 require_once '../includes/mailer.php';
+require_once '../includes/guest_helper.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
@@ -155,18 +156,19 @@ if ($method === 'GET') {
     } catch (PDOException $e) { /* tabela morda še ne obstaja */ }
 
     json_response(true, [
-        'name'           => $rest['name'],
-        'open_days'      => $openDays,
-        'auto_confirm'   => (bool)$rest['booking_auto_confirm'],
-        'duration'       => (int)$rest['reservation_duration'],
-        'sched_start'    => (int)$rest['schedule_start'],
-        'sched_end'      => (int)$rest['schedule_end'],
-        'min_guests'     => (int)$rest['booking_min_guests'],
-        'max_guests'     => (int)$rest['booking_max_guests'],
-        'slot_interval'  => (int)($rest['booking_slot_interval'] ?? $rest['reservation_duration']),
-        'blackout_dates' => $blackoutDates,
-        'custom_fields'  => $customFields,
-        'day_schedules'  => array_map(fn($ds) => [
+        'name'             => $rest['name'],
+        'open_days'        => $openDays,
+        'auto_confirm'     => (bool)$rest['booking_auto_confirm'],
+        'duration'         => (int)$rest['reservation_duration'],
+        'sched_start'      => (int)$rest['schedule_start'],
+        'sched_end'        => (int)$rest['schedule_end'],
+        'min_guests'       => (int)$rest['booking_min_guests'],
+        'max_guests'       => (int)$rest['booking_max_guests'],
+        'slot_interval'    => (int)($rest['booking_slot_interval'] ?? $rest['reservation_duration']),
+        'blackout_dates'   => $blackoutDates,
+        'custom_fields'    => $customFields,
+        'waitlist_enabled' => user_has_feature($pdo, (int)$rest['owner_id'], 'waitlist') && (bool)($rest['waitlist_enabled'] ?? 1),
+        'day_schedules'    => array_map(fn($ds) => [
             'day'    => (int)$ds['day_of_week'],
             'is_open'=> (bool)$ds['is_open'],
             'start'  => (int)$ds['start_time'],
@@ -260,6 +262,14 @@ if ($method === 'POST') {
 
         $newId = (int)$pdo->lastInsertId();
 
+        // Posodobi bazo gostov (Advanced/Premium)
+        upsert_guest($pdo, (int)$rest['id'], $email, [
+            'guest_name'       => $guestName,
+            'phone'            => $phone,
+            'reservation_date' => $date,
+            'guest_count'      => $guestCount,
+        ]);
+
         // Shrani custom field vrednosti (samo veljavna polja za to restavracijo)
         if ($customFields && $newId) {
             try {
@@ -275,10 +285,21 @@ if ($method === 'POST') {
             } catch (PDOException $e) { /* tiho */ }
         }
 
+        // Ustvari edit_token za vse rezervacije (veljavnost: do 1h po terminu)
+        $editToken = null;
+        try {
+            $editToken        = bin2hex(random_bytes(32));
+            $editTokenExpires = date('Y-m-d H:i:s', strtotime("{$date} {$time}") + 3600);
+            $pdo->prepare("UPDATE reservations SET edit_token = ?, edit_token_expires = ? WHERE id = ?")
+                ->execute([$editToken, $editTokenExpires, $newId]);
+        } catch (PDOException $e) { $editToken = null; /* stolpec morda še ne obstaja */ }
+
+        $cEmail = $rest['contact_email'] ?? '';
+        $cPhone = $rest['contact_phone'] ?? '';
         if ($status === 'confirmed') {
-            send_booking_confirmed_guest($email, $guestName, $rest['name'], $date, $time, $guestCount, (int)$rest['reservation_duration']);
+            send_booking_confirmed_guest($email, $guestName, $rest['name'], $date, $time, $guestCount, (int)$rest['reservation_duration'], $editToken ?? '', $cEmail, $cPhone);
         } else {
-            send_booking_pending_guest($email, $guestName, $rest['name'], $date, $time, $guestCount);
+            send_booking_pending_guest($email, $guestName, $rest['name'], $date, $time, $guestCount, $editToken ?? '', $cEmail, $cPhone);
         }
 
         $admin = $pdo->prepare("SELECT email, full_name FROM users WHERE id = ?");
@@ -288,7 +309,7 @@ if ($method === 'POST') {
             send_booking_notify_admin(
                 $adminRow['email'], $adminRow['full_name'],
                 $rest['name'], $guestName, $email,
-                $date, $time, $guestCount, $status
+                $date, $time, $guestCount, $status, $newId
             );
         }
 

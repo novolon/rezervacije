@@ -173,6 +173,28 @@ input,textarea{font-family:inherit}
 /* Spinner */
 .spin{display:inline-block;width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:sp .7s linear infinite;flex-shrink:0}
 @keyframes sp{to{transform:rotate(360deg)}}
+
+/* Waitlist */
+.cal-day.wl{opacity:.5;cursor:pointer}
+.cal-day.wl:hover{opacity:.8;background:rgba(245,158,11,.15)}
+.wl-panel{background:#FFFBEB;border:1px solid #FDE68A;border-radius:13px;padding:16px;margin-top:14px}
+.wl-panel-ttl{font-size:13px;font-weight:700;color:#92400E;margin-bottom:4px}
+.wl-panel-sub{font-size:12px;color:#B45309;margin-bottom:12px}
+.wl-row2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.wl-inp{width:100%;border:1.5px solid #FDE68A;border-radius:10px;padding:9px 11px;font-size:13px;color:var(--f);outline:none;background:#fff;font-family:inherit;transition:border-color .15s}
+.wl-inp:focus{border-color:#F59E0B}
+.wl-lbl{display:block;font-size:11px;font-weight:600;color:#92400E;margin-bottom:4px}
+.wl-gdpr{display:flex;align-items:flex-start;gap:8px;margin-bottom:10px}
+.wl-gdpr label{font-size:11px;color:#78350F;line-height:1.5;cursor:pointer}
+.wl-gdpr input{margin-top:2px;accent-color:#F59E0B;flex-shrink:0}
+.wl-err{font-size:12px;color:#DC2626;background:#FEE2E2;border-radius:8px;padding:7px 10px;margin-bottom:8px;display:none}
+.wl-err.show{display:block}
+.wl-btn{width:100%;padding:11px;background:#F59E0B;color:#fff;border:none;border-radius:11px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s}
+.wl-btn:hover:not(:disabled){background:#D97706}
+.wl-btn:disabled{opacity:.5;cursor:not-allowed}
+.wl-done{background:#F0FDF4;border:1px solid #BBF7D0;border-radius:13px;padding:14px;margin-top:14px;text-align:center}
+.wl-done-ttl{font-size:14px;font-weight:700;color:#166534;margin-bottom:4px}
+.wl-done-sub{font-size:12px;color:#15803D}
 `;
 
     // ── HTML ──────────────────────────────────────────────────────
@@ -247,7 +269,27 @@ input,textarea{font-family:inherit}
         </div>
         <div class="sub" id="ws3sub"></div>
         <div class="empty" id="wsloading">Nalagam termine...</div>
-        <div class="empty" id="wsempty" style="display:none"><div class="ico">😕</div><div>Za ta dan ni prostih terminov.</div></div>
+        <div id="wsempty" style="display:none">
+          <div class="empty"><div class="ico">😕</div><div>Za ta dan ni prostih terminov.</div></div>
+          <div class="wl-panel" id="wwl-panel" style="display:none">
+            <div class="wl-panel-ttl">Vpišite se na čakalno listo</div>
+            <div class="wl-panel-sub">Ko se sprosti termin, vas bomo takoj obvestili po emailu.</div>
+            <div class="wl-row2" style="margin-bottom:8px">
+              <div><label class="wl-lbl">Ime <span style="color:#EF4444">*</span></label><input class="wl-inp" id="wwl-first" type="text" placeholder="Janez"></div>
+              <div><label class="wl-lbl">Priimek <span style="color:#EF4444">*</span></label><input class="wl-inp" id="wwl-last" type="text" placeholder="Novak"></div>
+            </div>
+            <div style="margin-bottom:8px"><label class="wl-lbl">Email <span style="color:#EF4444">*</span></label><input class="wl-inp" id="wwl-email" type="email" placeholder="janez@email.com"></div>
+            <div style="margin-bottom:8px"><label class="wl-lbl">Telefon <span style="color:#92400E;font-weight:400">(neobvezno)</span></label><input class="wl-inp" id="wwl-phone" type="tel" placeholder="041 123 456"></div>
+            <div style="margin-bottom:10px"><label class="wl-lbl">Prednostni čas <span style="color:#92400E;font-weight:400">(neobvezno)</span></label><input class="wl-inp" id="wwl-time" type="time"></div>
+            <div class="wl-gdpr"><input type="checkbox" id="wwl-gdpr"><label for="wwl-gdpr">Strinjam se z obdelavo osebnih podatkov za namen obveščanja o prostih terminih.</label></div>
+            <div class="wl-err" id="wwl-err"></div>
+            <button class="wl-btn" id="wwl-submit">Vpišem se na čakalno listo</button>
+          </div>
+          <div class="wl-done" id="wwl-done" style="display:none">
+            <div class="wl-done-ttl">✓ Vpisani ste na čakalno listo!</div>
+            <div class="wl-done-sub">Ko se sprosti termin, vas bomo obvestili po emailu.</div>
+          </div>
+        </div>
         <div class="slots-grid" id="wsslots" style="display:none"></div>
       </div>
 
@@ -469,9 +511,15 @@ input,textarea{font-family:inherit}
             const cell = document.createElement('div');
             cell.textContent = d;
 
-            if (isPast || !isOpen || isBlk) {
+            const futureUnavail = !isPast && (!isOpen || isBlk);
+            if (isPast) {
                 cell.className = 'cal-day dis' + (isTd ? ' td' : '');
-                if (isBlk && !isPast && isOpen) cell.title = 'Ta dan ni na voljo';
+            } else if (futureUnavail && state.rest.waitlist_enabled) {
+                cell.className = 'cal-day wl' + (isTd ? ' td' : '');
+                cell.title = 'Ni terminov – kliknite za čakalno listo';
+                cell.addEventListener('click', () => selectDateWaitlist(ds));
+            } else if (futureUnavail) {
+                cell.className = 'cal-day dis' + (isTd ? ' td' : '');
             } else {
                 cell.className = 'cal-day av' + (isTd ? ' td' : '') + (isSel ? ' sel' : '');
                 cell.addEventListener('click', () => selectDate(ds));
@@ -497,12 +545,37 @@ input,textarea{font-family:inherit}
         loadSlots(ds);
     }
 
+    function selectDateWaitlist(ds) {
+        state.date = ds;
+        renderCal();
+        $('wsloading').style.display = 'none';
+        $('wsslots').style.display   = 'none';
+        $('wsempty').style.display   = '';
+        showWaitlistPanel();
+        const dt = new Date(ds + 'T12:00:00');
+        $('ws3sub').textContent = `${DAYS_SL[(dt.getDay() + 6) % 7]}, ${dt.getDate()}. ${MONTHS[dt.getMonth()]} ${dt.getFullYear()} · ni terminov`;
+        setStep(3);
+    }
+
+    function showWaitlistPanel() {
+        $('wwl-panel').style.display = '';
+        $('wwl-done').style.display  = 'none';
+        // Ponastavi
+        ['wwl-first','wwl-last','wwl-email','wwl-phone','wwl-time'].forEach(id => {
+            const el = $(id); if (el) el.value = '';
+        });
+        const g = $('wwl-gdpr'); if (g) g.checked = false;
+        const e = $('wwl-err');  if (e) { e.textContent = ''; e.classList.remove('show'); }
+    }
+
     // ── Korak 3: Termini ──────────────────────────────────────────
     async function loadSlots(date) {
         $('wsloading').style.display = '';
         $('wsempty').style.display   = 'none';
         $('wsslots').style.display   = 'none';
         $('wsslots').innerHTML = '';
+        if ($('wwl-panel')) $('wwl-panel').style.display = 'none';
+        if ($('wwl-done'))  $('wwl-done').style.display  = 'none';
 
         try {
             const res  = await fetch(`${apiUrl}?t=${encodeURIComponent(token)}&date=${date}`);
@@ -513,6 +586,7 @@ input,textarea{font-family:inherit}
 
             if (!slots.length) {
                 $('wsempty').style.display = '';
+                if (state.rest.waitlist_enabled) showWaitlistPanel();
                 return;
             }
 
@@ -532,6 +606,7 @@ input,textarea{font-family:inherit}
         } catch (e) {
             $('wsloading').style.display = 'none';
             $('wsempty').style.display   = '';
+            if (state.rest.waitlist_enabled) showWaitlistPanel();
         }
     }
 
@@ -541,6 +616,56 @@ input,textarea{font-family:inherit}
         btn.classList.add('sel');
         setTimeout(() => setStep(4), 180);
     }
+
+    // ── Čakalna lista submit ───────────────────────────────────────
+    const waitlistApiUrl = scriptEl.src.replace(/\/widget\.js(\?.*)?$/, '') + '/api/waitlist.php';
+
+    $('wwl-submit').addEventListener('click', async () => {
+        const firstName = $('wwl-first')?.value.trim();
+        const lastName  = $('wwl-last')?.value.trim();
+        const email     = $('wwl-email')?.value.trim();
+        const phone     = $('wwl-phone')?.value.trim();
+        const timePref  = $('wwl-time')?.value.trim();
+        const gdpr      = $('wwl-gdpr')?.checked;
+        const errEl     = $('wwl-err');
+        const btn       = $('wwl-submit');
+
+        const showErr = (msg) => { errEl.textContent = msg; errEl.classList.add('show'); };
+        errEl.classList.remove('show');
+
+        if (!firstName) return showErr('Ime je obvezno.');
+        if (!lastName)  return showErr('Priimek je obvezen.');
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showErr('Vnesite veljaven email.');
+        if (!gdpr)      return showErr('Soglasje je obvezno.');
+
+        btn.disabled = true;
+        btn.textContent = 'Pošiljam...';
+
+        try {
+            const res  = await fetch(`${waitlistApiUrl}?t=${encodeURIComponent(token)}`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({
+                    date:        state.date,
+                    time_pref:   timePref || '',
+                    guests:      state.guests || 1,
+                    first_name:  firstName,
+                    last_name:   lastName,
+                    email,
+                    phone:       phone || '',
+                    gdpr_consent: true,
+                }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error || 'Napaka strežnika.');
+            $('wwl-panel').style.display = 'none';
+            $('wwl-done').style.display  = '';
+        } catch (e) {
+            showErr(e.message);
+            btn.disabled = false;
+            btn.textContent = 'Vpišem se na čakalno listo';
+        }
+    });
 
     // ── Custom fields ─────────────────────────────────────────────
     function renderCustomFields(fields) {

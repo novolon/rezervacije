@@ -195,17 +195,33 @@ if ($method === 'PUT') {
     $booking_min_guests    = isset($body['booking_min_guests'])    ? max(1, (int)$body['booking_min_guests']) : null;
     $booking_max_guests    = isset($body['booking_max_guests'])    ? max(1, (int)$body['booking_max_guests']) : null;
 
+    $allow_guest_edit          = isset($body['allow_guest_edit'])          ? ($body['allow_guest_edit'] ? 1 : 0) : null;
+    $guest_edit_cutoff_hours   = isset($body['guest_edit_cutoff_hours'])   ? max(1, (int)$body['guest_edit_cutoff_hours']) : null;
+    $allow_guest_cancel        = isset($body['allow_guest_cancel'])        ? ($body['allow_guest_cancel'] ? 1 : 0) : null;
+    $guest_cancel_cutoff_hours = isset($body['guest_cancel_cutoff_hours']) ? max(1, (int)$body['guest_cancel_cutoff_hours']) : null;
+    $waitlist_enabled          = isset($body['waitlist_enabled'])          ? ($body['waitlist_enabled'] ? 1 : 0) : null;
+
+    $contact_email = array_key_exists('contact_email', $body) ? (trim($body['contact_email']) ?: null) : false;
+    $contact_phone = array_key_exists('contact_phone', $body) ? (trim($body['contact_phone']) ?: null) : false;
+
     $sets = []; $params = [];
-    if ($name)                          { $sets[] = 'name = ?';                   $params[] = $name; }
-    if ($duration)                      { $sets[] = 'reservation_duration = ?';   $params[] = $duration; }
-    if ($allow_custom !== null)         { $sets[] = 'allow_custom_duration = ?';  $params[] = $allow_custom; }
-    if ($color)                         { $sets[] = 'color = ?';                  $params[] = $color; }
-    if ($active !== null)               { $sets[] = 'is_active = ?';              $params[] = $active; }
-    if ($booking_enabled !== null)      { $sets[] = 'booking_enabled = ?';        $params[] = $booking_enabled; }
-    if ($booking_slot_interval !== null){ $sets[] = 'booking_slot_interval = ?';  $params[] = $booking_slot_interval; }
-    if ($booking_auto_confirm !== null) { $sets[] = 'booking_auto_confirm = ?';   $params[] = $booking_auto_confirm; }
-    if ($booking_min_guests !== null)   { $sets[] = 'booking_min_guests = ?';     $params[] = $booking_min_guests; }
-    if ($booking_max_guests !== null)   { $sets[] = 'booking_max_guests = ?';     $params[] = $booking_max_guests; }
+    if ($name)                               { $sets[] = 'name = ?';                        $params[] = $name; }
+    if ($duration)                           { $sets[] = 'reservation_duration = ?';        $params[] = $duration; }
+    if ($allow_custom !== null)              { $sets[] = 'allow_custom_duration = ?';       $params[] = $allow_custom; }
+    if ($color)                              { $sets[] = 'color = ?';                       $params[] = $color; }
+    if ($active !== null)                    { $sets[] = 'is_active = ?';                   $params[] = $active; }
+    if ($booking_enabled !== null)           { $sets[] = 'booking_enabled = ?';             $params[] = $booking_enabled; }
+    if ($booking_slot_interval !== null)     { $sets[] = 'booking_slot_interval = ?';       $params[] = $booking_slot_interval; }
+    if ($booking_auto_confirm !== null)      { $sets[] = 'booking_auto_confirm = ?';        $params[] = $booking_auto_confirm; }
+    if ($booking_min_guests !== null)        { $sets[] = 'booking_min_guests = ?';          $params[] = $booking_min_guests; }
+    if ($booking_max_guests !== null)        { $sets[] = 'booking_max_guests = ?';          $params[] = $booking_max_guests; }
+    if ($allow_guest_edit !== null)          { $sets[] = 'allow_guest_edit = ?';            $params[] = $allow_guest_edit; }
+    if ($guest_edit_cutoff_hours !== null)   { $sets[] = 'guest_edit_cutoff_hours = ?';     $params[] = $guest_edit_cutoff_hours; }
+    if ($allow_guest_cancel !== null)        { $sets[] = 'allow_guest_cancel = ?';          $params[] = $allow_guest_cancel; }
+    if ($guest_cancel_cutoff_hours !== null) { $sets[] = 'guest_cancel_cutoff_hours = ?';   $params[] = $guest_cancel_cutoff_hours; }
+    if ($waitlist_enabled !== null)          { $sets[] = 'waitlist_enabled = ?';             $params[] = $waitlist_enabled; }
+    if ($contact_email !== false)            { $sets[] = 'contact_email = ?';               $params[] = $contact_email; }
+    if ($contact_phone !== false)            { $sets[] = 'contact_phone = ?';               $params[] = $contact_phone; }
 
     try {
         // Day schedules

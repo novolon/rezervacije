@@ -325,6 +325,17 @@ function send_email_change_email(string $newEmail, string $fullName, string $tok
 
 // ─── Booking emaili ───────────────────────────────────────────
 
+/**
+ * Vrne HTML blok s kontaktnimi podatki restavracije (ali prazen niz).
+ */
+function _contact_html(string $email, string $phone): string {
+    if (!$email && !$phone) return '';
+    $parts = [];
+    if ($email) $parts[] = '<a href="mailto:' . htmlspecialchars($email) . '" style="color:#F59E0B">' . htmlspecialchars($email) . '</a>';
+    if ($phone) $parts[] = '<a href="tel:' . htmlspecialchars(preg_replace('/\s+/', '', $phone)) . '" style="color:#F59E0B">' . htmlspecialchars($phone) . '</a>';
+    return '<p style="margin:12px 0 0;font-size:13px;color:#9CA3AF">Kontakt: ' . implode(' · ', $parts) . '</p>';
+}
+
 function _calendar_google_url(string $date, string $time, int $duration, string $restName, string $guestName): string {
     $startTs = strtotime("{$date} {$time}");
     $endTs   = $startTs + $duration * 60;
@@ -378,14 +389,36 @@ function _booking_details_html(string $restName, string $date, string $time, int
 /**
  * Gost – rezervacija čaka potrditev (manual approve).
  */
-function send_booking_pending_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests): bool {
+function send_booking_pending_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests, string $editToken = '', string $contactEmail = '', string $contactPhone = ''): bool {
     $appName = APP_NAME;
     $details = _booking_details_html($restName, $date, $time, $guests);
+    $contact = _contact_html($contactEmail, $contactPhone);
+
+    $editLinks = '';
+    if ($editToken) {
+        $cancelUrl = htmlspecialchars(APP_URL . BASE_PATH . '/pages/reservation_edit.php?t=' . urlencode($editToken) . '&action=cancel');
+        $editUrl   = htmlspecialchars(APP_URL . BASE_PATH . '/pages/reservation_edit.php?t=' . urlencode($editToken));
+        $editLinks = "
+        <div style='margin:20px 0;padding:16px 20px;background:#F9FAFB;border-radius:8px;border:1px solid #E5E7EB'>
+            <div style='font-size:13px;color:#6B7280;margin-bottom:10px'>Upravljanje prošnje:</div>
+            <a href='{$editUrl}'
+               style='display:inline-block;background:#1B4332;color:#fff;text-decoration:none;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;margin-right:8px;margin-bottom:6px'>
+                Uredi prošnjo
+            </a>
+            <a href='{$cancelUrl}'
+               style='display:inline-block;background:#fff;color:#DC2626;text-decoration:none;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;border:1.5px solid #FCA5A5;margin-bottom:6px'>
+                Prekliči prošnjo
+            </a>
+        </div>";
+    }
+
     $body = "
         <p style='margin:0 0 6px;font-size:16px;font-weight:600;color:#111827'>Pozdravljeni, " . htmlspecialchars($guestName) . "!</p>
         <p style='margin:0 0 20px;font-size:14px;color:#6B7280;line-height:1.6'>Vaša prošnja za rezervacijo je bila sprejeta. Ko jo potrdimo, vam pošljemo potrditev po e-pošti.</p>
         {$details}
-        <p style='margin:0;font-size:13px;color:#9CA3AF'>Če imate vprašanja, nas kontaktirajte neposredno v restavraciji.</p>";
+        {$editLinks}
+        <p style='margin:0;font-size:13px;color:#9CA3AF'>Če imate vprašanja, nas kontaktirajte neposredno v restavraciji.</p>
+        {$contact}";
     $html = email_wrap($appName, $body, $appName . ' · Rezervacijska prošnja');
     $text = "Pozdravljeni {$guestName},\nVaša prošnja za rezervacijo v {$restName} ({$date} ob {$time}, {$guests} gostov) je bila sprejeta. Ko jo potrdimo, vas obvestimo.";
     return send_email($toEmail, 'Vaša prošnja za rezervacijo je bila sprejeta – ' . $restName, $html, $text);
@@ -394,16 +427,38 @@ function send_booking_pending_guest(string $toEmail, string $guestName, string $
 /**
  * Gost – rezervacija potrjena (auto ali manual approve).
  */
-function send_booking_confirmed_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests, int $duration = 60): bool {
+function send_booking_confirmed_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests, int $duration = 60, string $editToken = '', string $contactEmail = '', string $contactPhone = ''): bool {
     $appName  = APP_NAME;
     $details  = _booking_details_html($restName, $date, $time, $guests);
     $calLinks = _calendar_links_html($date, $time, $duration, $restName, $guestName);
+    $contact  = _contact_html($contactEmail, $contactPhone);
+
+    $editLinks = '';
+    if ($editToken) {
+        $editUrl   = htmlspecialchars(APP_URL . BASE_PATH . '/pages/reservation_edit.php?t=' . urlencode($editToken));
+        $cancelUrl = htmlspecialchars(APP_URL . BASE_PATH . '/pages/reservation_edit.php?t=' . urlencode($editToken) . '&action=cancel');
+        $editLinks = "
+        <div style='margin:20px 0;padding:16px 20px;background:#F9FAFB;border-radius:8px;border:1px solid #E5E7EB'>
+            <div style='font-size:13px;color:#6B7280;margin-bottom:10px'>Upravljanje rezervacije:</div>
+            <a href='{$editUrl}'
+               style='display:inline-block;background:#1B4332;color:#fff;text-decoration:none;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;margin-right:8px;margin-bottom:6px'>
+                Uredi rezervacijo
+            </a>
+            <a href='{$cancelUrl}'
+               style='display:inline-block;background:#fff;color:#DC2626;text-decoration:none;padding:9px 18px;border-radius:8px;font-size:13px;font-weight:600;border:1.5px solid #FCA5A5;margin-bottom:6px'>
+                Odpovem rezervacijo
+            </a>
+        </div>";
+    }
+
     $body = "
         <p style='margin:0 0 6px;font-size:16px;font-weight:600;color:#111827'>Pozdravljeni, " . htmlspecialchars($guestName) . "!</p>
         <p style='margin:0 0 20px;font-size:14px;color:#6B7280;line-height:1.6'>Vaša rezervacija je potrjena. Veselimo se vašega obiska!</p>
         {$details}
         {$calLinks}
-        <p style='margin:0;font-size:13px;color:#9CA3AF'>Če ne morete priti, nas prosimo obvestite čim prej. Hvala!</p>";
+        {$editLinks}
+        <p style='margin:0;font-size:13px;color:#9CA3AF'>Če ne morete priti, nas prosimo obvestite čim prej. Hvala!</p>
+        {$contact}";
     $html = email_wrap($appName, $body, $appName . ' · Potrjena rezervacija');
     $text = "Pozdravljeni {$guestName},\nVaša rezervacija v {$restName} je potrjena: {$date} ob {$time}, {$guests} gostov.";
     return send_email($toEmail, 'Rezervacija potrjena – ' . $restName, $html, $text);
@@ -412,14 +467,16 @@ function send_booking_confirmed_guest(string $toEmail, string $guestName, string
 /**
  * Gost – rezervacija zavrnjena.
  */
-function send_booking_rejected_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests): bool {
+function send_booking_rejected_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests, string $contactEmail = '', string $contactPhone = ''): bool {
     $appName = APP_NAME;
     $details = _booking_details_html($restName, $date, $time, $guests);
+    $contact = _contact_html($contactEmail, $contactPhone);
     $body = "
         <p style='margin:0 0 6px;font-size:16px;font-weight:600;color:#111827'>Pozdravljeni, " . htmlspecialchars($guestName) . "!</p>
         <p style='margin:0 0 20px;font-size:14px;color:#6B7280;line-height:1.6'>Žal vaše rezervacije ne moremo potrditi za izbrani termin. Prosimo, poskusite z drugim terminom ali nas kontaktirajte.</p>
         {$details}
-        <p style='margin:0;font-size:13px;color:#9CA3AF'>Opravičujemo se za nevšečnosti.</p>";
+        <p style='margin:0;font-size:13px;color:#9CA3AF'>Opravičujemo se za nevšečnosti.</p>
+        {$contact}";
     $html = email_wrap($appName, $body, $appName . ' · Rezervacija ni mogoča');
     $text = "Pozdravljeni {$guestName},\nVaše rezervacije v {$restName} ({$date} ob {$time}) žal ne moremo potrditi. Prosimo, poskusite z drugim terminom.";
     return send_email($toEmail, 'Rezervacija ni mogoča – ' . $restName, $html, $text);
@@ -428,16 +485,18 @@ function send_booking_rejected_guest(string $toEmail, string $guestName, string 
 /**
  * Gost – opomnik 24h pred rezervacijo.
  */
-function send_booking_reminder_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests, int $duration = 60): bool {
+function send_booking_reminder_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests, int $duration = 60, string $contactEmail = '', string $contactPhone = ''): bool {
     $appName  = APP_NAME;
     $details  = _booking_details_html($restName, $date, $time, $guests);
     $calLinks = _calendar_links_html($date, $time, $duration, $restName, $guestName);
+    $contact  = _contact_html($contactEmail, $contactPhone);
     $body = "
         <p style='margin:0 0 6px;font-size:16px;font-weight:600;color:#111827'>Pozdravljeni, " . htmlspecialchars($guestName) . "!</p>
         <p style='margin:0 0 20px;font-size:14px;color:#6B7280;line-height:1.6'>Opominjamo vas, da imate jutri rezervacijo.</p>
         {$details}
         {$calLinks}
-        <p style='margin:0;font-size:13px;color:#9CA3AF'>Veselimo se vašega obiska. Če ne morete priti, nas prosimo obvestite čim prej.</p>";
+        <p style='margin:0;font-size:13px;color:#9CA3AF'>Veselimo se vašega obiska. Če ne morete priti, nas prosimo obvestite čim prej.</p>
+        {$contact}";
     $html = email_wrap($appName, $body, $appName . ' · Opomnik rezervacije');
     $text = "Opomnik: jutri ({$date} ob {$time}) imate rezervacijo v {$restName} za {$guests} gostov.";
     return send_email($toEmail, 'Opomnik: jutri imate rezervacijo v ' . $restName, $html, $text);
@@ -446,17 +505,40 @@ function send_booking_reminder_guest(string $toEmail, string $guestName, string 
 /**
  * Admin – nova rezervacija prispela.
  */
-function send_booking_notify_admin(string $toEmail, string $adminName, string $restName, string $guestName, string $guestEmail, string $date, string $time, int $guests, string $status): bool {
+function send_booking_notify_admin(string $toEmail, string $adminName, string $restName, string $guestName, string $guestEmail, string $date, string $time, int $guests, string $status, int $reservationId = 0): bool {
     $appName   = APP_NAME;
     $details   = _booking_details_html($restName, $date, $time, $guests);
     $statusTxt = $status === 'confirmed' ? 'Samodejno potrjena' : 'Čaka na vašo potrditev';
     $appLink   = APP_URL . BASE_PATH . '/pages/main.php';
+
+    // Gumba Potrdi/Zavrni – samo za pending rezervacije
+    $actionButtons = '';
+    if ($status === 'pending' && $reservationId > 0) {
+        $sigApprove = hash_hmac('sha256', "{$reservationId}|approve", DB_PASS . 'admin-action-v1');
+        $sigReject  = hash_hmac('sha256', "{$reservationId}|reject",  DB_PASS . 'admin-action-v1');
+        $urlApprove = htmlspecialchars(APP_URL . BASE_PATH . '/api/reservation_action.php?id=' . $reservationId . '&action=approve&sig=' . $sigApprove);
+        $urlReject  = htmlspecialchars(APP_URL . BASE_PATH . '/api/reservation_action.php?id=' . $reservationId . '&action=reject&sig='  . $sigReject);
+        $actionButtons = "
+        <div style='margin:20px 0 4px;display:flex;gap:10px;flex-wrap:wrap'>
+            <a href='{$urlApprove}'
+               style='display:inline-block;background:#1B4332;color:#fff;text-decoration:none;padding:11px 24px;border-radius:8px;font-weight:600;font-size:.9rem'>
+                ✓ Potrdi rezervacijo
+            </a>
+            <a href='{$urlReject}'
+               style='display:inline-block;background:#fff;color:#DC2626;text-decoration:none;padding:11px 24px;border-radius:8px;font-weight:600;font-size:.9rem;border:1.5px solid #FCA5A5'>
+                ✕ Zavrni rezervacijo
+            </a>
+        </div>
+        <p style='margin:6px 0 0;font-size:.75rem;color:#9CA3AF'>Ali odpri razpored za več možnosti.</p>";
+    }
+
     $body = "
         <p style='margin:0 0 6px;font-size:16px;font-weight:600;color:#111827'>Nova rezervacija!</p>
         <p style='margin:0 0 8px;font-size:14px;color:#6B7280'>Gost: <strong>" . htmlspecialchars($guestName) . "</strong> (" . htmlspecialchars($guestEmail) . ")</p>
         <p style='margin:0 0 20px;font-size:13px;color:" . ($status === 'confirmed' ? '#065F46' : '#92400E') . ";font-weight:600'>{$statusTxt}</p>
         {$details}
-        <p style='margin:20px 0 0'><a href='{$appLink}' style='background:#1B4332;color:#fff;text-decoration:none;padding:11px 24px;border-radius:8px;font-weight:600;font-size:.9rem;display:inline-block'>Odpri razpored →</a></p>";
+        {$actionButtons}
+        <p style='margin:20px 0 0'><a href='{$appLink}' style='background:#F59E0B;color:#fff;text-decoration:none;padding:9px 20px;border-radius:8px;font-weight:600;font-size:.85rem;display:inline-block'>Odpri razpored →</a></p>";
     $html = email_wrap($appName, $body, $appName . ' · Obvestilo o rezervaciji');
     $text = "Nova rezervacija v {$restName}!\nGost: {$guestName} ({$guestEmail})\n{$date} ob {$time}, {$guests} gostov.\nStatus: {$statusTxt}";
     return send_email($toEmail, 'Nova rezervacija – ' . $restName, $html, $text);

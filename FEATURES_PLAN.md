@@ -565,16 +565,16 @@ CREATE TABLE realtime_events (...);
 
 ### Prioriteta 2 – kmalu po objavi
 - [x] **C1** – Modul 4: Calendar links (.ics + Google URL) v emailih
-- [ ] **C2** – Modul 3: `edit_token` generacija v potrditvenem emailu
-- [ ] **C3** – Modul 3: `pages/reservation_edit.php` (uredi/odpovej)
-- [ ] **C4** – Modul 3: Admin nastavitve (cutoff ure, toggle)
-- [ ] **C5** – Modul 5: `includes/guest_helper.php` + upsert ob rezervaciji
-- [ ] **C6** – Modul 5: `pages/guests.php` (tabela + modal)
-- [ ] **C7** – Modul 5: Mini-profil v rezervacijskem pogledu
+- [x] **C2** – Modul 3: `edit_token` generacija v potrditvenem emailu
+- [x] **C3** – Modul 3: `pages/reservation_edit.php` (uredi/odpovej)
+- [x] **C4** – Modul 3: Admin nastavitve (cutoff ure, toggle)
+- [x] **C5** – Modul 5: `includes/guest_helper.php` + upsert ob rezervaciji
+- [x] **C6** – Modul 5: `pages/guests.php` (tabela + modal)
+- [x] **C7** – Modul 5: Mini-profil v rezervacijskem pogledu
 
 ### Prioriteta 3
-- [ ] **W1** – Modul 2: Čakalna lista (tabela, vpis, notifier, cron)
-- [ ] **W2** – Modul 2: Admin UI za čakalno listo
+- [x] **W1** – Modul 2: Čakalna lista (tabela, vpis, notifier, cron)
+- [x] **W2** – Modul 2: Admin UI za čakalno listo
 - [ ] **A1** – Modul 6: Analitika vračajočih gostov (SQL + Chart.js)
 - [ ] **R1** – Modul 7: SSE endpoint + `realtime_events` tabela
 - [ ] **R2** – Modul 7: Frontend `js/realtime.js` + fallback polling

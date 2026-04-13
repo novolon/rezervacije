@@ -190,6 +190,54 @@ $apiBase = BASE_PATH . '/api/book.php';
                     <div class="text-4xl mb-3">😕</div>
                     <p class="text-forest/60 font-medium">Za ta dan ni prostih terminov.</p>
                     <button onclick="goStep(2)" class="mt-4 text-sm text-terracotta font-medium hover:underline">← Izberite drug datum</button>
+
+                    <div id="waitlist-offer" class="hidden mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-5 text-left">
+                        <p class="text-sm font-semibold text-amber-900 mb-1">Vpišite se na čakalno listo</p>
+                        <p class="text-xs text-amber-700 mb-4">Ko se sprosti termin, vas bomo takoj obvestili.</p>
+                        <div class="space-y-3">
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label class="block text-xs font-medium text-forest mb-1">Ime <span class="text-terracotta">*</span></label>
+                                    <input id="wl-first" type="text" placeholder="Janez"
+                                        class="w-full border border-sage-light rounded-xl px-3 py-2.5 text-forest text-sm focus:outline-none focus:border-forest">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-medium text-forest mb-1">Priimek <span class="text-terracotta">*</span></label>
+                                    <input id="wl-last" type="text" placeholder="Novak"
+                                        class="w-full border border-sage-light rounded-xl px-3 py-2.5 text-forest text-sm focus:outline-none focus:border-forest">
+                                </div>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-forest mb-1">Email <span class="text-terracotta">*</span></label>
+                                <input id="wl-email" type="email" placeholder="janez@email.com"
+                                    class="w-full border border-sage-light rounded-xl px-3 py-2.5 text-forest text-sm focus:outline-none focus:border-forest">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-forest mb-1">Telefon <span class="text-forest/40 font-normal">(neobvezno)</span></label>
+                                <input id="wl-phone" type="tel" placeholder="041 123 456"
+                                    class="w-full border border-sage-light rounded-xl px-3 py-2.5 text-forest text-sm focus:outline-none focus:border-forest">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-forest mb-1">Prednostni čas <span class="text-forest/40 font-normal">(neobvezno)</span></label>
+                                <input id="wl-time" type="time"
+                                    class="w-full border border-sage-light rounded-xl px-3 py-2.5 text-forest text-sm focus:outline-none focus:border-forest">
+                            </div>
+                            <label class="flex gap-2 items-start cursor-pointer">
+                                <input id="wl-gdpr" type="checkbox" class="mt-0.5 accent-forest">
+                                <span class="text-xs text-forest/70">Strinjam se z obdelavo osebnih podatkov za namen obveščanja o prostih terminih.</span>
+                            </label>
+                            <div id="wl-error" class="hidden text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2"></div>
+                            <button id="wl-submit" onclick="submitWaitlist()"
+                                class="w-full bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl py-3 text-sm transition-colors">
+                                Vpišem se na čakalno listo
+                            </button>
+                        </div>
+                    </div>
+                    <div id="waitlist-done" class="hidden mt-6 bg-green-50 border border-green-200 rounded-2xl p-5 text-center">
+                        <div class="text-2xl mb-2">✓</div>
+                        <p class="text-sm font-semibold text-green-800">Vpisani ste na čakalno listo!</p>
+                        <p class="text-xs text-green-700 mt-1">Ko se sprosti termin, vas bomo obvestili po emailu.</p>
+                    </div>
                 </div>
                 <div id="slots-grid" class="hidden grid grid-cols-3 sm:grid-cols-4 gap-3"></div>
             </div>
@@ -488,9 +536,17 @@ function renderCalendar() {
         const cell = document.createElement('div');
         cell.textContent = d;
 
-        if (isPast || !isOpen || isBlackout) {
+        const isFutureUnavailable = !isPast && (!isOpen || isBlackout);
+        if (isPast) {
             cell.className = `cal-day disabled${isToday ? ' today' : ''}`;
-            if (isBlackout && !isPast && isOpen) cell.title = 'Ta dan ni na voljo';
+        } else if (isFutureUnavailable && state.restaurant?.waitlist_enabled) {
+            // Klikljiv za čakalno listo – brez 'disabled' razreda (pointer-events:none)
+            cell.className = `cal-day cal-day-waitlist${isToday ? ' today' : ''}`;
+            cell.title = 'Ni terminov – kliknite za čakalno listo';
+            cell.style.opacity = '0.45';
+            cell.onclick = () => selectDateWaitlist(dateStr);
+        } else if (isFutureUnavailable) {
+            cell.className = `cal-day disabled${isToday ? ' today' : ''}`;
         } else {
             cell.className = `cal-day available${isToday ? ' today' : ''}${isSelected ? ' selected' : ''}`;
             cell.onclick   = () => selectDate(dateStr);
@@ -504,6 +560,41 @@ function selectDate(dateStr) {
     renderCalendar();
     goStep(3);
     loadSlots(dateStr);
+}
+
+function selectDateWaitlist(dateStr) {
+    state.date = dateStr;
+    renderCalendar();
+
+    // Pokaži step 3 z direktno waitlist ponudbo (brez nalaganja terminov)
+    document.getElementById('slots-loading').classList.add('hidden');
+    document.getElementById('slots-grid').classList.add('hidden');
+
+    const slotsEmpty   = document.getElementById('slots-empty');
+    const waitlistOffer = document.getElementById('waitlist-offer');
+    const waitlistDone  = document.getElementById('waitlist-done');
+
+    slotsEmpty.classList.remove('hidden');
+    if (waitlistOffer) {
+        waitlistOffer.classList.remove('hidden');
+        if (waitlistDone) waitlistDone.classList.add('hidden');
+        ['wl-first','wl-last','wl-email','wl-phone','wl-time'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.value = '';
+        });
+        const gdpr = document.getElementById('wl-gdpr');
+        if (gdpr) gdpr.checked = false;
+        const err = document.getElementById('wl-error');
+        if (err) err.classList.add('hidden');
+    }
+
+    // Posodobi podnaslov
+    const d = new Date(dateStr + 'T12:00:00');
+    const dow = DAYS_SL[(d.getDay() + 6) % 7];
+    document.getElementById('step3-subtitle').textContent =
+        `${dow}, ${d.getDate()}. ${MONTHS[d.getMonth()]} ${d.getFullYear()} · ni terminov`;
+
+    goStep(3);
 }
 
 // ── Termini ───────────────────────────────────────────────────
@@ -522,8 +613,27 @@ async function loadSlots(date) {
 
         if (slots.length === 0) {
             document.getElementById('slots-empty').classList.remove('hidden');
+            // Ponudi čakalno listo če je na voljo
+            const waitlistOffer = document.getElementById('waitlist-offer');
+            const waitlistDone  = document.getElementById('waitlist-done');
+            if (waitlistOffer && state.restaurant?.waitlist_enabled) {
+                waitlistOffer.classList.remove('hidden');
+                if (waitlistDone) waitlistDone.classList.add('hidden');
+                // Ponastavi obrazec
+                ['wl-first','wl-last','wl-email','wl-phone','wl-time'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = '';
+                });
+                const gdpr = document.getElementById('wl-gdpr');
+                if (gdpr) gdpr.checked = false;
+                const err = document.getElementById('wl-error');
+                if (err) err.classList.add('hidden');
+            }
             return;
         }
+        // Ko so termini na voljo, skrij waitlist ponudbo
+        const wo = document.getElementById('waitlist-offer');
+        if (wo) wo.classList.add('hidden');
 
         const grid = document.getElementById('slots-grid');
         grid.innerHTML = '';
@@ -553,6 +663,60 @@ function selectSlot(time, btn) {
     document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
     setTimeout(() => goStep(4), 200);
+}
+
+// ── Čakalna lista ─────────────────────────────────────────────
+const WAITLIST_API = <?= json_encode(APP_URL . BASE_PATH . '/api/waitlist.php') ?>;
+
+async function submitWaitlist() {
+    const firstName = document.getElementById('wl-first')?.value.trim();
+    const lastName  = document.getElementById('wl-last')?.value.trim();
+    const email     = document.getElementById('wl-email')?.value.trim();
+    const phone     = document.getElementById('wl-phone')?.value.trim();
+    const timePref  = document.getElementById('wl-time')?.value.trim();
+    const gdpr      = document.getElementById('wl-gdpr')?.checked;
+    const errEl     = document.getElementById('wl-error');
+
+    const showErr = (msg) => {
+        errEl.textContent = msg;
+        errEl.classList.remove('hidden');
+    };
+
+    if (!firstName) return showErr('Ime je obvezno.');
+    if (!lastName)  return showErr('Priimek je obvezen.');
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showErr('Vnesite veljaven email naslov.');
+    if (!gdpr)      return showErr('Soglasje je obvezno.');
+
+    errEl.classList.add('hidden');
+    const btn = document.getElementById('wl-submit');
+    btn.disabled = true;
+    btn.textContent = 'Pošiljam...';
+
+    try {
+        const res  = await fetch(`${WAITLIST_API}?t=${encodeURIComponent(TOKEN)}`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+                date:        state.date,
+                time_pref:   timePref || '',
+                guests:      state.guests || 1,
+                first_name:  firstName,
+                last_name:   lastName,
+                email,
+                phone:       phone || '',
+                gdpr_consent: true,
+            }),
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error || 'Napaka strežnika.');
+
+        document.getElementById('waitlist-offer').classList.add('hidden');
+        document.getElementById('waitlist-done').classList.remove('hidden');
+    } catch (e) {
+        showErr(e.message);
+        btn.disabled = false;
+        btn.textContent = 'Vpišem se na čakalno listo';
+    }
 }
 
 // ── Korak 4 – podnaslov ───────────────────────────────────────

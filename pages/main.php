@@ -131,6 +131,18 @@ if ($restaurants) {
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
             Statistika
         </a>
+        <?php if ($isAdmin && user_has_feature($pdo, (int)$_SESSION['user_id'], 'guest_database')): ?>
+        <a href="<?= BASE_PATH ?>/pages/guests.php" class="btn-header btn-header-admin">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Gostje
+        </a>
+        <?php endif; ?>
+        <?php if ($isAdmin && user_has_feature($pdo, (int)$_SESSION['user_id'], 'waitlist')): ?>
+        <a href="<?= BASE_PATH ?>/pages/waitlist.php" class="btn-header btn-header-admin">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+            Čakalna lista
+        </a>
+        <?php endif; ?>
         <?php if ($isAdmin): ?>
             <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
@@ -164,6 +176,12 @@ if ($restaurants) {
     <?php endif; ?>
     <a href="<?= BASE_PATH ?>/pages/stats.php" class="btn-header btn-header-admin">Statistika</a>
     <?php if ($isAdmin): ?>
+    <?php if (user_has_feature($pdo, (int)$_SESSION['user_id'], 'guest_database')): ?>
+    <a href="<?= BASE_PATH ?>/pages/guests.php" class="btn-header btn-header-admin">Gostje</a>
+    <?php endif; ?>
+    <?php if (user_has_feature($pdo, (int)$_SESSION['user_id'], 'waitlist')): ?>
+    <a href="<?= BASE_PATH ?>/pages/waitlist.php" class="btn-header btn-header-admin">Čakalna lista</a>
+    <?php endif; ?>
     <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">Admin</a>
     <a href="<?= BASE_PATH ?>/pages/billing.php" class="btn-header btn-header-admin">Paketi</a>
     <?php endif; ?>
@@ -284,7 +302,8 @@ window.APP_STATE = <?= json_encode([
     'pendingCount' => $pendingCount,
     'today'        => $today,
     'base'         => BASE_PATH,
-    'hasSurvey'    => $isAdmin ? user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey') : false,
+    'hasSurvey'       => $isAdmin ? user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey') : false,
+    'hasGuestDatabase'=> $isAdmin ? user_has_feature($pdo, (int)$_SESSION['user_id'], 'guest_database') : false,
 ], JSON_UNESCAPED_UNICODE) ?>;
 </script>
 

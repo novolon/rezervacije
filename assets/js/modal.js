@@ -256,7 +256,58 @@ const ReservationModal = (() => {
         });
 
         wrap.appendChild(grid);
+
+        // ── Mini-profil gosta (Advanced/Premium) ─────────────────
+        if (APP_STATE.hasGuestDatabase && r.email && r.restaurant_id) {
+            const profileDiv = document.createElement('div');
+            profileDiv.id = 'guest-mini-profile';
+            profileDiv.style.cssText = 'margin-top:16px;border-top:1px solid #E5E7EB;padding-top:14px';
+            profileDiv.innerHTML = '<div style="color:#9CA3AF;font-size:.8rem">Nalagam profil gosta…</div>';
+            wrap.appendChild(profileDiv);
+
+            const base = APP_STATE.base || '';
+            fetch(`${base}/api/guests.php?restaurant_id=${r.restaurant_id}&email=${encodeURIComponent(r.email)}`)
+                .then(res => res.json())
+                .then(json => {
+                    if (!json.success || !json.data) {
+                        profileDiv.innerHTML = '';
+                        return;
+                    }
+                    const g = json.data;
+                    const tags = (g.tags || []).slice(0, 4).map(t =>
+                        `<span style="display:inline-block;padding:1px 8px;border-radius:999px;font-size:.7rem;font-weight:600;background:${t==='VIP'?'#FEE2E2':'#FEF3C7'};color:${t==='VIP'?'#991B1B':'#92400E'};margin:1px 2px">${escText(t)}</span>`
+                    ).join('');
+                    const avg = g.avg_rating ? `⭐ ${g.avg_rating}` : '';
+                    const guestPageUrl = `${base}/pages/guests.php?rest_id=${r.restaurant_id}`;
+                    profileDiv.innerHTML = `
+                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                            <span style="font-size:.75rem;font-weight:600;color:#9CA3AF;text-transform:uppercase;letter-spacing:.05em">Profil gosta</span>
+                            <a href="${guestPageUrl}" style="font-size:.75rem;color:#F59E0B;text-decoration:none" target="_blank">Baza gostov →</a>
+                        </div>
+                        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+                            <div style="font-size:.85rem">
+                                <span style="color:#6B7280">Obiski:</span>
+                                <strong style="color:#111827;margin-left:4px">${g.total_visits}</strong>
+                                ${g.no_shows ? `<span style="color:#EF4444;font-size:.75rem;margin-left:4px">(${g.no_shows} ns)</span>` : ''}
+                            </div>
+                            ${g.last_visit && g.last_visit !== r.reservation_date ? `<div style="font-size:.85rem"><span style="color:#6B7280">Zadnjič:</span> <strong style="color:#111827;margin-left:4px">${fmtMiniDate(g.last_visit)}</strong></div>` : ''}
+                            ${avg ? `<div style="font-size:.85rem">${avg}</div>` : ''}
+                            ${g.is_blacklisted ? '<span style="color:#EF4444;font-size:.8rem;font-weight:600">⛔ Blokiran</span>' : ''}
+                        </div>
+                        ${tags ? `<div style="margin-top:6px">${tags}</div>` : ''}
+                        ${g.notes ? `<div style="margin-top:8px;font-size:.82rem;color:#374151;background:#F9FAFB;border-radius:6px;padding:7px 10px">${escText(g.notes)}</div>` : ''}
+                    `;
+                })
+                .catch(() => { profileDiv.innerHTML = ''; });
+        }
+
         return wrap;
+    }
+
+    function fmtMiniDate(d) {
+        if (!d) return '';
+        const [y,m,day] = d.slice(0,10).split('-');
+        return `${parseInt(day)}. ${parseInt(m)}. ${y}`;
     }
 
     // ── Forma (create / edit) ─────────────────────────────────────
