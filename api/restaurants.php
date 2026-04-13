@@ -200,6 +200,7 @@ if ($method === 'PUT') {
     $allow_guest_cancel        = isset($body['allow_guest_cancel'])        ? ($body['allow_guest_cancel'] ? 1 : 0) : null;
     $guest_cancel_cutoff_hours = isset($body['guest_cancel_cutoff_hours']) ? max(1, (int)$body['guest_cancel_cutoff_hours']) : null;
     $waitlist_enabled          = isset($body['waitlist_enabled'])          ? ($body['waitlist_enabled'] ? 1 : 0) : null;
+    $waitlist_max_per_slot     = isset($body['waitlist_max_per_slot'])     ? max(0, (int)$body['waitlist_max_per_slot']) : null;
 
     $contact_email = array_key_exists('contact_email', $body) ? (trim($body['contact_email']) ?: null) : false;
     $contact_phone = array_key_exists('contact_phone', $body) ? (trim($body['contact_phone']) ?: null) : false;
@@ -220,6 +221,7 @@ if ($method === 'PUT') {
     if ($allow_guest_cancel !== null)        { $sets[] = 'allow_guest_cancel = ?';          $params[] = $allow_guest_cancel; }
     if ($guest_cancel_cutoff_hours !== null) { $sets[] = 'guest_cancel_cutoff_hours = ?';   $params[] = $guest_cancel_cutoff_hours; }
     if ($waitlist_enabled !== null)          { $sets[] = 'waitlist_enabled = ?';             $params[] = $waitlist_enabled; }
+    if ($waitlist_max_per_slot !== null)    { $sets[] = 'waitlist_max_per_slot = ?';        $params[] = $waitlist_max_per_slot; }
     if ($contact_email !== false)            { $sets[] = 'contact_email = ?';               $params[] = $contact_email; }
     if ($contact_phone !== false)            { $sets[] = 'contact_phone = ?';               $params[] = $contact_phone; }
 

@@ -35,6 +35,10 @@ $apiBase = BASE_PATH . '/api/book.php';
         .slot-btn { transition: all .15s; }
         .slot-btn.selected { background: #1B4332; color: #fff; border-color: #1B4332; }
         .slot-btn:disabled { opacity: .35; cursor: not-allowed; }
+        .slot-btn.waitlist { border-color: #F59E0B; color: #92400E; background: #FFFBEB; }
+        .slot-btn.waitlist:hover { background: #FEF3C7; border-color: #D97706; }
+        .slot-btn.waitlist.selected { background: #F59E0B; color: #fff; border-color: #F59E0B; }
+        .slot-btn.full { opacity: .4; cursor: not-allowed; text-decoration: line-through; }
         .cal-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
                    border-radius: 9999px; font-size: .875rem; font-weight: 500; cursor: pointer;
                    transition: all .15s; }
@@ -240,6 +244,58 @@ $apiBase = BASE_PATH . '/api/book.php';
                     </div>
                 </div>
                 <div id="slots-grid" class="hidden grid grid-cols-3 sm:grid-cols-4 gap-3"></div>
+
+                <!-- Legenda -->
+                <div id="slots-legend" class="hidden mt-3 text-xs text-forest/50" style="display:none">
+                    <span id="legend-waitlist" style="display:none;align-items:center;gap:6px">
+                        <span style="display:inline-block;width:12px;height:12px;border-radius:3px;border:2px solid #F59E0B;background:#FFFBEB"></span> Čakalna lista
+                    </span>
+                </div>
+
+                <!-- Inline waitlist obrazec ob kliku na waitlist termin -->
+                <div id="slot-waitlist-panel" class="hidden mt-4 bg-amber-50 border border-amber-200 rounded-2xl p-5">
+                    <p class="text-sm font-semibold text-amber-900 mb-1">Termin je zaseden – čakalna lista</p>
+                    <p class="text-xs text-amber-700 mb-4">Vpišite se za termin <strong id="swl-time-label"></strong>. Ko se sprosti mesto, vas bomo takoj obvestili. Lahko pa izberete drug termin zgoraj.</p>
+                    <div class="space-y-3">
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label class="block text-xs font-medium text-forest mb-1">Ime <span class="text-terracotta">*</span></label>
+                                <input id="swl-first" type="text" placeholder="Janez"
+                                    class="w-full border border-sage-light rounded-xl px-3 py-2.5 text-forest text-sm focus:outline-none focus:border-forest">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-medium text-forest mb-1">Priimek <span class="text-terracotta">*</span></label>
+                                <input id="swl-last" type="text" placeholder="Novak"
+                                    class="w-full border border-sage-light rounded-xl px-3 py-2.5 text-forest text-sm focus:outline-none focus:border-forest">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-forest mb-1">Email <span class="text-terracotta">*</span></label>
+                            <input id="swl-email" type="email" placeholder="janez@email.com"
+                                class="w-full border border-sage-light rounded-xl px-3 py-2.5 text-forest text-sm focus:outline-none focus:border-forest">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-forest mb-1">Telefon <span class="text-forest/40 font-normal">(neobvezno)</span></label>
+                            <input id="swl-phone" type="tel" placeholder="041 123 456"
+                                class="w-full border border-sage-light rounded-xl px-3 py-2.5 text-forest text-sm focus:outline-none focus:border-forest">
+                        </div>
+                        <label class="flex gap-2 items-start cursor-pointer">
+                            <input id="swl-gdpr" type="checkbox" class="mt-0.5 accent-forest">
+                            <span class="text-xs text-forest/70">Strinjam se z obdelavo osebnih podatkov za namen obveščanja o prostih terminih.</span>
+                        </label>
+                        <div id="swl-error" class="hidden text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2"></div>
+                        <button id="swl-submit" onclick="submitSlotWaitlist()"
+                            class="w-full bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl py-3 text-sm transition-colors">
+                            Vpišem se na čakalno listo
+                        </button>
+                    </div>
+                </div>
+                <div id="slot-waitlist-done" class="hidden mt-4 bg-green-50 border border-green-200 rounded-2xl p-5 text-center">
+                    <div class="text-2xl mb-2">✓</div>
+                    <p class="text-sm font-semibold text-green-800">Vpisani ste na čakalno listo!</p>
+                    <p class="text-xs text-green-700 mt-1">Ko se sprosti termin, vas bomo obvestili po emailu.</p>
+                    <button onclick="goStep(2)" class="mt-3 text-sm text-terracotta font-medium hover:underline">← Izberite drug datum</button>
+                </div>
             </div>
 
             <!-- ── Korak 4: Podatki ── -->
@@ -604,22 +660,25 @@ async function loadSlots(date) {
     document.getElementById('slots-grid').classList.add('hidden');
 
     try {
-        const res  = await fetch(`${API_URL}?t=${encodeURIComponent(TOKEN)}&date=${date}`);
+        const res  = await fetch(`${API_URL}?t=${encodeURIComponent(TOKEN)}&date=${date}&guest_count=${state.guests || 1}`);
         const json = await res.json();
         if (!json.success) throw new Error(json.error);
 
         const slots = json.data.slots || [];
         document.getElementById('slots-loading').classList.add('hidden');
 
+        // Skrij inline waitlist panel ob novem nalaganju
+        document.getElementById('slot-waitlist-panel')?.classList.add('hidden');
+        document.getElementById('slot-waitlist-done')?.classList.add('hidden');
+
         if (slots.length === 0) {
             document.getElementById('slots-empty').classList.remove('hidden');
-            // Ponudi čakalno listo če je na voljo
+            // Ponudi čakalno listo če je na voljo (splošna – brez termina)
             const waitlistOffer = document.getElementById('waitlist-offer');
             const waitlistDone  = document.getElementById('waitlist-done');
             if (waitlistOffer && state.restaurant?.waitlist_enabled) {
                 waitlistOffer.classList.remove('hidden');
                 if (waitlistDone) waitlistDone.classList.add('hidden');
-                // Ponastavi obrazec
                 ['wl-first','wl-last','wl-email','wl-phone','wl-time'].forEach(id => {
                     const el = document.getElementById(id);
                     if (el) el.value = '';
@@ -631,20 +690,47 @@ async function loadSlots(date) {
             }
             return;
         }
-        // Ko so termini na voljo, skrij waitlist ponudbo
+
+        // Ko so termini na voljo, skrij splošno waitlist ponudbo
         const wo = document.getElementById('waitlist-offer');
         if (wo) wo.classList.add('hidden');
 
         const grid = document.getElementById('slots-grid');
         grid.innerHTML = '';
-        slots.forEach(time => {
+        let hasWaitlist = false;
+
+        slots.forEach(slot => {
+            const time   = typeof slot === 'string' ? slot : slot.time;
+            const status = typeof slot === 'string' ? 'available' : (slot.status || 'available');
+
             const btn = document.createElement('button');
-            btn.className = 'slot-btn border-2 border-sage-light rounded-xl py-3 text-forest font-semibold text-sm hover:border-forest';
-            btn.textContent = time;
-            btn.onclick = () => selectSlot(time, btn);
+
+            if (status === 'full') {
+                btn.className = 'slot-btn full border-2 border-sage-light rounded-xl py-3 text-forest font-semibold text-sm';
+                btn.disabled = true;
+                btn.title = 'Termin je popolnoma zaseden';
+            } else if (status === 'waitlist') {
+                hasWaitlist = true;
+                btn.className = 'slot-btn waitlist border-2 rounded-xl py-3 font-semibold text-sm';
+                btn.title = 'Zasedeno – vpis na čakalno listo';
+                btn.innerHTML = time + ' <span style="font-size:.65rem;display:block;font-weight:500">čakalna lista</span>';
+                btn.onclick = () => selectWaitlistSlot(time, btn);
+            } else {
+                btn.className = 'slot-btn border-2 border-sage-light rounded-xl py-3 text-forest font-semibold text-sm hover:border-forest';
+                btn.textContent = time;
+                btn.onclick = () => selectSlot(time, btn);
+            }
+
             grid.appendChild(btn);
         });
+
         grid.classList.remove('hidden');
+
+        // Legenda
+        const legend = document.getElementById('slots-legend');
+        const legendWl = document.getElementById('legend-waitlist');
+        if (legend)   legend.style.display   = hasWaitlist ? 'flex'        : 'none';
+        if (legendWl) legendWl.style.display = hasWaitlist ? 'inline-flex' : 'none';
 
         // Podnaslov
         const d = new Date(date + 'T12:00:00');
@@ -662,7 +748,82 @@ function selectSlot(time, btn) {
     state.time = time;
     document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
+    // Skrij morebitni odprti waitlist panel
+    document.getElementById('slot-waitlist-panel')?.classList.add('hidden');
+    document.getElementById('slot-waitlist-done')?.classList.add('hidden');
     setTimeout(() => goStep(4), 200);
+}
+
+function selectWaitlistSlot(time, btn) {
+    // Označi gumb
+    document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+
+    const panel = document.getElementById('slot-waitlist-panel');
+    const done  = document.getElementById('slot-waitlist-done');
+    const label = document.getElementById('swl-time-label');
+    if (label) label.textContent = time;
+    if (done)  done.classList.add('hidden');
+    if (panel) {
+        panel.classList.remove('hidden');
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // Ponastavi obrazec
+    ['swl-first','swl-last','swl-email','swl-phone'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+    });
+    const gdpr = document.getElementById('swl-gdpr');
+    if (gdpr) gdpr.checked = false;
+    const err = document.getElementById('swl-error');
+    if (err) err.classList.add('hidden');
+
+    // Shrani čas v stanje (za morebitni submit)
+    state._waitlistTime = time;
+}
+
+async function submitSlotWaitlist() {
+    const firstName = document.getElementById('swl-first')?.value.trim();
+    const lastName  = document.getElementById('swl-last')?.value.trim();
+    const email     = document.getElementById('swl-email')?.value.trim();
+    const phone     = document.getElementById('swl-phone')?.value.trim();
+    const gdpr      = document.getElementById('swl-gdpr')?.checked;
+    const time      = state._waitlistTime || '';
+    const errEl     = document.getElementById('swl-error');
+
+    if (!firstName || !lastName || !email || !gdpr) {
+        if (errEl) { errEl.textContent = 'Izpolnite obvezna polja in potrdite soglasje.'; errEl.classList.remove('hidden'); }
+        return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        if (errEl) { errEl.textContent = 'Vnesite veljaven email.'; errEl.classList.remove('hidden'); }
+        return;
+    }
+
+    const btn = document.getElementById('swl-submit');
+    if (btn) btn.disabled = true;
+
+    try {
+        const res = await fetch(`${WAITLIST_API}?t=${encodeURIComponent(TOKEN)}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                first_name: firstName, last_name: lastName,
+                email, phone,
+                date: state.date, time_preference: time,
+                guests: state.guests, gdpr_consent: 1,
+            }),
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error || 'Napaka');
+
+        document.getElementById('slot-waitlist-panel')?.classList.add('hidden');
+        document.getElementById('slot-waitlist-done')?.classList.remove('hidden');
+        document.getElementById('slot-waitlist-done')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch(e) {
+        if (errEl) { errEl.textContent = e.message; errEl.classList.remove('hidden'); }
+        if (btn) btn.disabled = false;
+    }
 }
 
 // ── Čakalna lista ─────────────────────────────────────────────

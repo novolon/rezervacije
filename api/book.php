@@ -115,20 +115,63 @@ if ($method === 'GET') {
             }));
         }
 
-        // Filtriraj termine po razpoložljivosti miz (če restavracija uporablja upravljanje miz)
-        if (user_has_feature($pdo, (int)$rest['owner_id'], 'table_management')
-            && restaurant_has_tables($pdo, (int)$rest['id'])
-        ) {
-            $guestCount = isset($_GET['guest_count']) ? max(1, (int)$_GET['guest_count']) : (int)$rest['booking_min_guests'];
-            $duration   = (int)$rest['reservation_duration'];
-            $restId     = (int)$rest['id'];
-            $slots = array_values(array_filter($slots, function(string $slot) use ($pdo, $restId, $date, $duration, $guestCount): bool {
-                $r = find_available_table($pdo, $restId, $date, $slot, $duration, $guestCount, null);
-                return $r !== false;
-            }));
+        // Pripravi kontekst za status terminov
+        $guestCount       = isset($_GET['guest_count']) ? max(1, (int)$_GET['guest_count']) : (int)$rest['booking_min_guests'];
+        $duration         = (int)$rest['reservation_duration'];
+        $restId           = (int)$rest['id'];
+        $waitlistEnabled  = user_has_feature($pdo, (int)$rest['owner_id'], 'waitlist') && !empty($rest['waitlist_enabled']);
+        $waitlistMax      = (int)($rest['waitlist_max_per_slot'] ?? 3);
+        $useTableMgmt     = user_has_feature($pdo, (int)$rest['owner_id'], 'table_management')
+                            && restaurant_has_tables($pdo, $restId);
+
+        // Preštej čakalne vpise po terminu za ta datum (status = 'waiting')
+        $waitlistCounts = [];
+        if ($waitlistEnabled) {
+            $stmtWL = $pdo->prepare("
+                SELECT time_preference, COUNT(*) AS cnt
+                FROM waitlist
+                WHERE restaurant_id = ? AND date = ? AND status = 'waiting'
+                GROUP BY time_preference
+            ");
+            $stmtWL->execute([$restId, $date]);
+            foreach ($stmtWL->fetchAll(PDO::FETCH_ASSOC) as $row) {
+                $waitlistCounts[$row['time_preference']] = (int)$row['cnt'];
+            }
         }
 
-        json_response(true, ['slots' => $slots]);
+        // Določi status vsakega termina
+        // Status: 'available' | 'waitlist' | 'full'
+        $slotsOut = [];
+        foreach ($slots as $slot) {
+            $tableAvailable = true;
+            if ($useTableMgmt) {
+                $r = find_available_table($pdo, $restId, $date, $slot, $duration, $guestCount, null);
+                $tableAvailable = ($r !== false && $r['mode'] !== 'no_tables') || ($r !== false && $r['mode'] === 'no_tables');
+                // no_tables mode = backward compat = vedno available
+                if ($r === false) {
+                    $tableAvailable = false;
+                }
+            }
+
+            if ($tableAvailable) {
+                $slotsOut[] = ['time' => $slot, 'status' => 'available'];
+                continue;
+            }
+
+            // Mize zasedene — ponudi čakalno listo?
+            if ($waitlistEnabled) {
+                $wlCount = $waitlistCounts[$slot] ?? 0;
+                if ($waitlistMax > 0 && $wlCount >= $waitlistMax) {
+                    $slotsOut[] = ['time' => $slot, 'status' => 'full'];
+                } else {
+                    $slotsOut[] = ['time' => $slot, 'status' => 'waitlist'];
+                }
+            } else {
+                $slotsOut[] = ['time' => $slot, 'status' => 'full'];
+            }
+        }
+
+        json_response(true, ['slots' => $slotsOut]);
     }
 
     // ── Info o restavraciji (za javno booking stran) ──────────────
@@ -181,7 +224,8 @@ if ($method === 'GET') {
         'slot_interval'    => (int)($rest['booking_slot_interval'] ?? $rest['reservation_duration']),
         'blackout_dates'   => $blackoutDates,
         'custom_fields'    => $customFields,
-        'waitlist_enabled' => user_has_feature($pdo, (int)$rest['owner_id'], 'waitlist') && (bool)($rest['waitlist_enabled'] ?? 1),
+        'waitlist_enabled'     => user_has_feature($pdo, (int)$rest['owner_id'], 'waitlist') && (bool)($rest['waitlist_enabled'] ?? 1),
+        'waitlist_max_per_slot'=> (int)($rest['waitlist_max_per_slot'] ?? 3),
         'day_schedules'    => array_map(fn($ds) => [
             'day'    => (int)$ds['day_of_week'],
             'is_open'=> (bool)$ds['is_open'],

@@ -376,6 +376,18 @@ $hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_manag
                 </span>
                 <span class="toggle-label">Omogoči čakalno listo za javno rezervacijo</span>
             </label>
+            <div style="margin-top:14px">
+                <label style="font-size:.825rem;font-weight:600;color:var(--color-text);display:block;margin-bottom:6px">
+                    Max vpisov na čakalno listo po terminu
+                </label>
+                <div style="display:flex;align-items:center;gap:10px">
+                    <input type="number" id="r-waitlist-max" min="0" max="100"
+                        value="<?= (int)($rest['waitlist_max_per_slot'] ?? 3) ?>"
+                        style="width:90px;border:1.5px solid var(--color-border);border-radius:8px;padding:8px 10px;font-size:.875rem;font-family:var(--font);outline:none">
+                    <span style="font-size:.8rem;color:var(--color-muted)">(<code>0</code> = brez omejitve)</span>
+                </div>
+                <p style="font-size:.775rem;color:var(--color-muted);margin:6px 0 0">Ko je dosežen limit, se termin popolnoma zaklene za nove vpise.</p>
+            </div>
             <?php endif; ?>
         </div>
 
@@ -938,6 +950,7 @@ document.getElementById('btn-save-booking').addEventListener('click', async () =
             allow_guest_edit: allowEdit, guest_edit_cutoff_hours: editCutoff,
             allow_guest_cancel: allowCancel, guest_cancel_cutoff_hours: cancelCutoff,
             waitlist_enabled: document.getElementById('r-waitlist-enabled')?.checked ? 1 : 0,
+            waitlist_max_per_slot: parseInt(document.getElementById('r-waitlist-max')?.value ?? 3) || 0,
         });
         showPageOk('Shranjeno!');
     } catch(e) { showPageErr(e.message); }
