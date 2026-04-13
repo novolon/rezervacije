@@ -35,6 +35,9 @@ function restaurant_has_tables(PDO $pdo, int $restId): bool {
  *   ['mode' => 'merge', 'table_ids' => [...], 'merge_group_id' => Y] – združene mize
  *   false                                                        – ni prostega mesta
  */
+/**
+ * @return array|false
+ */
 function find_available_table(
     PDO    $pdo,
     int    $restId,
@@ -43,7 +46,7 @@ function find_available_table(
     int    $durationMins,
     int    $guestCount,
     ?int   $excludeResId
-): array|false {
+) {
 
     // 1. Naloži vse aktivne mize restavracije (ORDER BY capacity ASC – najmanjša najprej)
     $stmtT = $pdo->prepare("
