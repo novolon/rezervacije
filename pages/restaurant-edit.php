@@ -31,8 +31,9 @@ if (!$rest) { header('Location: ' . BASE_PATH . '/pages/admin.php'); exit; }
 
 $fullName  = $_SESSION['full_name'];
 $activeTab = $_GET['tab'] ?? 'splosno';
-$hasSurvey     = user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey');
-$hasSurveyEdit = user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey_edit');
+$hasSurvey      = user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey');
+$hasSurveyEdit  = user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey_edit');
+$hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_management');
 ?>
 <!DOCTYPE html>
 <html lang="sl">
@@ -178,6 +179,7 @@ $hasSurveyEdit = user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey_edit'
         <button class="re-tab" data-tab="zaposleni">Zaposleni</button>
         <button class="re-tab" data-tab="polja">Polja po meri</button>
         <button class="re-tab" data-tab="anketa">Anketa</button>
+        <button class="re-tab" data-tab="mize">Mize</button>
     </div>
 
     <!-- ── Tab: Splošno ────────────────────────────────────── -->
@@ -610,6 +612,96 @@ $hasSurveyEdit = user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey_edit'
     <?php endif; ?>
     </div>
 
+    <!-- ── Tab: Mize ─────────────────────────────────────────── -->
+    <div id="panel-mize" class="re-panel">
+    <?php if (!$hasTableMgmt): ?>
+        <div class="re-section" style="background:#FEF3C7;border-color:#FDE68A">
+            <p style="margin:0;font-size:.9rem;color:#92400E">
+                Upravljanje miz je na voljo v paketu <strong>Advanced</strong> ali višjem.
+                <a href="<?= BASE_PATH ?>/pages/billing.php" style="color:#B45309;font-weight:600">Nadgradi paket →</a>
+            </p>
+        </div>
+    <?php else: ?>
+
+        <!-- Cone -->
+        <div class="re-section">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                <div class="re-section-title" style="margin:0">Cone</div>
+                <button onclick="showAreaForm()" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">+ Cona</button>
+            </div>
+            <div id="areas-list"></div>
+            <div id="area-form" style="display:none;margin-top:12px;display:none">
+                <div style="display:flex;gap:8px;align-items:center">
+                    <input type="text" id="area-name-input" placeholder="Ime cone (npr. Zunaj, 1. nadstropje)" style="flex:1;border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none">
+                    <button onclick="saveArea()" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">Shrani</button>
+                    <button onclick="cancelAreaForm()" style="font-size:.8rem;padding:.4rem .9rem;background:transparent;border:1.5px solid var(--color-border);border-radius:8px;cursor:pointer;font-family:var(--font)">Prekliči</button>
+                </div>
+                <input type="hidden" id="area-edit-id" value="">
+            </div>
+        </div>
+
+        <!-- Mize -->
+        <div class="re-section">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                <div class="re-section-title" style="margin:0">Mize</div>
+                <button onclick="showTableForm()" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">+ Miza</button>
+            </div>
+            <div id="tables-list"></div>
+            <div id="table-form" style="display:none;margin-top:12px;background:var(--color-bg);border-radius:8px;padding:14px;border:1px solid var(--color-border)">
+                <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end">
+                    <div>
+                        <label style="font-size:.78rem;font-weight:600;color:var(--color-muted);display:block;margin-bottom:4px">Ime mize *</label>
+                        <input type="text" id="table-name-input" placeholder="npr. Miza 1, Bar 3"
+                            style="width:100%;border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none;box-sizing:border-box">
+                    </div>
+                    <div>
+                        <label style="font-size:.78rem;font-weight:600;color:var(--color-muted);display:block;margin-bottom:4px">Zmogljivost *</label>
+                        <input type="number" id="table-cap-input" min="1" max="50" value="2"
+                            style="width:80px;border:1.5px solid var(--color-border);border-radius:8px;padding:8px 10px;font-size:.875rem;font-family:var(--font);outline:none">
+                    </div>
+                    <div>
+                        <label style="font-size:.78rem;font-weight:600;color:var(--color-muted);display:block;margin-bottom:4px">Cona</label>
+                        <select id="table-area-select"
+                            style="border:1.5px solid var(--color-border);border-radius:8px;padding:8px 10px;font-size:.875rem;font-family:var(--font);outline:none;background:var(--color-surface)">
+                            <option value="">— brez cone —</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="display:flex;gap:8px;margin-top:10px">
+                    <button onclick="saveTable()" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">Shrani</button>
+                    <button onclick="cancelTableForm()" style="font-size:.8rem;padding:.4rem .9rem;background:transparent;border:1.5px solid var(--color-border);border-radius:8px;cursor:pointer;font-family:var(--font)">Prekliči</button>
+                </div>
+                <input type="hidden" id="table-edit-id" value="">
+            </div>
+        </div>
+
+        <!-- Združene mize -->
+        <div class="re-section">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                <div class="re-section-title" style="margin:0">Združene mize</div>
+                <button onclick="showMergeForm()" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">+ Skupina</button>
+            </div>
+            <div style="font-size:.8rem;color:var(--color-muted);margin-bottom:12px">
+                Definirajte, katere mize se lahko združijo (npr. sosednje mize za večje gruče gostov).
+            </div>
+            <div id="merge-groups-list"></div>
+            <div id="merge-form" style="display:none;margin-top:12px;background:var(--color-bg);border-radius:8px;padding:14px;border:1px solid var(--color-border)">
+                <label style="font-size:.78rem;font-weight:600;color:var(--color-muted);display:block;margin-bottom:4px">Ime skupine (opcionalno)</label>
+                <input type="text" id="mg-name-input" placeholder="npr. Terasa 1+2"
+                    style="width:100%;border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none;box-sizing:border-box;margin-bottom:10px">
+                <label style="font-size:.78rem;font-weight:600;color:var(--color-muted);display:block;margin-bottom:6px">Izberite mize (vsaj 2) *</label>
+                <div id="mg-tables-checkboxes" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+                <div style="display:flex;gap:8px">
+                    <button onclick="saveMergeGroup()" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">Shrani</button>
+                    <button onclick="cancelMergeForm()" style="font-size:.8rem;padding:.4rem .9rem;background:transparent;border:1.5px solid var(--color-border);border-radius:8px;cursor:pointer;font-family:var(--font)">Prekliči</button>
+                </div>
+                <input type="hidden" id="mg-edit-id" value="">
+            </div>
+        </div>
+
+    <?php endif; ?>
+    </div>
+
 </div><!-- .rest-edit-wrap -->
 
 <!-- Modal za podrobnosti odgovora -->
@@ -675,6 +767,7 @@ document.querySelectorAll('.re-tab').forEach(tab => {
         if (tab.dataset.tab === 'zaposleni' && !staffLoaded) loadStaff();
         if (tab.dataset.tab === 'polja'   && !cfLoaded)    loadCustomFields();
         if (tab.dataset.tab === 'anketa'  && !surveyLoaded) loadSurveyForm();
+        if (tab.dataset.tab === 'mize'    && !tablesLoaded) loadTables();
     });
 });
 
@@ -1243,6 +1336,197 @@ function exportSurveyCsv() {
     if (to)   params.set('date_to',   to);
     window.location.href = `${BASE}/api/survey.php?${params}`;
 }
+
+// ── Mize ─────────────────────────────────────────────────────
+<?php if ($hasTableMgmt): ?>
+let tablesLoaded = false;
+let tablesData = { areas: [], tables: [], merge_groups: [] };
+
+async function loadTables() {
+    tablesLoaded = true;
+    try {
+        tablesData = await apiCall('GET', `/api/tables.php?restaurant_id=${REST_ID}`);
+        renderAreas();
+        renderTables();
+        renderMergeGroups();
+    } catch(e) {
+        document.getElementById('areas-list').innerHTML = `<p style="color:#EF4444;font-size:.875rem">${h(e.message)}</p>`;
+    }
+}
+
+function renderAreas() {
+    const el = document.getElementById('areas-list');
+    if (!tablesData.areas.length) { el.innerHTML = '<p style="font-size:.85rem;color:var(--color-muted)">Ni definiranih con. Cone so opcijsko.</p>'; return; }
+    el.innerHTML = tablesData.areas.map(a => `
+        <div class="item-row" style="opacity:${a.is_active?1:.5}">
+            <span class="item-row-name">${h(a.name)}</span>
+            <span class="item-row-badge" style="background:${a.is_active?'#D1FAE5':'#F3F4F6'};color:${a.is_active?'#065F46':'#6B7280'}">${a.is_active?'Aktivna':'Neaktivna'}</span>
+            <button onclick="editArea(${a.id})" style="font-size:.8rem;padding:3px 8px;border:1.5px solid var(--color-border);border-radius:6px;background:transparent;cursor:pointer;font-family:var(--font)">Uredi</button>
+            <button class="item-row-del" onclick="deleteArea(${a.id})" title="Briši">✕</button>
+        </div>
+    `).join('');
+}
+
+function renderTables() {
+    const el = document.getElementById('tables-list');
+    if (!tablesData.tables.length) { el.innerHTML = '<p style="font-size:.85rem;color:var(--color-muted)">Ni definiranih miz.</p>'; return; }
+    el.innerHTML = tablesData.tables.map(t => `
+        <div class="item-row" style="opacity:${t.is_active?1:.5}">
+            <span class="item-row-name">${h(t.name)}</span>
+            ${t.area_name ? `<span class="item-row-badge" style="background:#EDE9FE;color:#5B21B6">${h(t.area_name)}</span>` : ''}
+            <span class="item-row-badge" style="background:#DBEAFE;color:#1D4ED8">${t.capacity} oseb</span>
+            <span class="item-row-badge" style="background:${t.is_active?'#D1FAE5':'#F3F4F6'};color:${t.is_active?'#065F46':'#6B7280'}">${t.is_active?'Aktivna':'Neaktivna'}</span>
+            <button onclick="editTable(${t.id})" style="font-size:.8rem;padding:3px 8px;border:1.5px solid var(--color-border);border-radius:6px;background:transparent;cursor:pointer;font-family:var(--font)">Uredi</button>
+            <button class="item-row-del" onclick="deleteTable(${t.id})" title="Briši">✕</button>
+        </div>
+    `).join('');
+}
+
+function renderMergeGroups() {
+    const el = document.getElementById('merge-groups-list');
+    if (!tablesData.merge_groups.length) { el.innerHTML = '<p style="font-size:.85rem;color:var(--color-muted)">Ni definiranih skupin za združevanje.</p>'; return; }
+    el.innerHTML = tablesData.merge_groups.map(g => `
+        <div class="item-row">
+            <span class="item-row-name">${g.name ? h(g.name) : '<em style="color:var(--color-muted)">Brez imena</em>'}</span>
+            <span class="item-row-badge" style="background:#FEF3C7;color:#92400E">${g.member_names.join(' + ')}</span>
+            <span class="item-row-badge" style="background:#DBEAFE;color:#1D4ED8">${g.total_capacity} oseb skupaj</span>
+            <button onclick="editMergeGroup(${g.id})" style="font-size:.8rem;padding:3px 8px;border:1.5px solid var(--color-border);border-radius:6px;background:transparent;cursor:pointer;font-family:var(--font)">Uredi</button>
+            <button class="item-row-del" onclick="deleteMergeGroup(${g.id})" title="Briši">✕</button>
+        </div>
+    `).join('');
+}
+
+// ─ Area form ─
+function showAreaForm(editId=null) {
+    const f = document.getElementById('area-form');
+    document.getElementById('area-name-input').value = editId
+        ? (tablesData.areas.find(a=>a.id===editId)?.name || '') : '';
+    document.getElementById('area-edit-id').value = editId || '';
+    f.style.display = 'block';
+    document.getElementById('area-name-input').focus();
+}
+function cancelAreaForm() { document.getElementById('area-form').style.display='none'; }
+function editArea(id) { showAreaForm(id); }
+
+async function saveArea() {
+    const name   = document.getElementById('area-name-input').value.trim();
+    const editId = document.getElementById('area-edit-id').value;
+    if (!name) { toast('Vnesite ime cone.','error'); return; }
+    try {
+        if (editId) {
+            await apiCall('PUT', `/api/tables.php?area_id=${editId}`, { name });
+        } else {
+            await apiCall('POST', '/api/tables.php', { action:'create_area', restaurant_id:REST_ID, name });
+        }
+        cancelAreaForm();
+        tablesLoaded = false; await loadTables();
+        toast(editId ? 'Cona posodobljena.' : 'Cona dodana.');
+    } catch(e) { toast(e.message,'error'); }
+}
+
+async function deleteArea(id) {
+    if (!confirm('Izbriši cono? Mize v tej coni bodo ostale brez dodelitve.')) return;
+    try {
+        await apiCall('DELETE', `/api/tables.php?area_id=${id}`);
+        tablesLoaded = false; await loadTables();
+        toast('Cona izbrisana.');
+    } catch(e) { toast(e.message,'error'); }
+}
+
+// ─ Table form ─
+function populateAreaSelect(selectedId=null) {
+    const sel = document.getElementById('table-area-select');
+    sel.innerHTML = '<option value="">— brez cone —</option>' +
+        tablesData.areas.map(a => `<option value="${a.id}" ${selectedId==a.id?'selected':''}>${h(a.name)}</option>`).join('');
+}
+
+function showTableForm(editId=null) {
+    const f = document.getElementById('table-form');
+    const t = editId ? tablesData.tables.find(x=>x.id===editId) : null;
+    document.getElementById('table-name-input').value = t?.name || '';
+    document.getElementById('table-cap-input').value  = t?.capacity || 2;
+    document.getElementById('table-edit-id').value    = editId || '';
+    populateAreaSelect(t?.area_id || null);
+    f.style.display = 'block';
+    document.getElementById('table-name-input').focus();
+}
+function cancelTableForm() { document.getElementById('table-form').style.display='none'; }
+function editTable(id) { showTableForm(id); }
+
+async function saveTable() {
+    const name     = document.getElementById('table-name-input').value.trim();
+    const capacity = parseInt(document.getElementById('table-cap-input').value) || 2;
+    const areaId   = document.getElementById('table-area-select').value || null;
+    const editId   = document.getElementById('table-edit-id').value;
+    if (!name) { toast('Vnesite ime mize.','error'); return; }
+    try {
+        if (editId) {
+            await apiCall('PUT', `/api/tables.php?table_id=${editId}`, { name, capacity, area_id: areaId });
+        } else {
+            await apiCall('POST', '/api/tables.php', { action:'create_table', restaurant_id:REST_ID, name, capacity, area_id: areaId });
+        }
+        cancelTableForm();
+        tablesLoaded = false; await loadTables();
+        toast(editId ? 'Miza posodobljena.' : 'Miza dodana.');
+    } catch(e) { toast(e.message,'error'); }
+}
+
+async function deleteTable(id) {
+    if (!confirm('Izbriši mizo?')) return;
+    try {
+        await apiCall('DELETE', `/api/tables.php?table_id=${id}`);
+        tablesLoaded = false; await loadTables();
+        toast('Miza izbrisana.');
+    } catch(e) { toast(e.message,'error'); }
+}
+
+// ─ Merge group form ─
+function showMergeForm(editId=null) {
+    const f  = document.getElementById('merge-form');
+    const g  = editId ? tablesData.merge_groups.find(x=>x.id===editId) : null;
+    document.getElementById('mg-name-input').value = g?.name || '';
+    document.getElementById('mg-edit-id').value    = editId || '';
+    const cbWrap = document.getElementById('mg-tables-checkboxes');
+    cbWrap.innerHTML = tablesData.tables.filter(t=>t.is_active).map(t => `
+        <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer;background:var(--color-surface);border:1.5px solid var(--color-border);border-radius:8px;padding:6px 10px">
+            <input type="checkbox" value="${t.id}" ${g?.member_ids?.includes(t.id)?'checked':''}>
+            ${h(t.name)} <span style="font-size:.75rem;color:var(--color-muted)">(${t.capacity} os.)</span>
+        </label>
+    `).join('');
+    f.style.display = 'block';
+}
+function cancelMergeForm() { document.getElementById('merge-form').style.display='none'; }
+function editMergeGroup(id) { showMergeForm(id); }
+
+async function saveMergeGroup() {
+    const name    = document.getElementById('mg-name-input').value.trim() || null;
+    const editId  = document.getElementById('mg-edit-id').value;
+    const checked = [...document.querySelectorAll('#mg-tables-checkboxes input:checked')].map(i=>parseInt(i.value));
+    if (checked.length < 2) { toast('Izberite vsaj 2 mizi.','error'); return; }
+    try {
+        if (editId) {
+            await apiCall('PUT', `/api/tables.php?merge_group_id=${editId}`, { name, member_table_ids: checked });
+        } else {
+            await apiCall('POST', '/api/tables.php', { action:'create_merge_group', restaurant_id:REST_ID, name, member_table_ids: checked });
+        }
+        cancelMergeForm();
+        tablesLoaded = false; await loadTables();
+        toast(editId ? 'Skupina posodobljena.' : 'Skupina dodana.');
+    } catch(e) { toast(e.message,'error'); }
+}
+
+async function deleteMergeGroup(id) {
+    if (!confirm('Izbriši skupino za združevanje?')) return;
+    try {
+        await apiCall('DELETE', `/api/tables.php?merge_group_id=${id}`);
+        tablesLoaded = false; await loadTables();
+        toast('Skupina izbrisana.');
+    } catch(e) { toast(e.message,'error'); }
+}
+<?php else: ?>
+let tablesLoaded = false;
+function loadTables() { tablesLoaded = true; }
+<?php endif; ?>
 </script>
 
 </body>

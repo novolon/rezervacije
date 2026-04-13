@@ -5,6 +5,8 @@ require_once '../includes/functions.php';
 require_once '../includes/mailer.php';
 require_once '../includes/guest_helper.php';
 require_once '../includes/waitlist_notifier.php';
+require_once '../includes/plans.php';
+require_once '../includes/table_helper.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -82,6 +84,36 @@ function attach_field_values(PDO $pdo, array &$reservations): void {
     }
 }
 
+// ─── Pomožna: priloži dodelitve miz k rezervacijam ────────────
+function attach_table_assignments_bulk(PDO $pdo, array &$reservations): void {
+    if (empty($reservations)) return;
+    $ids = array_column($reservations, 'id');
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    try {
+        $stmt = $pdo->prepare("
+            SELECT rta.reservation_id, rta.table_id, rt.name AS table_name,
+                   rt.capacity, ra.name AS area_name, rta.merge_group_id
+            FROM reservation_table_assignments rta
+            JOIN restaurant_tables rt ON rta.table_id = rt.id
+            LEFT JOIN restaurant_areas ra ON rt.area_id = ra.id
+            WHERE rta.reservation_id IN ($placeholders)
+            ORDER BY rt.sort_order, rt.name
+        ");
+        $stmt->execute($ids);
+        $map = [];
+        foreach ($stmt->fetchAll() as $row) {
+            $rid = $row['reservation_id'];
+            unset($row['reservation_id']);
+            $map[$rid][] = $row;
+        }
+        foreach ($reservations as &$r) {
+            $r['table_assignments'] = $map[$r['id']] ?? [];
+        }
+    } catch (PDOException $e) {
+        foreach ($reservations as &$r) { $r['table_assignments'] = []; }
+    }
+}
+
 // ─── Pomožna: shrani custom field vrednosti ────────────────────
 function save_field_values(PDO $pdo, int $reservationId, array $fieldValues): void {
     if (empty($fieldValues)) return;
@@ -130,6 +162,7 @@ if ($method === 'GET') {
         }
         $rows = [$row];
         attach_field_values($pdo, $rows);
+        attach_table_assignments_bulk($pdo, $rows);
         json_response(true, $rows[0]);
     }
 
@@ -230,6 +263,7 @@ if ($method === 'GET') {
 
         $rows = $stmt->fetchAll();
         attach_field_values($pdo, $rows);
+        attach_table_assignments_bulk($pdo, $rows);
         json_response(true, $rows);
     }
 
@@ -385,7 +419,30 @@ if ($method === 'POST') {
         if ($sChk->fetchColumn()) $staff_id = $sid;
     }
 
+    // Pridobi lastnika restavracije za feature check
+    $ownerStmt = $pdo->prepare("SELECT owner_id, reservation_duration FROM restaurants WHERE id = ?");
+    $ownerStmt->execute([$rest_id]);
+    $restRow2 = $ownerStmt->fetch();
+    $ownerId2 = (int)($restRow2['owner_id'] ?? 0);
+    $defaultDuration = (int)($restRow2['reservation_duration'] ?? 60);
+    $effectiveDuration = $custom_duration ?? $defaultDuration;
+
+    $useTableMgmt = $ownerId2 && user_has_feature($pdo, $ownerId2, 'table_management')
+                    && restaurant_has_tables($pdo, $rest_id);
+
     try {
+        $pdo->beginTransaction();
+
+        // Auto-dodelitev mize (admin ustvari – ne blokira, a vrne opozorilo)
+        $tableAssignment = null;
+        $tableWarning    = null;
+        if ($useTableMgmt) {
+            $tableAssignment = find_available_table($pdo, $rest_id, $date, substr($time, 0, 5), $effectiveDuration, $count, null);
+            if ($tableAssignment === false) {
+                $tableWarning = 'Ni proste mize za ta termin. Rezervacija je shranjena brez dodelitve mize.';
+            }
+        }
+
         $stmt = $pdo->prepare("
             INSERT INTO reservations
                 (restaurant_id, reservation_date, reservation_time, duration, guest_name, guest_count, email, phone, notes, created_by, staff_id)
@@ -406,6 +463,13 @@ if ($method === 'POST') {
         ]);
 
         $id = (int)$pdo->lastInsertId();
+
+        // Dodeli mizo (če je table management aktiven in je bila najdena)
+        if ($useTableMgmt && $tableAssignment && $tableAssignment['mode'] !== 'no_tables') {
+            assign_tables_to_reservation($pdo, $id, $tableAssignment, null);
+        }
+
+        $pdo->commit();
 
         // Shrani custom field vrednosti
         if (!empty($body['custom_fields']) && is_array($body['custom_fields'])) {
@@ -437,9 +501,13 @@ if ($method === 'POST') {
         $row = $stmt->fetch();
         $rows = [$row];
         attach_field_values($pdo, $rows);
-        json_response(true, $rows[0], '', 201);
+        attach_table_assignments_bulk($pdo, $rows);
+        $responseData = $rows[0];
+        if ($tableWarning) $responseData['table_warning'] = $tableWarning;
+        json_response(true, $responseData, '', 201);
 
     } catch (PDOException $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
         error_log('Reservation create error: ' . $e->getMessage());
         json_response(false, null, 'Napaka pri shranjevanju.', 500);
     }
@@ -556,6 +624,22 @@ if ($method === 'PUT') {
         }
     }
 
+    // Ugotovi, ali se je čas/datum/trajanje/stevilo_gostov spremenilo (vpliva na dodelitev miz)
+    $timeChanged = ($date !== $existing['reservation_date'])
+                || (substr($time, 0, 5) !== substr($existing['reservation_time'], 0, 5))
+                || ($custom_duration !== $existing['duration'])
+                || ($count !== (int)$existing['guest_count']);
+
+    // Feature check za table management
+    $putOwnerStmt = $pdo->prepare("SELECT owner_id, reservation_duration FROM restaurants WHERE id = ?");
+    $putOwnerStmt->execute([$existing['restaurant_id']]);
+    $putRestRow = $putOwnerStmt->fetch();
+    $putOwnerId = (int)($putRestRow['owner_id'] ?? 0);
+    $putDefaultDur = (int)($putRestRow['reservation_duration'] ?? 60);
+    $putEffectiveDur = $custom_duration ?? $putDefaultDur;
+    $putUseTableMgmt = $putOwnerId && user_has_feature($pdo, $putOwnerId, 'table_management')
+                       && restaurant_has_tables($pdo, (int)$existing['restaurant_id']);
+
     try {
         $pdo->prepare("
             UPDATE reservations
@@ -574,6 +658,18 @@ if ($method === 'PUT') {
             $put_staff_id,
             $id,
         ]);
+
+        // Re-assign mize, če se je čas/datum/trajanje/gosti spremenilo
+        $putTableWarning = null;
+        if ($putUseTableMgmt && $timeChanged) {
+            clear_table_assignments($pdo, $id);
+            $newAssignment = find_available_table($pdo, (int)$existing['restaurant_id'], $date, substr($time, 0, 5), $putEffectiveDur, $count, $id);
+            if ($newAssignment && $newAssignment['mode'] !== 'no_tables') {
+                assign_tables_to_reservation($pdo, $id, $newAssignment, (int)$session['user_id']);
+            } elseif ($newAssignment === false) {
+                $putTableWarning = 'Ni proste mize za nov termin. Rezervacija je posodobljena brez dodelitve mize.';
+            }
+        }
 
         // Posodobi custom field vrednosti
         if (!empty($body['custom_fields']) && is_array($body['custom_fields'])) {
@@ -594,7 +690,10 @@ if ($method === 'PUT') {
         $row = $stmt->fetch();
         $rows = [$row];
         attach_field_values($pdo, $rows);
-        json_response(true, $rows[0]);
+        attach_table_assignments_bulk($pdo, $rows);
+        $putResponseData = $rows[0];
+        if ($putTableWarning) $putResponseData['table_warning'] = $putTableWarning;
+        json_response(true, $putResponseData);
 
     } catch (PDOException $e) {
         error_log('Reservation update error: ' . $e->getMessage());

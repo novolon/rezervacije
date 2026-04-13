@@ -304,6 +304,7 @@ window.APP_STATE = <?= json_encode([
     'base'         => BASE_PATH,
     'hasSurvey'       => $isAdmin ? user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey') : false,
     'hasGuestDatabase'=> $isAdmin ? user_has_feature($pdo, (int)$_SESSION['user_id'], 'guest_database') : false,
+    'hasTableMgmt'    => $isAdmin ? user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_management') : false,
 ], JSON_UNESCAPED_UNICODE) ?>;
 </script>
 

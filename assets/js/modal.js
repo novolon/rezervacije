@@ -157,6 +157,16 @@ const ReservationModal = (() => {
             footer.appendChild(closeFooter);
 
             if (!isPast) {
+                // Gumb "Prestavi mizo" (samo če je table management aktiven)
+                if (APP_STATE.hasTableMgmt && data.id) {
+                    const moveBtn = document.createElement('button');
+                    moveBtn.className = 'btn btn-ghost';
+                    moveBtn.style.cssText = 'color:#7C3AED;border-color:#C4B5FD';
+                    moveBtn.textContent = 'Prestavi mizo';
+                    moveBtn.addEventListener('click', () => openTableMoveDialog(data, box));
+                    footer.appendChild(moveBtn);
+                }
+
                 const editBtn = document.createElement('button');
                 editBtn.className = 'btn btn-primary';
                 editBtn.textContent = 'Uredi';
@@ -232,6 +242,10 @@ const ReservationModal = (() => {
         if (r.email) fields.push({ label: 'E-pošta', value: r.email });
         if (r.phone) fields.push({ label: 'Telefon', value: r.phone });
         if (r.staff_name) fields.push({ label: 'Sprejel', value: r.staff_name });
+        if (Array.isArray(r.table_assignments) && r.table_assignments.length) {
+            const tableLabel = r.table_assignments.map(a => a.table_name).join(' + ');
+            fields.push({ label: 'Miza', value: tableLabel });
+        }
         if (r.notes) fields.push({ label: 'Opomba', value: r.notes, full: true });
         if (r.arrived_at) {
             const d = new Date(r.arrived_at.replace(' ','T'));
@@ -762,6 +776,78 @@ const ReservationModal = (() => {
         const [y, m, d] = ds.split('-');
         const months = ['jan','feb','mar','apr','maj','jun','jul','avg','sep','okt','nov','dec'];
         return `${parseInt(d)}. ${months[parseInt(m)-1]} ${y}`;
+    }
+
+    // ── Prestavi mizo (dialog) ────────────────────────────────────
+    async function openTableMoveDialog(data, box) {
+        const base = APP_STATE.base || '';
+        const restId = data.restaurant_id;
+        if (!restId) return;
+
+        // Naloži razpoložljive mize za restavracijo
+        let tablesResp;
+        try {
+            const r = await fetch(`${base}/api/tables.php?restaurant_id=${restId}`, { credentials:'same-origin' });
+            tablesResp = await r.json();
+        } catch(e) { if (window.App) App.showToast('Napaka pri nalaganju miz.','error'); return; }
+        if (!tablesResp.success || !tablesResp.data?.tables?.length) {
+            if (window.App) App.showToast('Za to restavracijo ni definiranih miz.','error');
+            return;
+        }
+
+        const allTables = tablesResp.data.tables.filter(t => t.is_active);
+        const currentAssigned = (data.table_assignments || []).map(a => a.table_id);
+
+        // Mini-dialog overlay
+        const overlay = document.createElement('div');
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:2000;display:flex;align-items:center;justify-content:center;padding:16px';
+
+        const dlg = document.createElement('div');
+        dlg.style.cssText = 'background:#fff;border-radius:14px;max-width:420px;width:100%;padding:24px;box-shadow:0 8px 30px rgba(0,0,0,.18)';
+        dlg.innerHTML = `
+            <h3 style="margin:0 0 16px;font-size:1rem;font-weight:700">Prestavi mizo</h3>
+            <p style="font-size:.8rem;color:#6B7280;margin:0 0 12px">Izberite mizo za rezervacijo <strong>${escText(data.guest_name)}</strong> (${data.guest_count} os.):</p>
+            <div id="move-table-list" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;margin-bottom:16px">
+                ${allTables.map(t => `
+                    <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1.5px solid ${currentAssigned.includes(t.id)?'#7C3AED':'#E5E7EB'};border-radius:8px;cursor:pointer;background:${currentAssigned.includes(t.id)?'#F5F3FF':'#FAFAFA'}">
+                        <input type="radio" name="move-table" value="${t.id}" ${currentAssigned.includes(t.id)?'checked':''} style="accent-color:#7C3AED">
+                        <span style="flex:1;font-size:.875rem;font-weight:500">${escText(t.name)}</span>
+                        <span style="font-size:.75rem;color:#6B7280">${t.capacity} os.</span>
+                        ${t.area_name ? `<span style="font-size:.7rem;padding:2px 6px;border-radius:4px;background:#EDE9FE;color:#5B21B6">${escText(t.area_name)}</span>` : ''}
+                    </label>
+                `).join('')}
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+                <button id="move-cancel" class="btn btn-ghost">Prekliči</button>
+                <button id="move-confirm" class="btn btn-primary" style="background:#7C3AED;border-color:#7C3AED">Prestavi</button>
+            </div>
+        `;
+
+        overlay.appendChild(dlg);
+        document.body.appendChild(overlay);
+        overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
+        document.getElementById('move-cancel').addEventListener('click', () => overlay.remove());
+
+        document.getElementById('move-confirm').addEventListener('click', async () => {
+            const sel = dlg.querySelector('input[name="move-table"]:checked');
+            if (!sel) { if(window.App) App.showToast('Izberite mizo.','error'); return; }
+            const tableId = parseInt(sel.value);
+            try {
+                const res = await fetch(`${base}/api/table_assignment.php`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type':'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({ reservation_id: data.id, table_ids: [tableId], merge_group_id: null }),
+                });
+                const json = await res.json();
+                if (!json.success) throw new Error(json.error || 'Napaka');
+                overlay.remove();
+                if (window.App) App.showToast('Miza prestavljena.','success');
+                // Osveži modal z novimi podatki
+                data.table_assignments = json.data?.table_assignments || [{ table_id: tableId, table_name: sel.closest('label').querySelector('span').textContent }];
+                open('view', data);
+            } catch(e) { if(window.App) App.showToast(e.message,'error'); }
+        });
     }
 
     return { open, close };

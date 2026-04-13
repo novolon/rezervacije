@@ -11,6 +11,7 @@ require_once '../includes/functions.php';
 require_once '../includes/plans.php';
 require_once '../includes/mailer.php';
 require_once '../includes/guest_helper.php';
+require_once '../includes/table_helper.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
@@ -111,6 +112,19 @@ if ($method === 'GET') {
             $slots = array_values(array_filter($slots, static function (string $s) use ($nowMins): bool {
                 [$h, $i] = explode(':', $s);
                 return ((int)$h * 60 + (int)$i) > $nowMins;
+            }));
+        }
+
+        // Filtriraj termine po razpoložljivosti miz (če restavracija uporablja upravljanje miz)
+        if (user_has_feature($pdo, (int)$rest['owner_id'], 'table_management')
+            && restaurant_has_tables($pdo, (int)$rest['id'])
+        ) {
+            $guestCount = isset($_GET['guest_count']) ? max(1, (int)$_GET['guest_count']) : (int)$rest['booking_min_guests'];
+            $duration   = (int)$rest['reservation_duration'];
+            $restId     = (int)$rest['id'];
+            $slots = array_values(array_filter($slots, function(string $slot) use ($pdo, $restId, $date, $duration, $guestCount): bool {
+                $r = find_available_table($pdo, $restId, $date, $slot, $duration, $guestCount, null);
+                return $r !== false;
             }));
         }
 
@@ -233,6 +247,26 @@ if ($method === 'POST') {
     try {
         $gdprIp  = $_SERVER['REMOTE_ADDR'] ?? null;
         $gdprNow = $gdprConsent ? date('Y-m-d H:i:s') : null;
+        $durationMins = (int)$rest['reservation_duration'];
+        $useTableMgmt = user_has_feature($pdo, (int)$rest['owner_id'], 'table_management')
+                        && restaurant_has_tables($pdo, (int)$rest['id']);
+
+        $pdo->beginTransaction();
+
+        // Preveri razpoložljivost mize znotraj transakcije (prepreči race condition)
+        if ($useTableMgmt) {
+            $tableAssignment = find_available_table($pdo, (int)$rest['id'], $date, $time, $durationMins, $guestCount, null);
+            if ($tableAssignment === false) {
+                $pdo->rollBack();
+                // Ponudi čakalno listo, če je omogočena
+                $waitlistEnabled = user_has_feature($pdo, (int)$rest['owner_id'], 'waitlist')
+                                   && !empty($rest['waitlist_enabled']);
+                json_response(false, [
+                    'no_availability'  => true,
+                    'waitlist_enabled' => $waitlistEnabled,
+                ], 'Za ta termin ni prostih miz.', 409);
+            }
+        }
 
         $pdo->prepare("
             INSERT INTO reservations
@@ -246,7 +280,7 @@ if ($method === 'POST') {
             $rest['id'],
             $date,
             $time . ':00',
-            $rest['reservation_duration'],
+            $durationMins,
             $guestName,
             $guestCount,
             $email,
@@ -261,6 +295,13 @@ if ($method === 'POST') {
         ]);
 
         $newId = (int)$pdo->lastInsertId();
+
+        // Dodeli mizo (če je table management aktiven)
+        if ($useTableMgmt && isset($tableAssignment)) {
+            assign_tables_to_reservation($pdo, $newId, $tableAssignment, null);
+        }
+
+        $pdo->commit();
 
         // Posodobi bazo gostov (Advanced/Premium)
         upsert_guest($pdo, (int)$rest['id'], $email, [
@@ -316,6 +357,7 @@ if ($method === 'POST') {
         json_response(true, ['auto_confirm' => (bool)$rest['booking_auto_confirm']]);
 
     } catch (PDOException $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
         error_log('Booking POST error: ' . $e->getMessage());
         json_response(false, null, 'Napaka strežnika. Poskusite znova.', 500);
     }

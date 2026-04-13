@@ -24,7 +24,8 @@ const PLANS = [
         'features'        => ['reservations', 'restaurants', 'staff',
                               'guest_emails', 'guest_reminders',
                               'public_booking', 'booking_approval',
-                              'survey', 'guest_database', 'waitlist'],
+                              'survey', 'guest_database', 'waitlist',
+                              'table_management'],
     ],
     'premium' => [
         'name'            => 'Premium',
@@ -36,7 +37,8 @@ const PLANS = [
                               'embed_widget', 'branding',
                               'auto_confirm', 'sms_notifications',
                               'survey', 'survey_edit', 'survey_export',
-                              'guest_database', 'waitlist'],
+                              'guest_database', 'waitlist',
+                              'table_management'],
     ],
 ];
 
@@ -58,6 +60,7 @@ const FEATURE_LABELS = [
     'survey_export'   => 'CSV izvoz anket',
     'guest_database'  => 'Baza gostov z zgodovino',
     'waitlist'        => 'Čakalna lista',
+    'table_management'=> 'Upravljanje miz in zmogljivosti',
 ];
 
 // ─── Pridobi aktivno naročnino admina ─────────────────────────

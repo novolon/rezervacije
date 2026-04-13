@@ -378,6 +378,17 @@ const Schedule = (() => {
       }
 
       meta.appendChild(timeEl);
+
+      // Miza badge (samo če je table management aktiven in mize so dodeljene)
+      if (APP_STATE.hasTableMgmt && Array.isArray(reservation.table_assignments) && reservation.table_assignments.length) {
+        const tableNames = reservation.table_assignments.map(a => a.table_name).join('+');
+        const tableEl = document.createElement('span');
+        tableEl.className = 'card-time';
+        tableEl.style.cssText = 'background:rgba(124,58,237,.15);color:#5B21B6;border-radius:3px;padding:1px 4px;font-size:.65rem;font-weight:700';
+        tableEl.textContent = tableNames;
+        meta.appendChild(tableEl);
+      }
+
       card.appendChild(nameEl);
       card.appendChild(meta);
     } else {
