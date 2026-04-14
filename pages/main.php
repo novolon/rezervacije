@@ -298,6 +298,7 @@ if ($restaurants) {
 <!-- ── Toast kontejner ────────────────────────────────────── -->
 <div id="toast-container"></div>
 
+<!-- DEBUG: hasTableMgmt=<?= var_export($hasTableMgmt, true) ?> hasTablesMap=<?= json_encode($hasTablesMap) ?> role=<?= $_SESSION['role'] ?> userId=<?= $_SESSION['user_id'] ?> -->
 <!-- ── APP_STATE ──────────────────────────────────────────── -->
 <script>
 window.APP_STATE = <?= json_encode([
