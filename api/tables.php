@@ -25,9 +25,19 @@ $session = require_auth();
 $pdo     = getDB();
 $method  = $_SERVER['REQUEST_METHOD'];
 
-// Samo admin in superadmin imata dostop
+// user vloga: dovoljen samo bralni ?action=available za lastno restavracijo
+// admin in superadmin: poln dostop
 if ($session['role'] === 'user') {
-    json_response(false, null, 'Dostop zavrnjen.', 403);
+    $action = trim($_GET['action'] ?? '');
+    if ($method !== 'GET' || $action !== 'available') {
+        json_response(false, null, 'Dostop zavrnjen.', 403);
+    }
+    // Zakleni na lastno restavracijo
+    $allowedRestId = (int)$session['restaurant_id'];
+    $requestedRestId = isset($_GET['restaurant_id']) ? (int)$_GET['restaurant_id'] : 0;
+    if (!$requestedRestId || $requestedRestId !== $allowedRestId) {
+        json_response(false, null, 'Dostop zavrnjen.', 403);
+    }
 }
 
 function tables_can_access(PDO $pdo, array $session, int $restId): bool {
@@ -46,14 +56,27 @@ function tables_require_feature(PDO $pdo, array $session): void {
 if ($method === 'GET') {
     $restId = isset($_GET['restaurant_id']) ? (int)$_GET['restaurant_id'] : 0;
     if (!$restId) json_response(false, null, 'restaurant_id je obvezen.', 400);
-    if (!tables_can_access($pdo, $session, $restId)) {
-        json_response(false, null, 'Dostop zavrnjen.', 403);
+
+    // user vloga je že validirana zgoraj (samo action=available za lastno rest.)
+    if ($session['role'] !== 'user') {
+        if (!tables_can_access($pdo, $session, $restId)) {
+            json_response(false, null, 'Dostop zavrnjen.', 403);
+        }
+        tables_require_feature($pdo, $session);
+    } else {
+        // Za user: preverimo feature pri ownerju restavracije
+        require_once '../includes/table_helper.php';
+        $ownerQ = $pdo->prepare("SELECT owner_id FROM restaurants WHERE id = ? LIMIT 1");
+        $ownerQ->execute([$restId]);
+        $ownId = (int)$ownerQ->fetchColumn();
+        if (!$ownId || !user_has_feature($pdo, $ownId, 'table_management')) {
+            json_response(false, null, 'Upravljanje miz ni na voljo.', 403);
+        }
     }
-    tables_require_feature($pdo, $session);
 
     // ?action=available – vrne razpoložljive mize za dani termin
     if (isset($_GET['action']) && $_GET['action'] === 'available') {
-        require_once '../includes/table_helper.php';
+        if ($session['role'] !== 'user') require_once '../includes/table_helper.php';
         $date     = trim($_GET['date']     ?? '');
         $time     = trim($_GET['time']     ?? '');
         $guests   = max(1, (int)($_GET['guests']   ?? 1));

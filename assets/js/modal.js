@@ -3,9 +3,10 @@
  * Načini: 'create', 'view', 'edit'
  */
 const ReservationModal = (() => {
-    let currentMode = null;
-    let currentData = null;
-    let submitted   = false;
+    let currentMode    = null;
+    let currentData    = null;
+    let submitted      = false;
+    let _doTableFetch  = null; // referenca na fetchAvailableTables aktivnega modala
 
     // ── Cache za zaposlene in custom fields po restaurant_id ─────
     const _extrasCache = {};
@@ -69,6 +70,7 @@ const ReservationModal = (() => {
     function close() {
         const overlay = document.getElementById('modal-overlay');
         if (overlay) overlay.remove();
+        _doTableFetch = null;
     }
 
     // ── Zgradi modal ──────────────────────────────────────────────
@@ -586,7 +588,7 @@ const ReservationModal = (() => {
             let _tFetchTimer = null;
             function scheduleTableFetch() {
                 if (_tFetchTimer) clearTimeout(_tFetchTimer);
-                _tFetchTimer = setTimeout(fetchAvailableTables, 600);
+                _tFetchTimer = setTimeout(fetchAvailableTables, 200);
             }
 
             async function fetchAvailableTables() {
@@ -686,6 +688,9 @@ const ReservationModal = (() => {
                 }
             }
 
+            // Shrani referenco za validateForm
+            _doTableFetch = fetchAvailableTables;
+
             // Sproži fetch ob spremembi relevantnih polj + takoj ob odprtju
             setTimeout(() => {
                 const ov = document.getElementById('modal-overlay');
@@ -694,7 +699,6 @@ const ReservationModal = (() => {
                     ov.querySelector(`[name="${n}"]`)?.addEventListener('change', scheduleTableFetch);
                     ov.querySelector(`[name="${n}"]`)?.addEventListener('input',  scheduleTableFetch);
                 });
-                // Takoj preveri razpoložljivost (za pre-filled polja ob kliku na termin v razporedu)
                 fetchAvailableTables();
             }, 0);
         }
@@ -792,16 +796,54 @@ const ReservationModal = (() => {
             }
         }
 
-        // Blokira submit, če ni razpoložljivih miz za ta termin
+        // Blokira submit, če restavracija ima mize ampak nobena ni izbrana
         if (currentMode === 'create' && APP_STATE.hasTableMgmt) {
-            const saveBtn = document.getElementById('modal-save-btn');
-            if (saveBtn && saveBtn.dataset.tableBlocked) {
-                const errDiv = document.getElementById('table-no-availability');
-                if (errDiv) {
-                    errDiv.style.display = 'block';
-                    errDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            const rIdEl = overlay.querySelector('[name="restaurant_id"]');
+            const rId   = rIdEl ? parseInt(rIdEl.value) : (APP_STATE.restaurantId || 0);
+            const rest  = rId ? APP_STATE.restaurants.find(r => r.id === rId) : null;
+
+            if (rest && rest.has_tables) {
+                const saveBtn       = document.getElementById('modal-save-btn');
+                const tableErrDiv   = document.getElementById('table-no-availability');
+                const tableSection  = document.getElementById('table-selection-section');
+                const selTableId    = (overlay.querySelector('[name="selected_table_id"]')?.value  || '').trim();
+                const selMergeId    = (overlay.querySelector('[name="selected_merge_group_id"]')?.value || '').trim();
+
+                if (saveBtn && saveBtn.dataset.tableBlocked) {
+                    // Ni prostih miz
+                    if (tableErrDiv) {
+                        tableErrDiv.style.display = 'block';
+                        tableErrDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                    valid = false;
+                } else if (!selTableId && !selMergeId) {
+                    // Miza ni izbrana – pokliči fetch in blokiraj
+                    if (tableSection) {
+                        tableSection.style.display = '';
+                        const statusEl = document.getElementById('table-status');
+                        if (statusEl && !statusEl.textContent.includes('Napaka')) {
+                            statusEl.textContent = 'Nalagam mize…';
+                        }
+                    }
+                    if (_doTableFetch) _doTableFetch();
+                    // Prikaži napako pod table section
+                    if (tableSection) {
+                        let msgEl = document.getElementById('table-required-msg');
+                        if (!msgEl) {
+                            msgEl = document.createElement('div');
+                            msgEl.id = 'table-required-msg';
+                            msgEl.style.cssText = 'font-size:.8rem;color:#DC2626;margin-top:6px';
+                            tableSection.appendChild(msgEl);
+                        }
+                        msgEl.textContent = 'Izberite mizo za to rezervacijo.';
+                        tableSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                    valid = false;
+                } else {
+                    // Miza je izbrana – počisti morebitno napako
+                    const msgEl = document.getElementById('table-required-msg');
+                    if (msgEl) msgEl.textContent = '';
                 }
-                valid = false;
             }
         }
 
