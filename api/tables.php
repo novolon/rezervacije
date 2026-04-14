@@ -51,6 +51,23 @@ if ($method === 'GET') {
     }
     tables_require_feature($pdo, $session);
 
+    // ?action=available – vrne razpoložljive mize za dani termin
+    if (isset($_GET['action']) && $_GET['action'] === 'available') {
+        require_once '../includes/table_helper.php';
+        $date     = trim($_GET['date']     ?? '');
+        $time     = trim($_GET['time']     ?? '');
+        $guests   = max(1, (int)($_GET['guests']   ?? 1));
+        $duration = max(15, (int)($_GET['duration'] ?? 60));
+        $excludeId= isset($_GET['exclude_reservation_id']) ? (int)$_GET['exclude_reservation_id'] : null;
+
+        if (!$date || !$time) {
+            json_response(false, null, 'date in time sta obvezna.', 400);
+        }
+
+        $result = get_available_tables_for_slot($pdo, $restId, $date, substr($time, 0, 5), $duration, $guests, $excludeId);
+        json_response(true, $result);
+    }
+
     // Cone
     $stmtA = $pdo->prepare("
         SELECT id, name, sort_order, is_active

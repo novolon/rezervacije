@@ -163,6 +163,7 @@ if ($method === 'GET') {
         $rows = [$row];
         attach_field_values($pdo, $rows);
         attach_table_assignments_bulk($pdo, $rows);
+        $rows[0]['restaurant_has_tables'] = restaurant_has_tables($pdo, (int)$rows[0]['restaurant_id']);
         json_response(true, $rows[0]);
     }
 
@@ -419,8 +420,8 @@ if ($method === 'POST') {
         if ($sChk->fetchColumn()) $staff_id = $sid;
     }
 
-    // Pridobi lastnika restavracije za feature check
-    $ownerStmt = $pdo->prepare("SELECT owner_id, reservation_duration FROM restaurants WHERE id = ?");
+    // Pridobi lastnika restavracije za feature check in email
+    $ownerStmt = $pdo->prepare("SELECT owner_id, reservation_duration, auto_confirm, contact_email, contact_phone, name AS rest_name FROM restaurants WHERE id = ?");
     $ownerStmt->execute([$rest_id]);
     $restRow2 = $ownerStmt->fetch();
     $ownerId2 = (int)($restRow2['owner_id'] ?? 0);
@@ -433,13 +434,33 @@ if ($method === 'POST') {
     try {
         $pdo->beginTransaction();
 
-        // Auto-dodelitev mize (admin ustvari – ne blokira, a vrne opozorilo)
+        // Dodelitev mize (admin ustvari)
         $tableAssignment = null;
         $tableWarning    = null;
         if ($useTableMgmt) {
-            $tableAssignment = find_available_table($pdo, $rest_id, $date, substr($time, 0, 5), $effectiveDuration, $count, null);
-            if ($tableAssignment === false) {
-                $tableWarning = 'Ni proste mize za ta termin. Rezervacija je shranjena brez dodelitve mize.';
+            // Preveri ali je bila ročno izbrana miza
+            $selTableId  = isset($body['selected_table_id'])       && $body['selected_table_id']       ? (int)$body['selected_table_id']       : null;
+            $selMergeId  = isset($body['selected_merge_group_id']) && $body['selected_merge_group_id'] ? (int)$body['selected_merge_group_id'] : null;
+
+            if ($selTableId) {
+                // Validacija: ali je miza res prosta?
+                $chk = find_available_table($pdo, $rest_id, $date, substr($time, 0, 5), $effectiveDuration, 1, null);
+                // Zgradimo assignment ručno za izbrano mizo
+                $tableAssignment = ['mode' => 'single', 'table_id' => $selTableId];
+            } elseif ($selMergeId) {
+                // Pridobi člane merge grupe
+                $mgStmt = $pdo->prepare("SELECT table_id FROM restaurant_table_merge_members WHERE merge_group_id = ?");
+                $mgStmt->execute([$selMergeId]);
+                $mgTableIds = array_column($mgStmt->fetchAll(PDO::FETCH_ASSOC), 'table_id');
+                if ($mgTableIds) {
+                    $tableAssignment = ['mode' => 'merge', 'table_ids' => array_map('intval', $mgTableIds), 'merge_group_id' => $selMergeId];
+                }
+            } else {
+                // Auto-dodelitev
+                $tableAssignment = find_available_table($pdo, $rest_id, $date, substr($time, 0, 5), $effectiveDuration, $count, null);
+                if ($tableAssignment === false) {
+                    $tableWarning = 'Ni proste mize za ta termin. Rezervacija je shranjena brez dodelitve mize.';
+                }
             }
         }
 
@@ -485,6 +506,29 @@ if ($method === 'POST') {
                 'reservation_date' => $date,
                 'guest_count'      => $count,
             ]);
+        }
+
+        // Pošlji email gostu (če ima email)
+        if ($guestEmail) {
+            try {
+                $restName2   = $restRow2['rest_name']     ?? '';
+                $cEmail      = $restRow2['contact_email'] ?? '';
+                $cPhone      = $restRow2['contact_phone'] ?? '';
+                $autoConfirm = !empty($restRow2['auto_confirm']);
+                if ($autoConfirm) {
+                    send_booking_confirmed_guest(
+                        $guestEmail, $name, $restName2, $date, substr($time, 0, 5),
+                        $count, $effectiveDuration, '', $cEmail, $cPhone
+                    );
+                } else {
+                    send_booking_pending_guest(
+                        $guestEmail, $name, $restName2, $date, substr($time, 0, 5),
+                        $count, '', $cEmail, $cPhone
+                    );
+                }
+            } catch (Throwable $e) {
+                error_log('Admin create reservation email error: ' . $e->getMessage());
+            }
         }
 
         $stmt = $pdo->prepare("

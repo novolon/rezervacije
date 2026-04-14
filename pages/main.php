@@ -67,6 +67,7 @@ if ($isAdmin) {
 
 // Naloži day_schedules za vse restavracije
 $daySchedulesMap = [];
+$hasTablesMap    = [];
 if ($restaurants) {
     try {
         $restIds = array_column($restaurants, 'id');
@@ -75,6 +76,15 @@ if ($restaurants) {
         $dsStmt->execute($restIds);
         foreach ($dsStmt->fetchAll() as $ds) {
             $daySchedulesMap[$ds['restaurant_id']][] = $ds;
+        }
+    } catch (PDOException $e) { /* tabela še ne obstaja */ }
+    try {
+        $restIds = array_column($restaurants, 'id');
+        $placeholders = implode(',', array_fill(0, count($restIds), '?'));
+        $tStmt = $pdo->prepare("SELECT restaurant_id FROM restaurant_tables WHERE restaurant_id IN ($placeholders) AND is_active = 1 GROUP BY restaurant_id");
+        $tStmt->execute($restIds);
+        foreach ($tStmt->fetchAll(PDO::FETCH_COLUMN) as $rid) {
+            $hasTablesMap[(int)$rid] = true;
         }
     } catch (PDOException $e) { /* tabela še ne obstaja */ }
 }
@@ -289,6 +299,7 @@ window.APP_STATE = <?= json_encode([
             'color'                 => $r['color'],
             'booking_token'         => $r['booking_token'] ?? null,
             'booking_enabled'       => (bool)($r['booking_enabled'] ?? false),
+            'has_tables'            => isset($hasTablesMap[(int)$r['id']]),
             'day_schedules'         => array_map(function($ds) {
                 return [
                     'day_of_week' => (int)$ds['day_of_week'],

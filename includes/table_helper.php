@@ -226,6 +226,110 @@ function clear_table_assignments(PDO $pdo, int $reservationId): void {
 }
 
 /**
+ * Vrne vse razpoložljive možnosti miz za dani termin.
+ * Vrne: ['tables' => [...], 'merge_groups' => [...]]
+ * tables[] = ['id', 'name', 'capacity', 'area_name']
+ * merge_groups[] = ['id', 'name', 'table_ids', 'table_names', 'total_capacity']
+ */
+function get_available_tables_for_slot(
+    PDO    $pdo,
+    int    $restId,
+    string $date,
+    string $time,
+    int    $durationMins,
+    int    $guestCount,
+    ?int   $excludeResId
+): array {
+    // Vsi termini se izračunajo enako kot v find_available_table
+    $stmtT = $pdo->prepare("
+        SELECT rt.id, rt.name, rt.capacity, ra.name AS area_name
+        FROM restaurant_tables rt
+        LEFT JOIN restaurant_areas ra ON rt.area_id = ra.id
+        WHERE rt.restaurant_id = ? AND rt.is_active = 1
+        ORDER BY rt.capacity ASC, rt.sort_order ASC, rt.name ASC
+    ");
+    $stmtT->execute([$restId]);
+    $allTables = $stmtT->fetchAll(PDO::FETCH_ASSOC);
+
+    if (empty($allTables)) {
+        return ['tables' => [], 'merge_groups' => []];
+    }
+
+    [$h, $m] = explode(':', $time);
+    $newStart = (int)$h * 60 + (int)$m;
+    $newEnd   = $newStart + $durationMins;
+
+    $excludeSql = ($excludeResId !== null) ? 'AND r.id != :excludeId' : '';
+    $sql = "
+        SELECT DISTINCT rta.table_id
+        FROM reservation_table_assignments rta
+        JOIN reservations  r   ON rta.reservation_id = r.id
+        JOIN restaurants   res ON r.restaurant_id    = res.id
+        WHERE r.restaurant_id = :restId
+          AND r.reservation_date = :date
+          AND r.status IN ('confirmed', 'pending')
+          $excludeSql
+          AND (TIME_TO_SEC(r.reservation_time) / 60) < :newEnd
+          AND (TIME_TO_SEC(r.reservation_time) / 60
+               + COALESCE(r.duration, res.reservation_duration)) > :newStart
+    ";
+    $stmtO = $pdo->prepare($sql);
+    $params = [':restId' => $restId, ':date' => $date, ':newEnd' => $newEnd, ':newStart' => $newStart];
+    if ($excludeResId !== null) $params[':excludeId'] = $excludeResId;
+    $stmtO->execute($params);
+    $occupiedSet = array_flip(array_column($stmtO->fetchAll(PDO::FETCH_ASSOC), 'table_id'));
+
+    // Proste mize z zadostno kapaciteto
+    $freeTables = [];
+    $allFreeSet = [];
+    foreach ($allTables as $t) {
+        if (!isset($occupiedSet[$t['id']])) {
+            $allFreeSet[$t['id']] = true;
+            if ((int)$t['capacity'] >= $guestCount) {
+                $freeTables[] = $t;
+            }
+        }
+    }
+
+    // Proste merge grupe
+    $stmtMG = $pdo->prepare("
+        SELECT mg.id AS group_id, mg.name AS group_name,
+               GROUP_CONCAT(mm.table_id ORDER BY mm.table_id) AS table_ids,
+               GROUP_CONCAT(rt.name ORDER BY mm.table_id SEPARATOR ', ') AS table_names,
+               SUM(rt.capacity) AS total_capacity
+        FROM restaurant_table_merge_groups mg
+        JOIN restaurant_table_merge_members mm ON mg.id = mm.merge_group_id
+        JOIN restaurant_tables rt ON mm.table_id = rt.id
+        WHERE mg.restaurant_id = ? AND rt.is_active = 1
+        GROUP BY mg.id
+        ORDER BY total_capacity ASC
+    ");
+    $stmtMG->execute([$restId]);
+    $mergeGroups = $stmtMG->fetchAll(PDO::FETCH_ASSOC);
+
+    $freeMergeGroups = [];
+    foreach ($mergeGroups as $group) {
+        if ((int)$group['total_capacity'] < $guestCount) continue;
+        $memberIds = array_map('intval', explode(',', $group['table_ids']));
+        $allFree = true;
+        foreach ($memberIds as $mid) {
+            if (!isset($allFreeSet[$mid])) { $allFree = false; break; }
+        }
+        if ($allFree) {
+            $freeMergeGroups[] = [
+                'id'             => (int)$group['group_id'],
+                'name'           => $group['group_name'] ?: implode(' + ', explode(',', $group['table_names'])),
+                'table_ids'      => $memberIds,
+                'table_names'    => $group['table_names'],
+                'total_capacity' => (int)$group['total_capacity'],
+            ];
+        }
+    }
+
+    return ['tables' => $freeTables, 'merge_groups' => $freeMergeGroups];
+}
+
+/**
  * Vrne kratko ime za prikaz dodeljenih miz (npr. "Miza 3" ali "Miza 3 + Miza 4").
  */
 function format_table_assignment_label(array $assignments): string {

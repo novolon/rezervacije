@@ -137,6 +137,9 @@ input,textarea{font-family:inherit}
 .slot:hover{border-color:var(--f)}
 .slot.sel{background:var(--f);color:#fff;border-color:var(--f)}
 .slot:disabled{opacity:.35;cursor:not-allowed}
+.slot.wl{border-color:#F59E0B;color:#92400E;background:#FFFBEB}
+.slot.wl:hover{background:#FEF3C7;border-color:#D97706}
+.slot.wl.sel{background:#F59E0B;color:#fff;border-color:#F59E0B}
 .empty{text-align:center;padding:28px 0;color:var(--f2);font-size:13px}
 .empty .ico{font-size:30px;margin-bottom:8px}
 
@@ -591,9 +594,13 @@ input,textarea{font-family:inherit}
             }
 
             const grid = $('wsslots');
-            slots.forEach(time => {
+            slots.forEach(slotObj => {
+                const time   = typeof slotObj === 'string' ? slotObj : slotObj.time;
+                const status = typeof slotObj === 'string' ? 'available' : (slotObj.status || 'available');
+                if (status === 'full') return; // preskoči popolnoma zasedene termine
                 const b = document.createElement('button');
-                b.className = 'slot';
+                b.className = 'slot' + (status === 'waitlist' ? ' wl' : '');
+                b.title = status === 'waitlist' ? 'Zasedeno – vpis na čakalno listo' : '';
                 b.textContent = time;
                 b.addEventListener('click', () => selectSlot(time, b));
                 grid.appendChild(b);

@@ -157,8 +157,8 @@ const ReservationModal = (() => {
             footer.appendChild(closeFooter);
 
             if (!isPast) {
-                // Gumb "Prestavi mizo" (samo če je table management aktiven)
-                if (APP_STATE.hasTableMgmt && data.id) {
+                // Gumb "Prestavi mizo" (samo če je table management aktiven IN restavracija ima mize)
+                if (APP_STATE.hasTableMgmt && data.id && data.restaurant_has_tables) {
                     const moveBtn = document.createElement('button');
                     moveBtn.className = 'btn btn-ghost';
                     moveBtn.style.cssText = 'color:#7C3AED;border-color:#C4B5FD';
@@ -544,6 +544,158 @@ const ReservationModal = (() => {
             wrap.appendChild(fieldEl);
         });
 
+        // ── Izbira mize (samo create + hasTableMgmt + restavracija ima mize) ──
+        if (currentMode === 'create' && APP_STATE.hasTableMgmt) {
+            const tableSection = document.createElement('div');
+            tableSection.id = 'table-selection-section';
+            tableSection.style.cssText = 'display:none;margin-top:4px';
+
+            const tableHdr = document.createElement('label');
+            tableHdr.textContent = 'Miza';
+            tableHdr.style.cssText = 'display:block;font-size:.8125rem;font-weight:600;color:#374151;margin-bottom:6px';
+            tableSection.appendChild(tableHdr);
+
+            const tableStatus = document.createElement('div');
+            tableStatus.id = 'table-status';
+            tableStatus.style.cssText = 'font-size:.8rem;color:#6B7280;min-height:20px';
+            tableStatus.textContent = 'Izpolnite datum, čas in število gostov za prikaz miz.';
+            tableSection.appendChild(tableStatus);
+
+            const tableRadios = document.createElement('div');
+            tableRadios.id = 'table-radios';
+            tableRadios.style.cssText = 'display:none;flex-direction:column;gap:6px;margin-top:8px';
+            tableSection.appendChild(tableRadios);
+
+            const tableError = document.createElement('div');
+            tableError.id = 'table-no-availability';
+            tableError.style.cssText = 'display:none;font-size:.8rem;color:#DC2626;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:8px 12px;margin-top:6px';
+            tableError.textContent = 'Ni razpoložljivih miz za ta termin. Spremenite čas ali zmanjšajte število gostov.';
+            tableSection.appendChild(tableError);
+
+            // hidden input za prenos izbrane mize
+            const hiddenTableId    = document.createElement('input');
+            hiddenTableId.type = 'hidden'; hiddenTableId.name = 'selected_table_id'; hiddenTableId.id = 'selected_table_id';
+            const hiddenMergeId    = document.createElement('input');
+            hiddenMergeId.type = 'hidden'; hiddenMergeId.name = 'selected_merge_group_id'; hiddenMergeId.id = 'selected_merge_group_id';
+            tableSection.appendChild(hiddenTableId);
+            tableSection.appendChild(hiddenMergeId);
+
+            wrap.appendChild(tableSection);
+
+            // Debounced fetch ko se spremenijo polja
+            let _tFetchTimer = null;
+            function scheduleTableFetch() {
+                if (_tFetchTimer) clearTimeout(_tFetchTimer);
+                _tFetchTimer = setTimeout(fetchAvailableTables, 600);
+            }
+
+            async function fetchAvailableTables() {
+                const ov = document.getElementById('modal-overlay');
+                if (!ov) return;
+                const restIdEl   = ov.querySelector('[name="restaurant_id"]');
+                const dateEl     = ov.querySelector('[name="reservation_date"]');
+                const timeEl     = ov.querySelector('[name="reservation_time"]');
+                const guestEl    = ov.querySelector('[name="guest_count"]');
+                const durationEl = ov.querySelector('[name="duration"]');
+
+                const rId  = restIdEl  ? parseInt(restIdEl.value)  : (APP_STATE.restaurantId || 0);
+                const date = dateEl    ? dateEl.value               : '';
+                const time = timeEl    ? timeEl.value               : '';
+                const g    = guestEl   ? parseInt(guestEl.value)    : 0;
+                const dur  = durationEl? parseInt(durationEl.value) : 60;
+
+                if (!rId || !date || !time || !g) {
+                    tableSection.style.display = 'none';
+                    return;
+                }
+
+                // Preveri ali ima restavracija mize
+                const rest = APP_STATE.restaurants.find(r => r.id === rId);
+                if (!rest || !rest.has_tables) {
+                    tableSection.style.display = 'none';
+                    return;
+                }
+
+                tableSection.style.display = '';
+                tableStatus.textContent = 'Nalagam mize...';
+                tableRadios.style.display = 'none';
+                tableError.style.display = 'none';
+                hiddenTableId.value = '';
+                hiddenMergeId.value = '';
+
+                try {
+                    const params = new URLSearchParams({ restaurant_id: rId, action: 'available', date, time, guests: g, duration: dur });
+                    const data = await API.get(`/api/tables.php?${params}`);
+                    const tables      = data.tables      || [];
+                    const mergeGroups = data.merge_groups || [];
+
+                    if (!tables.length && !mergeGroups.length) {
+                        tableStatus.textContent = '';
+                        tableError.style.display = '';
+                        // Onemogoči submit
+                        const saveBtn = document.getElementById('modal-save-btn');
+                        if (saveBtn) saveBtn.dataset.tableBlocked = '1';
+                        return;
+                    }
+
+                    // Omogoči submit
+                    const saveBtn = document.getElementById('modal-save-btn');
+                    if (saveBtn) delete saveBtn.dataset.tableBlocked;
+                    tableError.style.display = 'none';
+                    tableStatus.textContent = '';
+                    tableRadios.innerHTML = '';
+                    tableRadios.style.display = 'flex';
+
+                    function addRadio(value, type, label, capacity) {
+                        const lbl = document.createElement('label');
+                        lbl.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;border:1.5px solid #E5E7EB;border-radius:8px;cursor:pointer;font-size:.875rem;transition:border-color .15s';
+                        const rb = document.createElement('input');
+                        rb.type = 'radio'; rb.name = '_table_radio'; rb.value = value;
+                        rb.style.accentColor = '#1B4332';
+                        rb.addEventListener('change', () => {
+                            tableRadios.querySelectorAll('label').forEach(l => l.style.borderColor = '#E5E7EB');
+                            lbl.style.borderColor = '#1B4332';
+                            if (type === 'table') {
+                                hiddenTableId.value = value;
+                                hiddenMergeId.value = '';
+                            } else {
+                                hiddenMergeId.value = value;
+                                hiddenTableId.value = '';
+                            }
+                        });
+                        const txt = document.createElement('span');
+                        txt.innerHTML = `<strong>${label}</strong><span style="color:#9CA3AF;font-size:.75rem;margin-left:6px">${capacity} os.</span>`;
+                        lbl.appendChild(rb);
+                        lbl.appendChild(txt);
+                        tableRadios.appendChild(lbl);
+                    }
+
+                    tables.forEach(t => addRadio(t.id, 'table', (t.area_name ? t.area_name + ' – ' : '') + t.name, t.capacity));
+                    mergeGroups.forEach(mg => addRadio(mg.id, 'merge', mg.name, mg.total_capacity));
+
+                    // Samodejno izberi prvo
+                    const firstRb = tableRadios.querySelector('input[type="radio"]');
+                    if (firstRb) {
+                        firstRb.checked = true;
+                        firstRb.dispatchEvent(new Event('change'));
+                        firstRb.closest('label').style.borderColor = '#1B4332';
+                    }
+                } catch (e) {
+                    tableStatus.textContent = 'Napaka pri nalaganju miz.';
+                }
+            }
+
+            // Sproži fetch ob spremembi relevantnih polj (s setTimeout za zagotovitev da je wrap dodan v DOM)
+            setTimeout(() => {
+                const ov = document.getElementById('modal-overlay');
+                if (!ov) return;
+                ['reservation_date','reservation_time','guest_count','duration','restaurant_id'].forEach(n => {
+                    ov.querySelector(`[name="${n}"]`)?.addEventListener('change', scheduleTableFetch);
+                    ov.querySelector(`[name="${n}"]`)?.addEventListener('input',  scheduleTableFetch);
+                });
+            }, 0);
+        }
+
         return wrap;
     }
 
@@ -634,6 +786,16 @@ const ReservationModal = (() => {
                     timeEl.closest('.field').classList.add('invalid');
                     valid = false;
                 }
+            }
+        }
+
+        // Blokira submit, če ni razpoložljivih miz za ta termin
+        if (mode === 'create' && APP_STATE.hasTableMgmt) {
+            const saveBtn = document.getElementById('modal-save-btn');
+            if (saveBtn && saveBtn.dataset.tableBlocked) {
+                const errDiv = document.getElementById('table-no-availability');
+                if (errDiv) errDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                valid = false;
             }
         }
 
