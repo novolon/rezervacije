@@ -686,7 +686,7 @@ const ReservationModal = (() => {
                 }
             }
 
-            // Sproži fetch ob spremembi relevantnih polj (s setTimeout za zagotovitev da je wrap dodan v DOM)
+            // Sproži fetch ob spremembi relevantnih polj + takoj ob odprtju
             setTimeout(() => {
                 const ov = document.getElementById('modal-overlay');
                 if (!ov) return;
@@ -694,6 +694,8 @@ const ReservationModal = (() => {
                     ov.querySelector(`[name="${n}"]`)?.addEventListener('change', scheduleTableFetch);
                     ov.querySelector(`[name="${n}"]`)?.addEventListener('input',  scheduleTableFetch);
                 });
+                // Takoj preveri razpoložljivost (za pre-filled polja ob kliku na termin v razporedu)
+                fetchAvailableTables();
             }, 0);
         }
 

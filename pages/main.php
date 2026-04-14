@@ -49,6 +49,21 @@ $today    = date('Y-m-d');
 $fullName = $_SESSION['full_name'];
 $restId   = $_SESSION['restaurant_id'];
 
+// Za hasTableMgmt: admin preverimo po user_id, user vloga po owner_id restavracije
+$hasTableMgmt = false;
+if ($_SESSION['role'] === 'superadmin') {
+    $hasTableMgmt = true;
+} elseif ($isAdmin) {
+    $hasTableMgmt = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_management');
+} elseif ($_SESSION['role'] === 'user' && $restId) {
+    try {
+        $owQ = $pdo->prepare("SELECT owner_id FROM restaurants WHERE id = ? LIMIT 1");
+        $owQ->execute([$restId]);
+        $owId = (int)$owQ->fetchColumn();
+        if ($owId) $hasTableMgmt = user_has_feature($pdo, $owId, 'table_management');
+    } catch (PDOException $e) { /* tiho */ }
+}
+
 // Pending count (admin in user)
 $pendingCount = 0;
 if ($isAdmin) {
@@ -315,7 +330,7 @@ window.APP_STATE = <?= json_encode([
     'base'         => BASE_PATH,
     'hasSurvey'       => $isAdmin ? user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey') : false,
     'hasGuestDatabase'=> $isAdmin ? user_has_feature($pdo, (int)$_SESSION['user_id'], 'guest_database') : false,
-    'hasTableMgmt'    => $isAdmin ? user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_management') : false,
+    'hasTableMgmt'    => $hasTableMgmt,
 ], JSON_UNESCAPED_UNICODE) ?>;
 </script>
 
@@ -323,7 +338,7 @@ window.APP_STATE = <?= json_encode([
 <script src="<?= BASE_PATH ?>/assets/js/api.js?v=3"></script>
 <script src="<?= BASE_PATH ?>/assets/js/calendar.js?v=2"></script>
 <script src="<?= BASE_PATH ?>/assets/js/schedule.js?v=3"></script>
-<script src="<?= BASE_PATH ?>/assets/js/modal.js?v=7"></script>
+<script src="<?= BASE_PATH ?>/assets/js/modal.js?v=8"></script>
 <script src="<?= BASE_PATH ?>/assets/js/app.js?v=4"></script>
 
 </body>
