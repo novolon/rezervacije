@@ -600,7 +600,9 @@ const ReservationModal = (() => {
                 const guestEl    = ov.querySelector('[name="guest_count"]');
                 const durationEl = ov.querySelector('[name="duration"]');
 
-                const rId  = restIdEl  ? parseInt(restIdEl.value)  : (APP_STATE.restaurantId || 0);
+                const rId  = restIdEl && restIdEl.value
+                    ? parseInt(restIdEl.value)
+                    : (parseInt(currentData?.restaurantId || currentData?.restaurant_id) || APP_STATE.restaurantId || 0);
                 const date = dateEl    ? dateEl.value               : '';
                 const time = timeEl    ? timeEl.value               : '';
                 const g    = guestEl   ? parseInt(guestEl.value)    : 0;
@@ -799,7 +801,9 @@ const ReservationModal = (() => {
         // Blokira submit, če restavracija ima mize ampak nobena ni izbrana
         if (currentMode === 'create' && APP_STATE.hasTableMgmt) {
             const rIdEl = overlay.querySelector('[name="restaurant_id"]');
-            const rId   = rIdEl ? parseInt(rIdEl.value) : (APP_STATE.restaurantId || 0);
+            const rId   = (rIdEl && rIdEl.value)
+                ? parseInt(rIdEl.value)
+                : (parseInt(currentData?.restaurantId || currentData?.restaurant_id) || APP_STATE.restaurantId || 0);
             const rest  = rId ? APP_STATE.restaurants.find(r => r.id === rId) : null;
 
             if (rest && rest.has_tables) {

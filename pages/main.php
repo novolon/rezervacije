@@ -298,7 +298,6 @@ if ($restaurants) {
 <!-- ── Toast kontejner ────────────────────────────────────── -->
 <div id="toast-container"></div>
 
-<!-- DEBUG: hasTableMgmt=<?= var_export($hasTableMgmt, true) ?> hasTablesMap=<?= json_encode($hasTablesMap) ?> role=<?= $_SESSION['role'] ?> userId=<?= $_SESSION['user_id'] ?> -->
 <!-- ── APP_STATE ──────────────────────────────────────────── -->
 <script>
 window.APP_STATE = <?= json_encode([
@@ -341,7 +340,7 @@ window.APP_STATE = <?= json_encode([
 <script src="<?= BASE_PATH ?>/assets/js/api.js?v=3"></script>
 <script src="<?= BASE_PATH ?>/assets/js/calendar.js?v=2"></script>
 <script src="<?= BASE_PATH ?>/assets/js/schedule.js?v=3"></script>
-<script src="<?= BASE_PATH ?>/assets/js/modal.js?v=11"></script>
+<script src="<?= BASE_PATH ?>/assets/js/modal.js?v=12"></script>
 <script src="<?= BASE_PATH ?>/assets/js/app.js?v=4"></script>
 
 </body>
