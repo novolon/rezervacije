@@ -93,15 +93,17 @@ if ($restaurants) {
             $daySchedulesMap[$ds['restaurant_id']][] = $ds;
         }
     } catch (PDOException $e) { /* tabela še ne obstaja */ }
-    try {
-        $restIds = array_column($restaurants, 'id');
-        $placeholders = implode(',', array_fill(0, count($restIds), '?'));
-        $tStmt = $pdo->prepare("SELECT restaurant_id FROM restaurant_tables WHERE restaurant_id IN ($placeholders) AND is_active = 1 GROUP BY restaurant_id");
-        $tStmt->execute($restIds);
-        foreach ($tStmt->fetchAll(PDO::FETCH_COLUMN) as $rid) {
-            $hasTablesMap[(int)$rid] = true;
-        }
-    } catch (PDOException $e) { /* tabela še ne obstaja */ }
+
+    // has_tables: uporabimo COUNT(*) direktno – zanesljivo na vseh MySQL verzijah
+    foreach ($restaurants as $r) {
+        try {
+            $chk = $pdo->prepare("SELECT COUNT(*) FROM restaurant_tables WHERE restaurant_id = ? AND is_active = 1");
+            $chk->execute([(int)$r['id']]);
+            if ((int)$chk->fetchColumn() > 0) {
+                $hasTablesMap[(int)$r['id']] = true;
+            }
+        } catch (PDOException $e) { /* tabela še ne obstaja */ }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -338,7 +340,7 @@ window.APP_STATE = <?= json_encode([
 <script src="<?= BASE_PATH ?>/assets/js/api.js?v=3"></script>
 <script src="<?= BASE_PATH ?>/assets/js/calendar.js?v=2"></script>
 <script src="<?= BASE_PATH ?>/assets/js/schedule.js?v=3"></script>
-<script src="<?= BASE_PATH ?>/assets/js/modal.js?v=10"></script>
+<script src="<?= BASE_PATH ?>/assets/js/modal.js?v=11"></script>
 <script src="<?= BASE_PATH ?>/assets/js/app.js?v=4"></script>
 
 </body>
