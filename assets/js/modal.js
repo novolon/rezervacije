@@ -631,7 +631,8 @@ const ReservationModal = (() => {
 
                     if (!tables.length && !mergeGroups.length) {
                         tableStatus.textContent = '';
-                        tableError.style.display = '';
+                        tableError.style.display = 'block';
+                        tableRadios.style.display = 'none';
                         // Onemogoči submit
                         const saveBtn = document.getElementById('modal-save-btn');
                         if (saveBtn) saveBtn.dataset.tableBlocked = '1';
@@ -790,11 +791,14 @@ const ReservationModal = (() => {
         }
 
         // Blokira submit, če ni razpoložljivih miz za ta termin
-        if (mode === 'create' && APP_STATE.hasTableMgmt) {
+        if (currentMode === 'create' && APP_STATE.hasTableMgmt) {
             const saveBtn = document.getElementById('modal-save-btn');
             if (saveBtn && saveBtn.dataset.tableBlocked) {
                 const errDiv = document.getElementById('table-no-availability');
-                if (errDiv) errDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                if (errDiv) {
+                    errDiv.style.display = 'block';
+                    errDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                }
                 valid = false;
             }
         }

@@ -38,7 +38,7 @@ $apiBase = BASE_PATH . '/api/book.php';
         .slot-btn.waitlist { border-color: #F59E0B; color: #92400E; background: #FFFBEB; }
         .slot-btn.waitlist:hover { background: #FEF3C7; border-color: #D97706; }
         .slot-btn.waitlist.selected { background: #F59E0B; color: #fff; border-color: #F59E0B; }
-        .slot-btn.full { opacity: .4; cursor: not-allowed; text-decoration: line-through; }
+        .slot-btn.full { opacity: .4; cursor: not-allowed; }
         .cal-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center;
                    border-radius: 9999px; font-size: .875rem; font-weight: 500; cursor: pointer;
                    transition: all .15s; }
@@ -679,6 +679,7 @@ async function loadSlots(date) {
 
             if (status === 'full') {
                 btn.className = 'slot-btn full border-2 border-sage-light rounded-xl py-3 text-forest font-semibold text-sm';
+                btn.textContent = time;
                 btn.disabled = true;
                 btn.title = 'Termin je popolnoma zaseden';
             } else if (status === 'waitlist') {
