@@ -606,6 +606,8 @@ const ReservationModal = (() => {
                 const g    = guestEl   ? parseInt(guestEl.value)    : 0;
                 const dur  = durationEl? parseInt(durationEl.value) : 60;
 
+                console.log('[Tables] fetch:', { rId, date, time, g, dur, hasTableMgmt: APP_STATE.hasTableMgmt, restaurants: APP_STATE.restaurants.map(r=>({id:r.id,has_tables:r.has_tables})) });
+
                 if (!rId || !date || !time || !g) {
                     tableSection.style.display = 'none';
                     return;
@@ -613,6 +615,7 @@ const ReservationModal = (() => {
 
                 // Preveri ali ima restavracija mize
                 const rest = APP_STATE.restaurants.find(r => r.id === rId);
+                console.log('[Tables] rest found:', rest ? { id: rest.id, has_tables: rest.has_tables } : 'NOT FOUND');
                 if (!rest || !rest.has_tables) {
                     tableSection.style.display = 'none';
                     return;
