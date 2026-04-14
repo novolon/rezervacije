@@ -421,7 +421,7 @@ if ($method === 'POST') {
     }
 
     // Pridobi lastnika restavracije za feature check in email
-    $ownerStmt = $pdo->prepare("SELECT owner_id, reservation_duration, auto_confirm, contact_email, contact_phone, name AS rest_name FROM restaurants WHERE id = ?");
+    $ownerStmt = $pdo->prepare("SELECT owner_id, reservation_duration, booking_auto_confirm AS auto_confirm, contact_email, contact_phone, name AS rest_name FROM restaurants WHERE id = ?");
     $ownerStmt->execute([$rest_id]);
     $restRow2 = $ownerStmt->fetch();
     $ownerId2 = (int)($restRow2['owner_id'] ?? 0);
@@ -550,10 +550,10 @@ if ($method === 'POST') {
         if ($tableWarning) $responseData['table_warning'] = $tableWarning;
         json_response(true, $responseData, '', 201);
 
-    } catch (PDOException $e) {
+    } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         error_log('Reservation create error: ' . $e->getMessage());
-        json_response(false, null, 'Napaka pri shranjevanju.', 500);
+        json_response(false, null, 'Napaka pri shranjevanju: ' . $e->getMessage(), 500);
     }
 }
 
