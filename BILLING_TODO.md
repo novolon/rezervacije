@@ -151,7 +151,7 @@
 - [x] Korak 3: podatki gosta
 - [x] Email potrditvi (gostu + restavraciji)
 - [x] Admin odobri/zavrne rezervacijo
-- [ ] Opomnik 24h pred rezervacijo (cron job)
+- [x] Opomnik 24h pred rezervacijo (cron job)
 
 ---
 
@@ -204,5 +204,5 @@
 - [ ] Faza 2.8 – Preklop na live Stripe (po testiranju)
 - [x] Faza 3 – Predračun (letno plačilo po predračunu)
 - [x] Faza 4 – Popusti (superadmin)
-- [ ] Faza 5 – Self-booking (Advanced paket)
+- [x] Faza 5 – Self-booking (Advanced paket)
 - [x] Faza 6 – Embed widget (Premium paket)
