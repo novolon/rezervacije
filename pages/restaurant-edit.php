@@ -96,12 +96,18 @@ $hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_manag
         .re-note-blue { background:#EFF6FF; border-color:#BFDBFE; color:#1D4ED8; }
 
         /* Day schedule */
-        .day-row { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--color-border); }
+        .day-row { display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid var(--color-border); }
         .day-row:last-child { border-bottom:none; }
-        .day-label-wrap { display:flex; align-items:center; gap:8px; width:140px; flex-shrink:0; cursor:pointer; }
+        .day-label-wrap { display:flex; align-items:center; gap:8px; width:140px; flex-shrink:0; cursor:pointer; margin-top:6px; }
+        .day-periods-wrap { display:flex; flex-direction:column; gap:6px; flex:1; }
+        .day-period-row { display:flex; align-items:center; gap:6px; }
         .day-times { display:flex; align-items:center; gap:6px; }
         .day-time-input { border:1.5px solid var(--color-border); border-radius:8px; padding:7px 10px; font-size:.85rem; font-family:var(--font); color:var(--color-text); outline:none; width:90px; }
         .day-time-input:focus { border-color:var(--color-accent); }
+        .btn-period-add { background:none; border:1.5px dashed var(--color-border); border-radius:8px; padding:5px 12px; font-size:.8rem; color:var(--color-muted); cursor:pointer; font-family:var(--font); transition:border-color .15s,color .15s; }
+        .btn-period-add:hover { border-color:var(--color-accent); color:var(--color-accent); }
+        .btn-period-del { background:none; border:none; color:var(--color-muted); cursor:pointer; font-size:1.1rem; line-height:1; padding:4px; border-radius:6px; transition:color .15s; }
+        .btn-period-del:hover { color:#DC2626; }
 
         /* CF type/applies badges */
         .cf-badge { font-size:.7rem; padding:2px 7px; border-radius:4px; font-weight:600; }
@@ -248,18 +254,52 @@ $hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_manag
     <div id="panel-urnik" class="re-panel">
         <div class="re-section">
             <div class="re-section-title">Urnik po dnevih</div>
+            <p style="font-size:.825rem;color:var(--color-muted);margin:0 0 12px">Za vsak dan lahko dodate več terminov (npr. dopoldan in popoldan).</p>
             <div id="day-schedule-wrap">Nalagam...</div>
         </div>
         <div class="re-section">
             <div class="re-section-title">Blokirani datumi (izjeme)</div>
-            <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
-                <input type="date" id="blackout-date" min="<?= date('Y-m-d') ?>"
-                    style="border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none">
-                <input type="text" id="blackout-reason" placeholder="Razlog (neobvezno)"
-                    style="flex:1;min-width:160px;border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none">
-                <button class="btn btn-primary btn-sm" id="btn-add-blackout">+ Dodaj</button>
+            <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:flex-end">
+                <div>
+                    <label style="display:block;font-size:.775rem;font-weight:600;color:var(--color-muted);margin-bottom:4px">Datum</label>
+                    <input type="date" id="blackout-date" min="<?= date('Y-m-d') ?>"
+                        style="border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none">
+                </div>
+                <div style="flex:1;min-width:150px">
+                    <label style="display:block;font-size:.775rem;font-weight:600;color:var(--color-muted);margin-bottom:4px">Razlog (neobvezno)</label>
+                    <input type="text" id="blackout-reason" placeholder="npr. Zaprt za praznike"
+                        style="width:100%;box-sizing:border-box;border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none">
+                </div>
             </div>
+            <div style="margin-bottom:12px">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.825rem;color:var(--color-text);margin-bottom:8px">
+                    <input type="checkbox" id="blackout-partial" style="width:15px;height:15px;accent-color:var(--color-accent)">
+                    Samo del dneva
+                </label>
+                <div id="blackout-time-wrap" style="display:none;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <div style="display:none" id="blackout-time-inner">
+                        <label style="display:block;font-size:.775rem;font-weight:600;color:var(--color-muted);margin-bottom:4px">Od</label>
+                        <input type="time" id="blackout-start"
+                            style="border:1.5px solid var(--color-border);border-radius:8px;padding:7px 10px;font-size:.85rem;font-family:var(--font);outline:none;width:110px">
+                    </div>
+                    <div style="display:none" id="blackout-time-inner2">
+                        <label style="display:block;font-size:.775rem;font-weight:600;color:var(--color-muted);margin-bottom:4px">Do</label>
+                        <input type="time" id="blackout-end"
+                            style="border:1.5px solid var(--color-border);border-radius:8px;padding:7px 10px;font-size:.85rem;font-family:var(--font);outline:none;width:110px">
+                    </div>
+                </div>
+            </div>
+            <button class="btn btn-primary btn-sm" id="btn-add-blackout" style="margin-bottom:16px">+ Dodaj</button>
             <div id="blackout-list">Nalagam...</div>
+        </div>
+        <div class="re-section">
+            <div class="re-section-title">Nastavitve za zaposlene</div>
+            <label class="toggle" style="margin-bottom:4px">
+                <input type="checkbox" id="r-employees-override">
+                <div class="toggle-track"><div class="toggle-thumb"></div></div>
+                <span class="toggle-label">Zaposleni lahko dodajajo rezervacije na zaprte/blokirane dni</span>
+            </label>
+            <p style="font-size:.8rem;color:var(--color-muted);margin:4px 0 0">Ko je izklopljeno, zaposleni prejmejo sporočilo, da kontaktirajo admina.</p>
         </div>
         <div class="re-save-bar">
             <button class="btn btn-primary" id="btn-save-urnik">Shrani urnik</button>
@@ -390,6 +430,22 @@ $hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_manag
             </div>
             <?php endif; ?>
         </div>
+
+        <?php if ($hasTableMgmt): ?>
+        <div class="re-section">
+            <div class="re-section-title">Izbira prostora pri rezervaciji
+                <span style="background:#D1FAE5;color:#065F46;font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:6px">Advanced/Premium</span>
+            </div>
+            <label class="toggle-wrap" style="cursor:pointer">
+                <span class="toggle">
+                    <input type="checkbox" id="r-allow-area-choice" <?= !empty($rest['allow_area_choice']) ? 'checked' : '' ?>>
+                    <span class="toggle-track"></span>
+                </span>
+                <span class="toggle-label">Gostje lahko izberejo prostor/cono med rezervacijo</span>
+            </label>
+            <p style="font-size:.775rem;color:var(--color-muted);margin:8px 0 0">Ko je vklopljeno, se po izbiri termina prikaže dodaten korak z razpoložljivimi conami. Cone brez prostih miz so onemogočene.</p>
+        </div>
+        <?php endif; ?>
 
         <?php if ($rest['booking_token']): ?>
         <div class="re-section">
@@ -635,14 +691,18 @@ $hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_manag
         </div>
     <?php else: ?>
 
-        <!-- Cone -->
+        <!-- Cone in mize (cone-first prikaz) -->
         <div class="re-section">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-                <div class="re-section-title" style="margin:0">Cone</div>
+                <div class="re-section-title" style="margin:0">Cone in mize</div>
                 <button onclick="showAreaForm()" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">+ Cona</button>
             </div>
-            <div id="areas-list"></div>
-            <div id="area-form" style="display:none;margin-top:12px;display:none">
+            <div style="font-size:.8rem;color:var(--color-muted);margin-bottom:12px">
+                Najprej ustvarite cone (npr. Terasa, Notranjost), nato dodajte mize znotraj vsake cone.
+            </div>
+            <!-- Forma za cono -->
+            <div id="area-form" style="display:none;margin-bottom:14px;background:var(--color-bg);border-radius:8px;padding:12px;border:1px solid var(--color-border)">
+                <div style="font-size:.78rem;font-weight:600;color:var(--color-muted);margin-bottom:6px" id="area-form-title">Nova cona</div>
                 <div style="display:flex;gap:8px;align-items:center">
                     <input type="text" id="area-name-input" placeholder="Ime cone (npr. Zunaj, 1. nadstropje)" style="flex:1;border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none">
                     <button onclick="saveArea()" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">Shrani</button>
@@ -650,16 +710,11 @@ $hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_manag
                 </div>
                 <input type="hidden" id="area-edit-id" value="">
             </div>
-        </div>
-
-        <!-- Mize -->
-        <div class="re-section">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-                <div class="re-section-title" style="margin:0">Mize</div>
-                <button onclick="showTableForm()" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">+ Miza</button>
-            </div>
-            <div id="tables-list"></div>
-            <div id="table-form" style="display:none;margin-top:12px;background:var(--color-bg);border-radius:8px;padding:14px;border:1px solid var(--color-border)">
+            <!-- Cone z mizami (dinamično) -->
+            <div id="areas-list"></div>
+            <!-- Forma za mizo (deljeno, skrita) -->
+            <div id="table-form" style="display:none;margin-top:10px;background:var(--color-bg);border-radius:8px;padding:14px;border:1px solid var(--color-border)">
+                <div style="font-size:.78rem;font-weight:600;color:var(--color-muted);margin-bottom:8px" id="table-form-title">Nova miza</div>
                 <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end">
                     <div>
                         <label style="font-size:.78rem;font-weight:600;color:var(--color-muted);display:block;margin-bottom:4px">Ime mize *</label>
@@ -684,11 +739,28 @@ $hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_manag
                     <button onclick="cancelTableForm()" style="font-size:.8rem;padding:.4rem .9rem;background:transparent;border:1.5px solid var(--color-border);border-radius:8px;cursor:pointer;font-family:var(--font)">Prekliči</button>
                 </div>
                 <input type="hidden" id="table-edit-id" value="">
+                <input type="hidden" id="table-form-anchor" value="">
             </div>
         </div>
 
-        <!-- Združene mize -->
+        <!-- Nastavitev: vse mize so združljive -->
         <div class="re-section">
+            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
+                <input type="checkbox" id="all-tables-mergeable-toggle"
+                    <?= !empty($rest['all_tables_mergeable']) ? 'checked' : '' ?>
+                    onchange="saveTableMergeableSetting(this.checked)"
+                    style="margin-top:2px;width:16px;height:16px;cursor:pointer;accent-color:var(--color-primary)">
+                <div>
+                    <div style="font-weight:600;font-size:.875rem">Vse mize so združljive</div>
+                    <div style="font-size:.8rem;color:var(--color-muted);margin-top:2px">
+                        Sistem lahko za večje skupine samodejno združi katerekoli proste mize, ne samo predefinirane kombinacije. Koristno, kadar ne želite ročno nastavljati vsake kombinacije.
+                    </div>
+                </div>
+            </label>
+        </div>
+
+        <!-- Združene mize -->
+        <div class="re-section" id="merge-groups-section">
             <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
                 <div class="re-section-title" style="margin:0">Združene mize</div>
                 <button onclick="showMergeForm()" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">+ Skupina</button>
@@ -821,44 +893,114 @@ async function loadUrnik() {
         renderDaySchedule(rest.day_schedules || []);
         blackouts = rest.blackouts || [];
         renderBlackouts();
+        const ovr = document.getElementById('r-employees-override');
+        if (ovr) ovr.checked = !!rest.employees_can_override_schedule;
     } catch(e) { toast(e.message,'error'); }
 }
 
 function renderDaySchedule(ds) {
     const wrap = document.getElementById('day-schedule-wrap');
     wrap.innerHTML = DAY_NAMES.map((name, i) => {
-        const d    = ds.find(x=>x.day_of_week==i) || null;
-        const open = d ? !!d.is_open : (i<5);
-        const st   = d ? minsToTime(d.start_time) : '08:00';
-        const en   = d ? minsToTime(d.end_time)   : '23:00';
-        return `<div class="day-row">
+        const d      = ds.find(x=>x.day_of_week==i) || null;
+        const open   = d ? !!d.is_open : (i<5);
+        const periods = (d && d.periods && d.periods.length) ? d.periods : [{start_time: d?d.start_time:480, end_time: d?d.end_time:1380}];
+        const periodsHtml = periods.map((p,pi) => `
+            <div class="day-period-row" data-period="${pi}">
+                <input type="time" class="day-time-input day-start" data-day="${i}" data-period="${pi}" value="${minsToTime(p.start_time)}">
+                <span style="color:var(--color-muted);font-size:.8rem">–</span>
+                <input type="time" class="day-time-input day-end" data-day="${i}" data-period="${pi}" value="${minsToTime(p.end_time)}">
+                <button class="btn-period-del" onclick="removePeriod(${i},${pi},this)" title="Odstrani termin" ${periods.length<=1?'style="visibility:hidden"':''}>×</button>
+            </div>`).join('');
+        return `<div class="day-row" id="day-row-${i}">
             <label class="day-label-wrap">
                 <input type="checkbox" class="day-cb" data-day="${i}" ${open?'checked':''}
                     style="width:16px;height:16px;accent-color:var(--color-accent);cursor:pointer;flex-shrink:0"
                     onchange="toggleDayRow(${i},this.checked)">
                 <span style="font-size:.875rem;font-weight:500;color:var(--color-text)">${name}</span>
             </label>
-            <div class="day-times" id="day-times-${i}" style="${!open?'opacity:.35;pointer-events:none':''}">
-                <input type="time" class="day-time-input day-start" data-day="${i}" value="${st}">
-                <span style="color:var(--color-muted);font-size:.8rem">–</span>
-                <input type="time" class="day-time-input day-end" data-day="${i}" value="${en}">
+            <div class="day-periods-wrap" id="day-periods-${i}" style="${!open?'opacity:.35;pointer-events:none':''}">
+                ${periodsHtml}
+                <button class="btn-period-add" onclick="addPeriod(${i})">+ Dodaj termin</button>
             </div>
         </div>`;
     }).join('');
 }
 
 window.toggleDayRow = (day, open) => {
-    const el = document.getElementById('day-times-'+day);
+    const el = document.getElementById('day-periods-'+day);
     if (el) { el.style.opacity=open?'1':'.35'; el.style.pointerEvents=open?'':'none'; }
 };
 
+window.addPeriod = (day) => {
+    const wrap = document.getElementById('day-periods-'+day);
+    if (!wrap) return;
+    const rows = wrap.querySelectorAll('.day-period-row');
+    const pi = rows.length;
+    // Vzemi konec zadnje periode kot začetek nove
+    const lastEnd = wrap.querySelector(`.day-end[data-day="${day}"][data-period="${pi-1}"]`);
+    const newStart = lastEnd ? lastEnd.value : '08:00';
+    const div = document.createElement('div');
+    div.className = 'day-period-row';
+    div.dataset.period = pi;
+    div.innerHTML = `
+        <input type="time" class="day-time-input day-start" data-day="${day}" data-period="${pi}" value="${newStart}">
+        <span style="color:var(--color-muted);font-size:.8rem">–</span>
+        <input type="time" class="day-time-input day-end" data-day="${day}" data-period="${pi}" value="${newStart}">
+        <button class="btn-period-del" onclick="removePeriod(${day},${pi},this)" title="Odstrani termin">×</button>`;
+    wrap.insertBefore(div, wrap.querySelector('.btn-period-add'));
+    // Pokaži delete button pri prvi periodi če je sedaj >1
+    if (pi === 1) {
+        const firstDel = wrap.querySelector(`.day-period-row[data-period="0"] .btn-period-del`);
+        if (firstDel) firstDel.style.visibility = '';
+    }
+};
+
+window.removePeriod = (day, pi, btn) => {
+    const wrap = document.getElementById('day-periods-'+day);
+    if (!wrap) return;
+    btn.closest('.day-period-row').remove();
+    // Renumber remaining periods
+    wrap.querySelectorAll('.day-period-row').forEach((row,idx)=>{
+        row.dataset.period = idx;
+        row.querySelectorAll('[data-period]').forEach(el => el.dataset.period = idx);
+        const del = row.querySelector('.btn-period-del');
+        if (del) del.setAttribute('onclick', `removePeriod(${day},${idx},this)`);
+    });
+    // Skrij delete pri edini periodi
+    const rows = wrap.querySelectorAll('.day-period-row');
+    if (rows.length === 1) {
+        const del = rows[0].querySelector('.btn-period-del');
+        if (del) del.style.visibility = 'hidden';
+    }
+};
+
 function getDaySchedules() {
-    return Array.from({length:7},(_,i)=>({
-        day_of_week: i,
-        is_open:    document.querySelector(`.day-cb[data-day="${i}"]`)?.checked?1:0,
-        start_time: timeToMins(document.querySelector(`.day-start[data-day="${i}"]`)?.value||'08:00'),
-        end_time:   timeToMins(document.querySelector(`.day-end[data-day="${i}"]`)?.value||'23:00'),
-    }));
+    return Array.from({length:7}, (_,i) => {
+        const isOpen = document.querySelector(`.day-cb[data-day="${i}"]`)?.checked ? 1 : 0;
+        const wrap   = document.getElementById('day-periods-'+i);
+        const periods = [];
+        if (wrap) {
+            wrap.querySelectorAll('.day-period-row').forEach(row => {
+                const st = row.querySelector('.day-start')?.value || '08:00';
+                const en = row.querySelector('.day-end')?.value   || '23:00';
+                periods.push({start_time: timeToMins(st), end_time: timeToMins(en)});
+            });
+        }
+        if (!periods.length) periods.push({start_time:480, end_time:1380});
+        return {
+            day_of_week: i,
+            is_open: isOpen,
+            start_time: periods[0].start_time,
+            end_time:   periods[periods.length-1].end_time,
+            periods,
+        };
+    });
+}
+
+function blackoutTimeLabel(b) {
+    if (b.block_start == null || b.block_end == null) return '';
+    function fmt(m) { return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
+    return ` <span style="font-size:.8rem;background:#FFF7ED;border:1px solid #FED7AA;border-radius:4px;padding:1px 6px;color:#92400E">${fmt(b.block_start)}–${fmt(b.block_end)}</span>`;
 }
 
 function renderBlackouts() {
@@ -866,7 +1008,7 @@ function renderBlackouts() {
     if (!blackouts.length) { el.innerHTML='<p style="font-size:.825rem;color:var(--color-muted)">Ni blokiranih datumov.</p>'; return; }
     el.innerHTML = blackouts.map(b=>`
         <div class="item-row" data-date="${b.blackout_date}">
-            <span class="item-row-name">${h(b.blackout_date)}${b.reason?` <span style="color:var(--color-muted);font-weight:400">– ${h(b.reason)}</span>`:''}</span>
+            <span class="item-row-name">${h(b.blackout_date)}${blackoutTimeLabel(b)}${b.reason?` <span style="color:var(--color-muted);font-weight:400">– ${h(b.reason)}</span>`:''}</span>
             <button class="item-row-del" onclick="removeBlackout('${b.blackout_date}',this)" title="Odstrani">×</button>
         </div>`).join('');
 }
@@ -881,28 +1023,72 @@ window.removeBlackout = async (date, btn) => {
     } catch(e) { toast(e.message,'error'); }
 };
 
+// Prikaži/skrij čas vnos pri delnem blokiranju
+document.getElementById('blackout-partial').addEventListener('change', function() {
+    const t1 = document.getElementById('blackout-time-inner');
+    const t2 = document.getElementById('blackout-time-inner2');
+    if (t1) t1.style.display = this.checked ? '' : 'none';
+    if (t2) t2.style.display = this.checked ? '' : 'none';
+});
+
 document.getElementById('btn-add-blackout').addEventListener('click', async () => {
-    const date   = document.getElementById('blackout-date').value;
-    const reason = document.getElementById('blackout-reason').value.trim();
+    const date    = document.getElementById('blackout-date').value;
+    const reason  = document.getElementById('blackout-reason').value.trim();
+    const partial = document.getElementById('blackout-partial').checked;
     if (!date) { toast('Izberite datum.','error'); return; }
+    const payload = {date, reason};
+    if (partial) {
+        const bsVal = document.getElementById('blackout-start').value;
+        const beVal = document.getElementById('blackout-end').value;
+        if (!bsVal || !beVal) { toast('Vnesite začetni in končni čas.','error'); return; }
+        const bs = timeToMins(bsVal), be = timeToMins(beVal);
+        if (be <= bs) { toast('Končni čas mora biti večji od začetnega.','error'); return; }
+        payload.block_start = bs;
+        payload.block_end   = be;
+    }
     try {
-        await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}&action=add_blackout`, {date,reason});
-        blackouts.push({blackout_date:date, reason:reason||null});
+        const result = await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}&action=add_blackout`, payload);
+        blackouts.push({blackout_date:date, reason:reason||null, block_start:payload.block_start??null, block_end:payload.block_end??null});
         renderBlackouts();
         document.getElementById('blackout-date').value='';
         document.getElementById('blackout-reason').value='';
+        document.getElementById('blackout-partial').checked=false;
+        document.getElementById('blackout-start').value='';
+        document.getElementById('blackout-end').value='';
+        const t1 = document.getElementById('blackout-time-inner');
+        const t2 = document.getElementById('blackout-time-inner2');
+        if (t1) t1.style.display='none';
+        if (t2) t2.style.display='none';
         toast('Datum dodan!');
     } catch(e) { toast(e.message,'error'); }
 });
 
 document.getElementById('btn-save-urnik').addEventListener('click', async () => {
     const ds = getDaySchedules();
-    const invalid = ds.find(d=>d.is_open && d.end_time<=d.start_time);
-    if (invalid) { showPageErr(`${DAY_NAMES[invalid.day_of_week]}: končni čas mora biti večji od začetnega.`); return; }
+    // Preveri veljavnost vseh period
+    for (const d of ds) {
+        if (!d.is_open) continue;
+        const name = DAY_NAMES[d.day_of_week];
+        for (const p of d.periods) {
+            if (p.end_time <= p.start_time) {
+                showPageErr(`${name}: končni čas mora biti večji od začetnega.`); return;
+            }
+        }
+        // Preveri prekrivanja med periodami
+        const sorted = [...d.periods].sort((a, b) => a.start_time - b.start_time);
+        for (let i = 1; i < sorted.length; i++) {
+            if (sorted[i].start_time < sorted[i-1].end_time) {
+                const fmt = m => String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+                showPageErr(`${name}: termina ${fmt(sorted[i-1].start_time)}–${fmt(sorted[i-1].end_time)} in ${fmt(sorted[i].start_time)}–${fmt(sorted[i].end_time)} se prekrivata.`);
+                return;
+            }
+        }
+    }
+    const overrideVal = document.getElementById('r-employees-override')?.checked ? 1 : 0;
     const btn = document.getElementById('btn-save-urnik');
     btn.disabled=true; btn.textContent='...';
     try {
-        await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}`, {day_schedules:ds});
+        await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}`, {day_schedules:ds, employees_can_override_schedule:overrideVal});
         showPageOk('Urnik shranjen!');
     } catch(e) { showPageErr(e.message); }
     btn.disabled=false; btn.textContent='Shrani urnik';
@@ -951,6 +1137,7 @@ document.getElementById('btn-save-booking').addEventListener('click', async () =
             allow_guest_cancel: allowCancel, guest_cancel_cutoff_hours: cancelCutoff,
             waitlist_enabled: document.getElementById('r-waitlist-enabled')?.checked ? 1 : 0,
             waitlist_max_per_slot: parseInt(document.getElementById('r-waitlist-max')?.value ?? 3) || 0,
+            allow_area_choice: document.getElementById('r-allow-area-choice')?.checked ? 1 : 0,
         });
         showPageOk('Shranjeno!');
     } catch(e) { showPageErr(e.message); }
@@ -1355,44 +1542,115 @@ function exportSurveyCsv() {
 let tablesLoaded = false;
 let tablesData = { areas: [], tables: [], merge_groups: [] };
 
+function applyMergeableSectionVisibility(enabled) {
+    const sec = document.getElementById('merge-groups-section');
+    if (sec) sec.style.display = enabled ? 'none' : '';
+}
+
+async function saveTableMergeableSetting(enabled) {
+    try {
+        await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}`, { all_tables_mergeable: enabled ? 1 : 0 });
+        applyMergeableSectionVisibility(enabled);
+        toast(enabled ? 'Združevanje vseh miz vklopljeno.' : 'Združevanje vseh miz izklopljeno.');
+    } catch(e) {
+        toast(e.message, 'error');
+        document.getElementById('all-tables-mergeable-toggle').checked = !enabled;
+    }
+}
+
+// Inicializacija: skrij/prikaži ob nalaganju strani
+applyMergeableSectionVisibility(document.getElementById('all-tables-mergeable-toggle')?.checked);
+
 async function loadTables() {
     tablesLoaded = true;
     try {
         tablesData = await apiCall('GET', `/api/tables.php?restaurant_id=${REST_ID}`);
-        renderAreas();
-        renderTables();
+        renderAreasWithTables();
         renderMergeGroups();
     } catch(e) {
         document.getElementById('areas-list').innerHTML = `<p style="color:#EF4444;font-size:.875rem">${h(e.message)}</p>`;
     }
 }
 
-function renderAreas() {
-    const el = document.getElementById('areas-list');
-    if (!tablesData.areas.length) { el.innerHTML = '<p style="font-size:.85rem;color:var(--color-muted)">Ni definiranih con. Cone so opcijsko.</p>'; return; }
-    el.innerHTML = tablesData.areas.map(a => `
-        <div class="item-row" style="opacity:${a.is_active?1:.5}">
-            <span class="item-row-name">${h(a.name)}</span>
-            <span class="item-row-badge" style="background:${a.is_active?'#D1FAE5':'#F3F4F6'};color:${a.is_active?'#065F46':'#6B7280'}">${a.is_active?'Aktivna':'Neaktivna'}</span>
-            <button onclick="editArea(${a.id})" style="font-size:.8rem;padding:3px 8px;border:1.5px solid var(--color-border);border-radius:6px;background:transparent;cursor:pointer;font-family:var(--font)">Uredi</button>
-            <button class="item-row-del" onclick="deleteArea(${a.id})" title="Briši">✕</button>
-        </div>
-    `).join('');
+function renderTableRow(t) {
+    return `<div class="item-row" style="opacity:${t.is_active?1:.5};padding-left:20px">
+        <span style="font-size:.7rem;color:var(--color-muted);margin-right:2px">⌐</span>
+        <span class="item-row-name">${h(t.name)}</span>
+        <span class="item-row-badge" style="background:#DBEAFE;color:#1D4ED8">${t.capacity} oseb</span>
+        <span class="item-row-badge" style="background:${t.is_active?'#D1FAE5':'#F3F4F6'};color:${t.is_active?'#065F46':'#6B7280'}">${t.is_active?'Aktivna':'Neaktivna'}</span>
+        <button onclick="editTable(${t.id})" style="font-size:.8rem;padding:3px 8px;border:1.5px solid var(--color-border);border-radius:6px;background:transparent;cursor:pointer;font-family:var(--font)">Uredi</button>
+        <button class="item-row-del" onclick="deleteTable(${t.id})" title="Briši">✕</button>
+    </div>`;
 }
 
-function renderTables() {
-    const el = document.getElementById('tables-list');
-    if (!tablesData.tables.length) { el.innerHTML = '<p style="font-size:.85rem;color:var(--color-muted)">Ni definiranih miz.</p>'; return; }
-    el.innerHTML = tablesData.tables.map(t => `
-        <div class="item-row" style="opacity:${t.is_active?1:.5}">
-            <span class="item-row-name">${h(t.name)}</span>
-            ${t.area_name ? `<span class="item-row-badge" style="background:#EDE9FE;color:#5B21B6">${h(t.area_name)}</span>` : ''}
-            <span class="item-row-badge" style="background:#DBEAFE;color:#1D4ED8">${t.capacity} oseb</span>
-            <span class="item-row-badge" style="background:${t.is_active?'#D1FAE5':'#F3F4F6'};color:${t.is_active?'#065F46':'#6B7280'}">${t.is_active?'Aktivna':'Neaktivna'}</span>
-            <button onclick="editTable(${t.id})" style="font-size:.8rem;padding:3px 8px;border:1.5px solid var(--color-border);border-radius:6px;background:transparent;cursor:pointer;font-family:var(--font)">Uredi</button>
-            <button class="item-row-del" onclick="deleteTable(${t.id})" title="Briši">✕</button>
-        </div>
-    `).join('');
+function renderAreasWithTables() {
+    const el = document.getElementById('areas-list');
+
+    // Rescue table-form before innerHTML wipes it (it may have been moved inside areas-list)
+    const tf = document.getElementById('table-form');
+    if (tf && el.contains(tf)) {
+        el.insertAdjacentElement('afterend', tf);
+        tf.style.display = 'none';
+    }
+
+    const tablesByArea = {};
+    const noAreaTables = [];
+    tablesData.tables.forEach(t => {
+        if (t.area_id) { (tablesByArea[t.area_id] = tablesByArea[t.area_id] || []).push(t); }
+        else { noAreaTables.push(t); }
+    });
+
+    let html = '';
+
+    if (!tablesData.areas.length && !tablesData.tables.length) {
+        el.innerHTML = '<p style="font-size:.85rem;color:var(--color-muted)">Ni definiranih con. Kliknite <strong>+ Cona</strong> za začetek. Cone so opcijsko — mize brez cone dodajte z gumbom spodaj.</p>';
+        // Gumb za dodajanje mize brez cone
+        el.innerHTML += `<div style="margin-top:10px"><button onclick="showTableForm(null,null)" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">+ Miza brez cone</button></div>`;
+        return;
+    }
+
+    // Cone s svojimi mizami
+    tablesData.areas.forEach(a => {
+        const tables = tablesByArea[a.id] || [];
+        html += `<div id="area-block-${a.id}" style="border:1.5px solid var(--color-border);border-radius:10px;margin-bottom:10px;overflow:hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--color-surface);border-bottom:${tables.length?'1px solid var(--color-border)':'none'}">
+                <div style="display:flex;align-items:center;gap:8px">
+                    <strong style="font-size:.875rem">${h(a.name)}</strong>
+                    <span class="item-row-badge" style="background:${a.is_active?'#D1FAE5':'#F3F4F6'};color:${a.is_active?'#065F46':'#6B7280'}">${a.is_active?'Aktivna':'Neaktivna'}</span>
+                    <span style="font-size:.78rem;color:var(--color-muted)">${tables.length} ${tables.length===1?'miza':'miz'}</span>
+                </div>
+                <div style="display:flex;gap:6px;align-items:center">
+                    <button onclick="showTableForm(null,${a.id})" class="btn-success" style="font-size:.75rem;padding:3px 8px">+ Miza</button>
+                    <button onclick="editArea(${a.id})" style="font-size:.78rem;padding:3px 8px;border:1.5px solid var(--color-border);border-radius:6px;background:transparent;cursor:pointer;font-family:var(--font)">Uredi cono</button>
+                    <button class="item-row-del" onclick="deleteArea(${a.id})" title="Briši cono">✕</button>
+                </div>
+            </div>`;
+        if (tables.length) {
+            html += `<div style="padding:4px 0">${tables.map(renderTableRow).join('')}</div>`;
+        } else {
+            html += `<p style="font-size:.8rem;color:var(--color-muted);margin:0;padding:10px 14px">Ni miz v tej coni.</p>`;
+        }
+        html += '</div>';
+    });
+
+    // Mize brez cone
+    if (noAreaTables.length || !tablesData.areas.length) {
+        const headerLabel = tablesData.areas.length ? 'Brez cone' : 'Mize';
+        html += `<div id="area-block-no-area" style="border:1.5px dashed var(--color-border);border-radius:10px;margin-bottom:10px;overflow:hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--color-surface)">
+                <div style="display:flex;align-items:center;gap:8px">
+                    <strong style="font-size:.875rem;color:var(--color-muted)">${headerLabel}</strong>
+                    <span style="font-size:.78rem;color:var(--color-muted)">${noAreaTables.length} ${noAreaTables.length===1?'miza':'miz'}</span>
+                </div>
+                <button onclick="showTableForm(null,null)" class="btn-success" style="font-size:.75rem;padding:3px 8px">+ Miza</button>
+            </div>`;
+        if (noAreaTables.length) {
+            html += `<div style="padding:4px 0">${noAreaTables.map(renderTableRow).join('')}</div>`;
+        }
+        html += '</div>';
+    }
+
+    el.innerHTML = html;
 }
 
 function renderMergeGroups() {
@@ -1412,9 +1670,10 @@ function renderMergeGroups() {
 // ─ Area form ─
 function showAreaForm(editId=null) {
     const f = document.getElementById('area-form');
-    document.getElementById('area-name-input').value = editId
-        ? (tablesData.areas.find(a=>a.id===editId)?.name || '') : '';
+    const existing = editId ? tablesData.areas.find(a=>a.id===editId) : null;
+    document.getElementById('area-name-input').value = existing?.name || '';
     document.getElementById('area-edit-id').value = editId || '';
+    document.getElementById('area-form-title').textContent = editId ? 'Uredi cono' : 'Nova cona';
     f.style.display = 'block';
     document.getElementById('area-name-input').focus();
 }
@@ -1432,7 +1691,7 @@ async function saveArea() {
             await apiCall('POST', '/api/tables.php', { action:'create_area', restaurant_id:REST_ID, name });
         }
         cancelAreaForm();
-        tablesLoaded = false; await loadTables();
+        await loadTables();
         toast(editId ? 'Cona posodobljena.' : 'Cona dodana.');
     } catch(e) { toast(e.message,'error'); }
 }
@@ -1453,18 +1712,30 @@ function populateAreaSelect(selectedId=null) {
         tablesData.areas.map(a => `<option value="${a.id}" ${selectedId==a.id?'selected':''}>${h(a.name)}</option>`).join('');
 }
 
-function showTableForm(editId=null) {
+// presetAreaId: cona, v katero se doda nova miza (ko kliknemo "+ Miza" znotraj cone)
+function showTableForm(editId=null, presetAreaId=null) {
     const f = document.getElementById('table-form');
     const t = editId ? tablesData.tables.find(x=>x.id===editId) : null;
     document.getElementById('table-name-input').value = t?.name || '';
     document.getElementById('table-cap-input').value  = t?.capacity || 2;
     document.getElementById('table-edit-id').value    = editId || '';
-    populateAreaSelect(t?.area_id || null);
+    document.getElementById('table-form-anchor').value = presetAreaId || '';
+    document.getElementById('table-form-title').textContent = editId ? 'Uredi mizo' : 'Nova miza';
+    populateAreaSelect(t?.area_id ?? presetAreaId);
+
+    // Forma se prikaže pod pravilno cono (ali na koncu, če brez cone)
+    const anchorId = presetAreaId || 'no-area';
+    const anchor = document.getElementById(`area-block-${anchorId}`) || document.getElementById('areas-list');
+    anchor.after ? anchor.after(f) : anchor.parentNode.appendChild(f);
+
     f.style.display = 'block';
     document.getElementById('table-name-input').focus();
 }
 function cancelTableForm() { document.getElementById('table-form').style.display='none'; }
-function editTable(id) { showTableForm(id); }
+function editTable(id) {
+    const t = tablesData.tables.find(x=>x.id===id);
+    showTableForm(id, t?.area_id || null);
+}
 
 async function saveTable() {
     const name     = document.getElementById('table-name-input').value.trim();

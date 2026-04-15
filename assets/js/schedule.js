@@ -48,7 +48,7 @@ const Schedule = (() => {
   }
 
   // ── Render ────────────────────────────────────────────────────
-  function render(date, reservations, duration, allRestaurants, bounds) {
+  function render(date, reservations, duration, allRestaurants, bounds, overlays) {
     duration = Math.max(15, duration || 60);
     const SCHEDULE_START = bounds ? bounds.start : 480; // minute (8*60)
     const SCHEDULE_END = bounds ? bounds.end : 1380; // minute (23*60)
@@ -139,6 +139,42 @@ const Schedule = (() => {
           content.appendChild(line);
         }
       }
+    }
+
+    // ── Blokirani/zaprti overlay ──────────────────────────────
+    if (overlays) {
+        function addOverlay(cls, topPx, heightPx, label) {
+            const ov = document.createElement('div');
+            ov.className = 'tl-block-overlay ' + cls;
+            if (topPx    !== null) ov.style.top    = topPx    + 'px';
+            if (heightPx !== null) ov.style.height = heightPx + 'px';
+            if (label) {
+                const lbl = document.createElement('span');
+                lbl.className = 'tl-block-label';
+                lbl.textContent = label;
+                ov.appendChild(lbl);
+            }
+            content.appendChild(ov);
+        }
+
+        if (overlays.isClosed) {
+            addOverlay('closed', null, null, 'Zaprt');
+        } else if (overlays.fullBlackout) {
+            const lbl = overlays.fullBlackoutReason ? `Blokirano – ${overlays.fullBlackoutReason}` : 'Blokirano';
+            addOverlay('full', null, null, lbl);
+        } else if (overlays.partialBlackouts && overlays.partialBlackouts.length) {
+            const fmtMin = m => String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
+            overlays.partialBlackouts.forEach(pb => {
+                const topPx = Math.max(0, (pb.start - SCHEDULE_START)) * PX_PER_MIN;
+                const heightPx = Math.max(0, (pb.end - pb.start)) * PX_PER_MIN;
+                if (heightPx > 0) {
+                    const lbl = pb.reason
+                        ? `Blokirano ${fmtMin(pb.start)}–${fmtMin(pb.end)} – ${pb.reason}`
+                        : `Blokirano ${fmtMin(pb.start)}–${fmtMin(pb.end)}`;
+                    addOverlay('partial', topPx, heightPx, lbl);
+                }
+            });
+        }
     }
 
     // Klikabilno ozadje (za dodajanje rezervacij)

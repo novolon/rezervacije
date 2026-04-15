@@ -111,9 +111,10 @@
             const reservations = data.reservations || [];
             const overlays = data.overlay
                 ? {
-                    isClosed:        data.overlay.is_closed,
-                    fullBlackout:    data.overlay.full_blackout,
-                    partialBlackouts: (data.overlay.partial_blackouts || []).map(p => ({ start: p.start, end: p.end })),
+                    isClosed:             data.overlay.is_closed,
+                    fullBlackout:         data.overlay.full_blackout,
+                    fullBlackoutReason:   data.overlay.full_blackout_reason || null,
+                    partialBlackouts:     (data.overlay.partial_blackouts || []).map(p => ({ start: p.start, end: p.end, reason: p.reason || null })),
                   }
                 : getDayOverlays(); // fallback na stari način
             // Shrani zadnji updated_at za polling

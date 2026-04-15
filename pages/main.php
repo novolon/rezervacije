@@ -370,9 +370,9 @@ window.APP_STATE = <?= json_encode([
 <!-- ── JavaScript ─────────────────────────────────────────── -->
 <script src="<?= BASE_PATH ?>/assets/js/api.js?v=3"></script>
 <script src="<?= BASE_PATH ?>/assets/js/calendar.js?v=2"></script>
-<script src="<?= BASE_PATH ?>/assets/js/schedule.js?v=3"></script>
+<script src="<?= BASE_PATH ?>/assets/js/schedule.js?v=4"></script>
 <script src="<?= BASE_PATH ?>/assets/js/modal.js?v=14"></script>
-<script src="<?= BASE_PATH ?>/assets/js/app.js?v=5"></script>
+<script src="<?= BASE_PATH ?>/assets/js/app.js?v=6"></script>
 
 </body>
 </html>

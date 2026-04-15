@@ -136,26 +136,29 @@ function get_overlay_info(PDO $pdo, string $date, array $restIds): array {
     } catch (PDOException $e) {}
 
     // Blokirani datumi
+    $fullBlackoutReason = null;
     try {
-        $b = $pdo->prepare("SELECT block_start, block_end FROM restaurant_blackouts WHERE restaurant_id IN ($ph) AND blackout_date = ?");
+        $b = $pdo->prepare("SELECT block_start, block_end, reason FROM restaurant_blackouts WHERE restaurant_id IN ($ph) AND blackout_date = ?");
         $b->execute(array_merge($restIds, [$date]));
         foreach ($b->fetchAll() as $row) {
             if ($row['block_start'] === null) {
                 $fullBlackout = true;
+                if ($row['reason']) $fullBlackoutReason = $row['reason'];
             } else {
-                $partial[] = ['start' => (int)$row['block_start'], 'end' => (int)$row['block_end']];
+                $partial[] = ['start' => (int)$row['block_start'], 'end' => (int)$row['block_end'], 'reason' => $row['reason'] ?: null];
             }
         }
     } catch (PDOException $e) {
         // Fallback: brez block_start/block_end
         try {
-            $b2 = $pdo->prepare("SELECT 1 FROM restaurant_blackouts WHERE restaurant_id IN ($ph) AND blackout_date = ?");
+            $b2 = $pdo->prepare("SELECT reason FROM restaurant_blackouts WHERE restaurant_id IN ($ph) AND blackout_date = ?");
             $b2->execute(array_merge($restIds, [$date]));
-            if ($b2->fetch()) $fullBlackout = true;
+            $fb = $b2->fetch();
+            if ($fb) { $fullBlackout = true; $fullBlackoutReason = $fb['reason'] ?: null; }
         } catch (PDOException $e2) {}
     }
 
-    return ['is_closed' => $isClosed, 'full_blackout' => $fullBlackout, 'partial_blackouts' => $partial];
+    return ['is_closed' => $isClosed, 'full_blackout' => $fullBlackout, 'full_blackout_reason' => $fullBlackoutReason, 'partial_blackouts' => $partial];
 }
 
 // ─── Pomožna: shrani custom field vrednosti ────────────────────

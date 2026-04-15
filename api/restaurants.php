@@ -90,6 +90,16 @@ function save_day_schedules(PDO $pdo, int $id, array $daySchedules): void {
         $open  = $ds['is_open'] ? 1 : 0;
         $periods = is_array($ds['periods'] ?? null) ? $ds['periods'] : [];
 
+        // Preveri prekrivanja med periodami (server-side)
+        if ($open && count($periods) > 1) {
+            usort($periods, fn($a, $b) => (int)$a['start_time'] - (int)$b['start_time']);
+            for ($i = 1; $i < count($periods); $i++) {
+                if ((int)$periods[$i]['start_time'] < (int)$periods[$i-1]['end_time']) {
+                    throw new \InvalidArgumentException("Dan $dow: termini se prekrivajo.");
+                }
+            }
+        }
+
         // Izračunaj fallback start/end iz period (ali default)
         if ($periods) {
             $pStarts = array_column($periods, 'start_time');
@@ -340,6 +350,8 @@ if ($method === 'PUT') {
         $row['blackouts']     = fetch_blackouts($pdo, $id);
         json_response(true, $row);
 
+    } catch (\InvalidArgumentException $e) {
+        json_response(false, null, $e->getMessage(), 400);
     } catch (PDOException $e) {
         error_log('Restaurant update error: ' . $e->getMessage());
         json_response(false, null, 'Napaka pri posodabljanju.', 500);
