@@ -70,18 +70,57 @@
         btn.style.display = isPast ? 'none' : 'flex';
     }
 
+    // ── Izračunaj overlay info za blokirane/zaprte intervale ──────
+    function getDayOverlays() {
+        const ds = dateStr(state.currentDate);
+        const dayIdx = (state.currentDate.getDay() + 6) % 7; // 0=Pon
+
+        // Kadar admin vidi vse restavracije, prikaži overlayje samo za aktivno
+        const rests = state.restaurantId
+            ? APP_STATE.restaurants.filter(r => r.id === state.restaurantId)
+            : APP_STATE.restaurants;
+
+        let isClosed = false;
+        let fullBlackout = false;
+        const partialBlackouts = [];
+
+        rests.forEach(r => {
+            const daySchedule = (r.day_schedules || []).find(d => d.day_of_week === dayIdx);
+            if (daySchedule && !daySchedule.is_open) isClosed = true;
+
+            const blk = (r.blackout_dates || []).find(b => b.date === ds);
+            if (blk) {
+                if (blk.block_start === null) {
+                    fullBlackout = true;
+                } else {
+                    partialBlackouts.push({ start: blk.block_start, end: blk.block_end });
+                }
+            }
+        });
+
+        return { isClosed, fullBlackout, partialBlackouts };
+    }
+
     // ── Naloži razpored za currentDate ───────────────────────────
     async function loadSchedule() {
         const ds  = dateStr(state.currentDate);
         const url = `/api/reservations.php?date=${ds}` +
                     (state.restaurantId ? `&restaurant_id=${state.restaurantId}` : '');
         try {
-            const reservations = await API.get(url) || [];
+            const data = await API.get(url) || {};
+            const reservations = data.reservations || [];
+            const overlays = data.overlay
+                ? {
+                    isClosed:        data.overlay.is_closed,
+                    fullBlackout:    data.overlay.full_blackout,
+                    partialBlackouts: (data.overlay.partial_blackouts || []).map(p => ({ start: p.start, end: p.end })),
+                  }
+                : getDayOverlays(); // fallback na stari način
             // Shrani zadnji updated_at za polling
             state.lastDayUpdated = reservations.reduce((max, r) => r.updated_at > max ? r.updated_at : max, '');
             const duration = getActiveDuration();
             const bounds = getActiveScheduleBounds();
-            Schedule.render(state.currentDate, reservations, duration, APP_STATE.restaurants, bounds);
+            Schedule.render(state.currentDate, reservations, duration, APP_STATE.restaurants, bounds, overlays);
         } catch (e) {
             showToast(e.message, 'error');
         }

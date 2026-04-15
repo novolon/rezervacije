@@ -114,6 +114,50 @@ function attach_table_assignments_bulk(PDO $pdo, array &$reservations): void {
     }
 }
 
+// ─── Pomožna: vrni overlay info za datum in restavracije ─────
+function get_overlay_info(PDO $pdo, string $date, array $restIds): array {
+    if (empty($restIds)) {
+        return ['is_closed' => false, 'full_blackout' => false, 'partial_blackouts' => []];
+    }
+    $dow = (int)date('N', strtotime($date)) - 1; // 0=Pon..6=Ned
+
+    $isClosed     = false;
+    $fullBlackout = false;
+    $partial      = [];
+
+    // Dan v tednu
+    $ph = implode(',', array_fill(0, count($restIds), '?'));
+    try {
+        $s = $pdo->prepare("SELECT is_open FROM restaurant_day_schedules WHERE restaurant_id IN ($ph) AND day_of_week = ?");
+        $s->execute(array_merge($restIds, [$dow]));
+        foreach ($s->fetchAll() as $row) {
+            if (!(bool)$row['is_open']) { $isClosed = true; break; }
+        }
+    } catch (PDOException $e) {}
+
+    // Blokirani datumi
+    try {
+        $b = $pdo->prepare("SELECT block_start, block_end FROM restaurant_blackouts WHERE restaurant_id IN ($ph) AND blackout_date = ?");
+        $b->execute(array_merge($restIds, [$date]));
+        foreach ($b->fetchAll() as $row) {
+            if ($row['block_start'] === null) {
+                $fullBlackout = true;
+            } else {
+                $partial[] = ['start' => (int)$row['block_start'], 'end' => (int)$row['block_end']];
+            }
+        }
+    } catch (PDOException $e) {
+        // Fallback: brez block_start/block_end
+        try {
+            $b2 = $pdo->prepare("SELECT 1 FROM restaurant_blackouts WHERE restaurant_id IN ($ph) AND blackout_date = ?");
+            $b2->execute(array_merge($restIds, [$date]));
+            if ($b2->fetch()) $fullBlackout = true;
+        } catch (PDOException $e2) {}
+    }
+
+    return ['is_closed' => $isClosed, 'full_blackout' => $fullBlackout, 'partial_blackouts' => $partial];
+}
+
 // ─── Pomožna: shrani custom field vrednosti ────────────────────
 function save_field_values(PDO $pdo, int $reservationId, array $fieldValues): void {
     if (empty($fieldValues)) return;
@@ -265,7 +309,23 @@ if ($method === 'GET') {
         $rows = $stmt->fetchAll();
         attach_field_values($pdo, $rows);
         attach_table_assignments_bulk($pdo, $rows);
-        json_response(true, $rows);
+
+        // Overlay info (sveže iz DB, ne iz APP_STATE)
+        $overlayRestIds = $rest_id !== null
+            ? [$rest_id]
+            : array_values(array_unique(array_column($rows, 'restaurant_id')));
+        if (empty($overlayRestIds) && $session['role'] === 'user') {
+            $overlayRestIds = [(int)$session['restaurant_id']];
+        }
+        // Pridobi vse admin restavracije za overlay (če admin vidi vse)
+        if (empty($overlayRestIds) && $session['role'] === 'admin') {
+            $rStmt = $pdo->prepare("SELECT restaurant_id FROM restaurant_admins WHERE user_id = ?");
+            $rStmt->execute([$session['user_id']]);
+            $overlayRestIds = $rStmt->fetchAll(PDO::FETCH_COLUMN) ?: [];
+        }
+        $overlay = get_overlay_info($pdo, $date, array_map('intval', $overlayRestIds));
+
+        json_response(true, ['reservations' => $rows, 'overlay' => $overlay]);
     }
 
     // Mesečni agregati za koledar
