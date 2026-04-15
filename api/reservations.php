@@ -393,11 +393,55 @@ if ($method === 'POST') {
     if ($date < date('Y-m-d')) json_response(false, null, 'Rezervacij v preteklosti ni mogoče dodajati.', 400);
     if (!preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $time)) json_response(false, null, 'Neveljaven čas.', 400);
 
+    // Preveri employee override nastavitev restavracije
+    $overrideStmt = $pdo->prepare("SELECT employees_can_override_schedule FROM restaurants WHERE id = ?");
+    $overrideStmt->execute([$rest_id]);
+    $overrideRow = $overrideStmt->fetch();
+    $canOverride  = !empty($overrideRow['employees_can_override_schedule']);
+
     // Blokiran datum?
-    $blStmt = $pdo->prepare("SELECT 1 FROM restaurant_blackouts WHERE restaurant_id = ? AND blackout_date = ?");
-    $blStmt->execute([$rest_id, $date]);
-    if ($blStmt->fetchColumn()) {
-        json_response(false, null, 'Za ta datum rezervacije niso na voljo (blokiran datum).', 400);
+    $blRow = false;
+    try {
+        $blStmt = $pdo->prepare("SELECT block_start, block_end FROM restaurant_blackouts WHERE restaurant_id = ? AND blackout_date = ?");
+        $blStmt->execute([$rest_id, $date]);
+        $blRow = $blStmt->fetch();
+    } catch (PDOException $e) {
+        // block_start/block_end kolonice ne obstajajo (migrate_multi_period.sql ni zagnan)
+        // Fallback: preveri samo ali datum obstaja v blackoutih
+        try {
+            $blFallback = $pdo->prepare("SELECT 1 FROM restaurant_blackouts WHERE restaurant_id = ? AND blackout_date = ?");
+            $blFallback->execute([$rest_id, $date]);
+            if ($blFallback->fetch()) {
+                $blRow = ['block_start' => null, 'block_end' => null];
+            }
+        } catch (PDOException $e2) { /* tabela ne obstaja */ }
+    }
+    if ($blRow) {
+        $fullBlock = ($blRow['block_start'] === null);
+        if ($fullBlock && !$canOverride) {
+            json_response(false, null, 'Za ta datum rezervacije niso na voljo. Kontaktirajte admina, da vklopi rezervacije za ta dan.', 400);
+        }
+        if ($fullBlock && $canOverride) {
+            // Override dovoljen – nadaljuj
+        }
+        if (!$fullBlock && !$canOverride) {
+            [$th, $ti] = explode(':', substr($time, 0, 5));
+            $tMins = (int)$th * 60 + (int)$ti;
+            if ($tMins >= (int)$blRow['block_start'] && $tMins < (int)$blRow['block_end']) {
+                json_response(false, null, 'Za ta čas rezervacije niso na voljo. Kontaktirajte admina, da vklopi rezervacije za ta čas.', 400);
+            }
+        }
+    }
+
+    // Preverba odprtega dne (per-day schedule)
+    if (!$canOverride) {
+        $dowIdx = (int)date('N', strtotime($date)) - 1;
+        $dsChk = $pdo->prepare("SELECT is_open FROM restaurant_day_schedules WHERE restaurant_id = ? AND day_of_week = ?");
+        $dsChk->execute([$rest_id, $dowIdx]);
+        $dsRow = $dsChk->fetch();
+        if ($dsRow && !(bool)$dsRow['is_open']) {
+            json_response(false, null, 'V tem dnevu restavracija ne sprejema rezervacij. Kontaktirajte admina, da vklopi rezervacije za ta dan.', 400);
+        }
     }
 
     // Trajanje: samo če restavracija dovoljuje custom

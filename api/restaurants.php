@@ -11,36 +11,116 @@ $session = require_admin(); // admin ali superadmin
 $pdo     = getDB();
 $method  = $_SERVER['REQUEST_METHOD'];
 
-// Pomožna: vrni day_schedules in blackouts za restavracijo
+// Pomožna: vrni day_schedules + periode za restavracijo
+function fetch_day_periods_map(PDO $pdo, int $id): array {
+    try {
+        $stmt = $pdo->prepare("SELECT day_of_week, start_time, end_time FROM restaurant_day_periods WHERE restaurant_id = ? ORDER BY day_of_week, start_time");
+        $stmt->execute([$id]);
+        $map = [];
+        foreach ($stmt->fetchAll() as $p) {
+            $map[(int)$p['day_of_week']][] = ['start_time' => (int)$p['start_time'], 'end_time' => (int)$p['end_time']];
+        }
+        return $map;
+    } catch (PDOException $e) { return []; }
+}
+
 function fetch_day_schedules(PDO $pdo, int $id): array {
     try {
         $stmt = $pdo->prepare("SELECT day_of_week, is_open, start_time, end_time FROM restaurant_day_schedules WHERE restaurant_id = ? ORDER BY day_of_week");
         $stmt->execute([$id]);
-        return $stmt->fetchAll();
+        $rows = $stmt->fetchAll();
+        $periodsMap = fetch_day_periods_map($pdo, $id);
+        foreach ($rows as &$r) {
+            $dow = (int)$r['day_of_week'];
+            $r['periods'] = $periodsMap[$dow] ?? [['start_time' => (int)$r['start_time'], 'end_time' => (int)$r['end_time']]];
+        }
+        return $rows;
     } catch (PDOException $e) { return []; }
 }
 
 function fetch_blackouts(PDO $pdo, int $id): array {
     try {
-        $stmt = $pdo->prepare("SELECT blackout_date, reason FROM restaurant_blackouts WHERE restaurant_id = ? AND blackout_date >= CURDATE() ORDER BY blackout_date");
+        $stmt = $pdo->prepare("SELECT blackout_date, reason, block_start, block_end FROM restaurant_blackouts WHERE restaurant_id = ? AND blackout_date >= CURDATE() ORDER BY blackout_date");
         $stmt->execute([$id]);
         return $stmt->fetchAll();
     } catch (PDOException $e) { return []; }
 }
 
-// Pomožna: shrani day_schedules in posodobi schedule_start/end ter booking_open_days
+// Pomožna: shrani day_schedules + periode; posodobi schedule_start/end ter booking_open_days
 function save_day_schedules(PDO $pdo, int $id, array $daySchedules): void {
-    $stmt = $pdo->prepare("INSERT INTO restaurant_day_schedules (restaurant_id, day_of_week, is_open, start_time, end_time)
+    $dsStmt = $pdo->prepare("INSERT INTO restaurant_day_schedules (restaurant_id, day_of_week, is_open, start_time, end_time)
         VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE is_open=VALUES(is_open), start_time=VALUES(start_time), end_time=VALUES(end_time)");
+
+    // Preverimo ali ima kateri dan več kot eno periodo
+    $hasMultiPeriod = false;
+    foreach ($daySchedules as $ds) {
+        if (is_array($ds['periods'] ?? null) && count($ds['periods']) > 1) {
+            $hasMultiPeriod = true;
+            break;
+        }
+    }
+
+    // Izbriši stare periode za vse dni, ki jih posodabljamo
+    $dows = array_map(fn($d) => (int)$d['day_of_week'], $daySchedules);
+    if ($dows) {
+        $placeholders = implode(',', array_fill(0, count($dows), '?'));
+        try {
+            $pdo->prepare("DELETE FROM restaurant_day_periods WHERE restaurant_id = ? AND day_of_week IN ($placeholders)")
+                ->execute(array_merge([$id], $dows));
+        } catch (PDOException $e) {
+            if ($hasMultiPeriod) {
+                throw new PDOException('Tabela restaurant_day_periods ne obstaja. Zaženite sql/migrate_multi_period.sql na strežniku.');
+            }
+        }
+    }
+
+    $periodStmt = null;
+    try {
+        $periodStmt = $pdo->prepare("INSERT INTO restaurant_day_periods (restaurant_id, day_of_week, start_time, end_time) VALUES (?,?,?,?)");
+    } catch (PDOException $e) {
+        if ($hasMultiPeriod) {
+            throw new PDOException('Tabela restaurant_day_periods ne obstaja. Zaženite sql/migrate_multi_period.sql na strežniku.');
+        }
+    }
+
     $openDays = 0;
     $starts = []; $ends = [];
     foreach ($daySchedules as $ds) {
         $dow   = max(0, min(6, (int)$ds['day_of_week']));
         $open  = $ds['is_open'] ? 1 : 0;
-        $start = max(0, min(1439, (int)$ds['start_time']));
-        $end   = max(1, min(1440, (int)$ds['end_time']));
-        $stmt->execute([$id, $dow, $open, $start, $end]);
-        if ($open) { $openDays |= (1 << $dow); $starts[] = $start; $ends[] = $end; }
+        $periods = is_array($ds['periods'] ?? null) ? $ds['periods'] : [];
+
+        // Izračunaj fallback start/end iz period (ali default)
+        if ($periods) {
+            $pStarts = array_column($periods, 'start_time');
+            $pEnds   = array_column($periods, 'end_time');
+            $dsStart = min($pStarts);
+            $dsEnd   = max($pEnds);
+        } else {
+            $dsStart = max(0, min(1439, (int)($ds['start_time'] ?? 480)));
+            $dsEnd   = max(1, min(1440, (int)($ds['end_time']   ?? 1380)));
+            $periods = [['start_time' => $dsStart, 'end_time' => $dsEnd]];
+        }
+
+        $dsStmt->execute([$id, $dow, $open, $dsStart, $dsEnd]);
+
+        if ($periodStmt) {
+            foreach ($periods as $p) {
+                $pStart = max(0, min(1439, (int)$p['start_time']));
+                $pEnd   = max(1, min(1440, (int)$p['end_time']));
+                if ($pEnd > $pStart) {
+                    $periodStmt->execute([$id, $dow, $pStart, $pEnd]);
+                }
+            }
+        }
+
+        if ($open) {
+            $openDays |= (1 << $dow);
+            foreach ($periods as $p) {
+                $starts[] = (int)$p['start_time'];
+                $ends[]   = (int)$p['end_time'];
+            }
+        }
     }
     // Posodobi globalne vrednosti (fallback za staro kodo)
     $schedStart = $starts ? min($starts) : 480;
@@ -168,15 +248,24 @@ if ($method === 'PUT') {
 
     // ── Dodaj blokiran datum ──────────────────────────────────────
     if ($action === 'add_blackout') {
-        $date   = trim($body['date']   ?? '');
-        $reason = trim($body['reason'] ?? '') ?: null;
+        $date       = trim($body['date']   ?? '');
+        $reason     = trim($body['reason'] ?? '') ?: null;
+        $blockStart = isset($body['block_start']) && $body['block_start'] !== '' ? max(0, min(1439, (int)$body['block_start'])) : null;
+        $blockEnd   = isset($body['block_end'])   && $body['block_end']   !== '' ? max(1, min(1440, (int)$body['block_end']))   : null;
         if (!$date || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
             json_response(false, null, 'Neveljaven datum.', 400);
         }
+        if (($blockStart !== null) !== ($blockEnd !== null)) {
+            json_response(false, null, 'Določiti morata oba časa ali nobenega.', 400);
+        }
+        if ($blockStart !== null && $blockEnd !== null && $blockEnd <= $blockStart) {
+            json_response(false, null, 'Končni čas mora biti večji od začetnega.', 400);
+        }
         try {
-            $pdo->prepare("INSERT INTO restaurant_blackouts (restaurant_id, blackout_date, reason) VALUES (?,?,?) ON DUPLICATE KEY UPDATE reason=VALUES(reason)")
-                ->execute([$id, $date, $reason]);
-            json_response(true, ['blackout_date' => $date, 'reason' => $reason]);
+            $pdo->prepare("INSERT INTO restaurant_blackouts (restaurant_id, blackout_date, reason, block_start, block_end)
+                VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE reason=VALUES(reason), block_start=VALUES(block_start), block_end=VALUES(block_end)")
+                ->execute([$id, $date, $reason, $blockStart, $blockEnd]);
+            json_response(true, ['blackout_date' => $date, 'reason' => $reason, 'block_start' => $blockStart, 'block_end' => $blockEnd]);
         } catch (PDOException $e) {
             json_response(false, null, 'Napaka pri dodajanju datuma.', 500);
         }
@@ -205,6 +294,10 @@ if ($method === 'PUT') {
     $contact_email = array_key_exists('contact_email', $body) ? (trim($body['contact_email']) ?: null) : false;
     $contact_phone = array_key_exists('contact_phone', $body) ? (trim($body['contact_phone']) ?: null) : false;
 
+    $all_tables_mergeable              = isset($body['all_tables_mergeable'])              ? ($body['all_tables_mergeable'] ? 1 : 0) : null;
+    $allow_area_choice                 = isset($body['allow_area_choice'])                 ? ($body['allow_area_choice'] ? 1 : 0) : null;
+    $employees_can_override_schedule   = isset($body['employees_can_override_schedule'])   ? ($body['employees_can_override_schedule'] ? 1 : 0) : null;
+
     $sets = []; $params = [];
     if ($name)                               { $sets[] = 'name = ?';                        $params[] = $name; }
     if ($duration)                           { $sets[] = 'reservation_duration = ?';        $params[] = $duration; }
@@ -224,6 +317,9 @@ if ($method === 'PUT') {
     if ($waitlist_max_per_slot !== null)    { $sets[] = 'waitlist_max_per_slot = ?';        $params[] = $waitlist_max_per_slot; }
     if ($contact_email !== false)            { $sets[] = 'contact_email = ?';               $params[] = $contact_email; }
     if ($contact_phone !== false)            { $sets[] = 'contact_phone = ?';               $params[] = $contact_phone; }
+    if ($all_tables_mergeable !== null)            { $sets[] = 'all_tables_mergeable = ?';                  $params[] = $all_tables_mergeable; }
+    if ($allow_area_choice !== null)               { $sets[] = 'allow_area_choice = ?';                     $params[] = $allow_area_choice; }
+    if ($employees_can_override_schedule !== null) { $sets[] = 'employees_can_override_schedule = ?';        $params[] = $employees_can_override_schedule; }
 
     try {
         // Day schedules

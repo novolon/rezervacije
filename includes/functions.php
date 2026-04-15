@@ -98,3 +98,39 @@ function get_restaurant_or_404(PDO $pdo, int $id): array {
     if (!$row) json_response(false, null, 'Restavracija ne obstaja', 404);
     return $row;
 }
+
+/**
+ * Preveri, ali je datum blokiran za dano restavracijo.
+ * Vrne false (ni blokiran), ali array z ključi:
+ *   full=true  → cel dan blokiran
+ *   full=false → delno blokiran, block_start/block_end so minute od polnoči
+ */
+function get_blackout(PDO $pdo, int $restId, string $date) {
+    try {
+        $stmt = $pdo->prepare("SELECT block_start, block_end FROM restaurant_blackouts WHERE restaurant_id = ? AND blackout_date = ?");
+        $stmt->execute([$restId, $date]);
+        $row = $stmt->fetch();
+        if (!$row) return false;
+        if ($row['block_start'] === null || $row['block_end'] === null) {
+            return ['full' => true];
+        }
+        return ['full' => false, 'block_start' => (int)$row['block_start'], 'block_end' => (int)$row['block_end']];
+    } catch (PDOException $e) {
+        // block_start/block_end ne obstajata (migrate_multi_period.sql ni zagnan) – fallback
+        try {
+            $fb = $pdo->prepare("SELECT 1 FROM restaurant_blackouts WHERE restaurant_id = ? AND blackout_date = ?");
+            $fb->execute([$restId, $date]);
+            return $fb->fetch() ? ['full' => true] : false;
+        } catch (PDOException $e2) { return false; }
+    }
+}
+
+/**
+ * Preveri, ali je datum popolnoma blokiran za dano restavracijo.
+ * @deprecated Uporabi get_blackout() za natančnejše informacije.
+ */
+function is_blackout(PDO $pdo, int $restId, string $date): bool {
+    $b = get_blackout($pdo, $restId, $date);
+    return $b !== false && $b['full'];
+}
+

@@ -80,8 +80,9 @@ if ($isAdmin) {
     $pendingCount = (int) $stmt->fetchColumn();
 }
 
-// Naloži day_schedules za vse restavracije
+// Naloži day_schedules + blackouts za vse restavracije
 $daySchedulesMap = [];
+$blackoutDatesMap = [];
 $hasTablesMap    = [];
 if ($restaurants) {
     try {
@@ -93,6 +94,34 @@ if ($restaurants) {
             $daySchedulesMap[$ds['restaurant_id']][] = $ds;
         }
     } catch (PDOException $e) { /* tabela še ne obstaja */ }
+
+    try {
+        $restIds2 = array_column($restaurants, 'id');
+        $placeholders2 = implode(',', array_fill(0, count($restIds2), '?'));
+        // Poskusi z block_start/block_end (migrate_multi_period.sql)
+        try {
+            $blStmt = $pdo->prepare("SELECT restaurant_id, blackout_date, block_start, block_end FROM restaurant_blackouts WHERE restaurant_id IN ($placeholders2) AND blackout_date >= CURDATE() ORDER BY blackout_date");
+            $blStmt->execute($restIds2);
+            foreach ($blStmt->fetchAll() as $bl) {
+                $blackoutDatesMap[(int)$bl['restaurant_id']][] = [
+                    'date'        => $bl['blackout_date'],
+                    'block_start' => $bl['block_start'] !== null ? (int)$bl['block_start'] : null,
+                    'block_end'   => $bl['block_end']   !== null ? (int)$bl['block_end']   : null,
+                ];
+            }
+        } catch (PDOException $e) {
+            // Fallback: kolone block_start/block_end še ne obstajajo – naloži brez delnih blokiranj
+            $blStmt2 = $pdo->prepare("SELECT restaurant_id, blackout_date FROM restaurant_blackouts WHERE restaurant_id IN ($placeholders2) AND blackout_date >= CURDATE() ORDER BY blackout_date");
+            $blStmt2->execute($restIds2);
+            foreach ($blStmt2->fetchAll() as $bl) {
+                $blackoutDatesMap[(int)$bl['restaurant_id']][] = [
+                    'date'        => $bl['blackout_date'],
+                    'block_start' => null,
+                    'block_end'   => null,
+                ];
+            }
+        }
+    } catch (PDOException $e) { /* restaurant_blackouts tabela ne obstaja */ }
 
     // has_tables: uporabimo COUNT(*) direktno – zanesljivo na vseh MySQL verzijah
     foreach ($restaurants as $r) {
@@ -317,6 +346,8 @@ window.APP_STATE = <?= json_encode([
             'booking_token'         => $r['booking_token'] ?? null,
             'booking_enabled'       => (bool)($r['booking_enabled'] ?? false),
             'has_tables'            => isset($hasTablesMap[(int)$r['id']]),
+            'employees_can_override_schedule' => (bool)($r['employees_can_override_schedule'] ?? false),
+            'blackout_dates'        => $blackoutDatesMap[(int)$r['id']] ?? [],
             'day_schedules'         => array_map(function($ds) {
                 return [
                     'day_of_week' => (int)$ds['day_of_week'],
@@ -340,7 +371,7 @@ window.APP_STATE = <?= json_encode([
 <script src="<?= BASE_PATH ?>/assets/js/api.js?v=3"></script>
 <script src="<?= BASE_PATH ?>/assets/js/calendar.js?v=2"></script>
 <script src="<?= BASE_PATH ?>/assets/js/schedule.js?v=3"></script>
-<script src="<?= BASE_PATH ?>/assets/js/modal.js?v=12"></script>
+<script src="<?= BASE_PATH ?>/assets/js/modal.js?v=14"></script>
 <script src="<?= BASE_PATH ?>/assets/js/app.js?v=4"></script>
 
 </body>

@@ -62,11 +62,18 @@ function get_day_schedule(PDO $pdo, int $restId, int $dayOfWeek, array $rest): a
     ];
 }
 
-// ── Preveri blokiran datum ──────────────────────────────────────
-function is_blackout(PDO $pdo, int $restId, string $date): bool {
-    $stmt = $pdo->prepare("SELECT 1 FROM restaurant_blackouts WHERE restaurant_id = ? AND blackout_date = ?");
-    $stmt->execute([$restId, $date]);
-    return (bool) $stmt->fetchColumn();
+// ── Pridobi terminske periode za določen dan ───────────────────
+// Vrne array [['start_time'=>int,'end_time'=>int], ...]
+// Fallback: en interval iz day_schedule
+function get_day_periods(PDO $pdo, int $restId, int $dayOfWeek, array $ds): array {
+    try {
+        $stmt = $pdo->prepare("SELECT start_time, end_time FROM restaurant_day_periods WHERE restaurant_id = ? AND day_of_week = ? ORDER BY start_time");
+        $stmt->execute([$restId, $dayOfWeek]);
+        $rows = $stmt->fetchAll();
+        if ($rows) return $rows;
+    } catch (PDOException $e) { /* tabela morda še ne obstaja */ }
+    // Fallback na en interval iz day_schedule
+    return [['start_time' => (int)$ds['start_time'], 'end_time' => (int)$ds['end_time']]];
 }
 
 // ── GET ────────────────────────────────────────────────────────
@@ -81,12 +88,43 @@ if ($method === 'GET') {
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
             json_response(false, null, 'Neveljaven datum.', 400);
         }
+
+        // ── GET ?date=X&time=Y → razpoložljive cone za termin ─────────────────
+        // Mora biti pred slots logiko (ki pokliče json_response in exit)
+        $timeParam = trim($_GET['time'] ?? '');
+        if ($timeParam && preg_match('/^\d{2}:\d{2}(:\d{2})?$/', $timeParam)) {
+            $guestCount = max(1, (int)($_GET['guest_count'] ?? $rest['booking_min_guests']));
+            $duration   = (int)$rest['reservation_duration'];
+            $restId     = (int)$rest['id'];
+
+            $stmtAreas = $pdo->prepare("
+                SELECT id, name FROM restaurant_areas
+                WHERE restaurant_id = ? AND is_active = 1
+                ORDER BY sort_order ASC, name ASC
+            ");
+            $stmtAreas->execute([$restId]);
+            $areas = $stmtAreas->fetchAll(PDO::FETCH_ASSOC);
+
+            $result = [];
+            foreach ($areas as $area) {
+                $avail = find_available_table($pdo, $restId, $date, substr($timeParam, 0, 5), $duration, $guestCount, null, (int)$area['id']);
+                $result[] = [
+                    'id'        => (int)$area['id'],
+                    'name'      => $area['name'],
+                    'available' => $avail !== false,
+                ];
+            }
+
+            json_response(true, ['areas' => $result, 'allow_area_choice' => !empty($rest['allow_area_choice'])]);
+        }
+
         if ($date < date('Y-m-d')) {
             json_response(true, ['slots' => [], 'reason' => 'past']);
         }
 
-        // Blokiran datum?
-        if (is_blackout($pdo, (int)$rest['id'], $date)) {
+        // Blokiran datum? (cel dan ali delno)
+        $blackout = get_blackout($pdo, (int)$rest['id'], $date);
+        if ($blackout !== false && $blackout['full']) {
             json_response(true, ['slots' => [], 'reason' => 'blackout']);
         }
 
@@ -97,13 +135,31 @@ if ($method === 'GET') {
             json_response(true, ['slots' => [], 'reason' => 'closed']);
         }
 
-        $start    = (int)$ds['start_time'];
-        $end      = (int)$ds['end_time'];
         $interval = (int)($rest['booking_slot_interval'] ?? $rest['reservation_duration']);
         if ($interval < 15) $interval = 15;
-        $slots    = [];
-        for ($m = $start; $m + $interval <= $end; $m += $interval) {
-            $slots[] = sprintf('%02d:%02d', intdiv($m, 60), $m % 60);
+
+        // Generiraj slote iz vseh terminskih period za ta dan
+        $periods = get_day_periods($pdo, (int)$rest['id'], $dayOfWeek, $ds);
+        $slots = [];
+        foreach ($periods as $period) {
+            $pStart = (int)$period['start_time'];
+            $pEnd   = (int)$period['end_time'];
+            for ($m = $pStart; $m + $interval <= $pEnd; $m += $interval) {
+                $slots[] = sprintf('%02d:%02d', intdiv($m, 60), $m % 60);
+            }
+        }
+        $slots = array_unique($slots);
+        sort($slots);
+
+        // Filtriraj delno blokiran čas
+        if ($blackout !== false && !$blackout['full']) {
+            $bStart = $blackout['block_start'];
+            $bEnd   = $blackout['block_end'];
+            $slots  = array_values(array_filter($slots, static function (string $s) use ($bStart, $bEnd): bool {
+                [$h, $i] = explode(':', $s);
+                $m = (int)$h * 60 + (int)$i;
+                return $m < $bStart || $m >= $bEnd;
+            }));
         }
 
         // Filtriraj preteklost (če danes)
@@ -174,11 +230,22 @@ if ($method === 'GET') {
         json_response(true, ['slots' => $slotsOut]);
     }
 
+
     // ── Info o restavraciji (za javno booking stran) ──────────────
     // Dnevni urniki
     $dayStmt = $pdo->prepare("SELECT day_of_week, is_open, start_time, end_time FROM restaurant_day_schedules WHERE restaurant_id = ? ORDER BY day_of_week");
     $dayStmt->execute([$rest['id']]);
     $daySchedules = $dayStmt->fetchAll();
+
+    // Terminske periode po dnevih
+    $periodsMap = [];
+    try {
+        $pStmt = $pdo->prepare("SELECT day_of_week, start_time, end_time FROM restaurant_day_periods WHERE restaurant_id = ? ORDER BY day_of_week, start_time");
+        $pStmt->execute([$rest['id']]);
+        foreach ($pStmt->fetchAll() as $p) {
+            $periodsMap[(int)$p['day_of_week']][] = ['start' => (int)$p['start_time'], 'end' => (int)$p['end_time']];
+        }
+    } catch (PDOException $e) { /* tabela morda še ne obstaja */ }
 
     // Izračunaj open_days bitmask iz day_schedules (ali fallback)
     $openDays = 0;
@@ -190,10 +257,35 @@ if ($method === 'GET') {
         $openDays = (int)$rest['booking_open_days'];
     }
 
-    // Blokirani datumi (prihodnji)
-    $bStmt = $pdo->prepare("SELECT blackout_date FROM restaurant_blackouts WHERE restaurant_id = ? AND blackout_date >= CURDATE() ORDER BY blackout_date");
-    $bStmt->execute([$rest['id']]);
-    $blackoutDates = $bStmt->fetchAll(PDO::FETCH_COLUMN);
+    // Blokirani datumi (prihodnji) – vključno z delnim blokiranjem
+    $blackoutRows = [];
+    try {
+        $bStmt = $pdo->prepare("SELECT blackout_date, block_start, block_end FROM restaurant_blackouts WHERE restaurant_id = ? AND blackout_date >= CURDATE() ORDER BY blackout_date");
+        $bStmt->execute([$rest['id']]);
+        $blackoutRows = $bStmt->fetchAll();
+    } catch (PDOException $e) {
+        // block_start/block_end ne obstajata – fallback brez delnih blokiranj
+        try {
+            $bStmt2 = $pdo->prepare("SELECT blackout_date FROM restaurant_blackouts WHERE restaurant_id = ? AND blackout_date >= CURDATE() ORDER BY blackout_date");
+            $bStmt2->execute([$rest['id']]);
+            foreach ($bStmt2->fetchAll() as $br2) {
+                $blackoutRows[] = ['blackout_date' => $br2['blackout_date'], 'block_start' => null, 'block_end' => null];
+            }
+        } catch (PDOException $e2) { /* tabela ne obstaja */ }
+    }
+    $blackoutDates = []; // samo popolnoma blokirani datumi (za backwards compat)
+    $partialBlackouts = [];
+    foreach ($blackoutRows as $br) {
+        if ($br['block_start'] === null) {
+            $blackoutDates[] = $br['blackout_date'];
+        } else {
+            $partialBlackouts[] = [
+                'date'  => $br['blackout_date'],
+                'start' => (int)$br['block_start'],
+                'end'   => (int)$br['block_end'],
+            ];
+        }
+    }
 
     // Polja po meri za javno rezervacijo
     $customFields = [];
@@ -223,15 +315,27 @@ if ($method === 'GET') {
         'max_guests'       => (int)$rest['booking_max_guests'],
         'slot_interval'    => (int)($rest['booking_slot_interval'] ?? $rest['reservation_duration']),
         'blackout_dates'   => $blackoutDates,
+        'partial_blackouts'=> $partialBlackouts,
         'custom_fields'    => $customFields,
         'waitlist_enabled'     => user_has_feature($pdo, (int)$rest['owner_id'], 'waitlist') && (bool)($rest['waitlist_enabled'] ?? 1),
         'waitlist_max_per_slot'=> (int)($rest['waitlist_max_per_slot'] ?? 3),
-        'day_schedules'    => array_map(fn($ds) => [
-            'day'    => (int)$ds['day_of_week'],
-            'is_open'=> (bool)$ds['is_open'],
-            'start'  => (int)$ds['start_time'],
-            'end'    => (int)$ds['end_time'],
-        ], $daySchedules),
+        'day_schedules'    => array_map(function($ds) use ($periodsMap) {
+            $dow = (int)$ds['day_of_week'];
+            $periods = $periodsMap[$dow] ?? [];
+            if (empty($periods)) {
+                // Fallback: ena perioda iz start/end
+                $periods = [['start' => (int)$ds['start_time'], 'end' => (int)$ds['end_time']]];
+            }
+            return [
+                'day'     => $dow,
+                'is_open' => (bool)$ds['is_open'],
+                'start'   => (int)$ds['start_time'],
+                'end'     => (int)$ds['end_time'],
+                'periods' => $periods,
+            ];
+        }, $daySchedules),
+        'allow_area_choice' => !empty($rest['allow_area_choice'])
+                               && user_has_feature($pdo, (int)$rest['owner_id'], 'table_management'),
     ]);
 }
 
@@ -251,6 +355,7 @@ if ($method === 'POST') {
     $notes           = trim($body['notes']      ?? '');
     $gdprConsent     = !empty($body['gdpr_consent'])     ? 1 : 0;
     $marketingConsent = !empty($body['marketing_consent']) ? 1 : 0;
+    $preferredAreaId = isset($body['area_id']) && $body['area_id'] !== null ? (int)$body['area_id'] : null;
 
     // Validacija
     if (!$date || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) {
@@ -273,9 +378,19 @@ if ($method === 'POST') {
         json_response(false, null, "Število gostov mora biti med 1 in {$maxGuests}.", 400);
     }
 
-    // Blokiran datum?
-    if (is_blackout($pdo, (int)$rest['id'], $date)) {
+    // Blokiran datum? (cel dan → zavrni, delno → preverimo čas spodaj)
+    $blackout = get_blackout($pdo, (int)$rest['id'], $date);
+    if ($blackout !== false && $blackout['full']) {
         json_response(false, null, 'Za ta datum rezervacije niso na voljo.', 400);
+    }
+    if ($blackout !== false && !$blackout['full']) {
+        $bStart = $blackout['block_start'];
+        $bEnd   = $blackout['block_end'];
+        [$th, $ti] = explode(':', $time);
+        $timeMins = (int)$th * 60 + (int)$ti;
+        if ($timeMins >= $bStart && $timeMins < $bEnd) {
+            json_response(false, null, 'Za ta čas rezervacije niso na voljo.', 400);
+        }
     }
 
     // Preverba odprtega dne (per-day schedule)
@@ -297,9 +412,12 @@ if ($method === 'POST') {
 
         $pdo->beginTransaction();
 
+        // area_id preferenca (iz koraka izbire cone v booking flowu)
+        $areaIdForTable = ($preferredAreaId && !empty($rest['allow_area_choice'])) ? $preferredAreaId : null;
+
         // Preveri razpoložljivost mize znotraj transakcije (prepreči race condition)
         if ($useTableMgmt) {
-            $tableAssignment = find_available_table($pdo, (int)$rest['id'], $date, $time, $durationMins, $guestCount, null);
+            $tableAssignment = find_available_table($pdo, (int)$rest['id'], $date, $time, $durationMins, $guestCount, null, $areaIdForTable);
             if ($tableAssignment === false) {
                 $pdo->rollBack();
                 // Ponudi čakalno listo, če je omogočena
