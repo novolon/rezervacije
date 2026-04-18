@@ -45,17 +45,21 @@ function find_available_table(
     string $time,
     int    $durationMins,
     int    $guestCount,
-    ?int   $excludeResId
+    ?int   $excludeResId,
+    ?int   $areaId = null
 ) {
 
     // 1. Naloži vse aktivne mize restavracije (ORDER BY capacity ASC – najmanjša najprej)
+    $areaSql = $areaId !== null ? ' AND area_id = ?' : '';
     $stmtT = $pdo->prepare("
-        SELECT id, capacity
+        SELECT id, capacity, area_id
         FROM restaurant_tables
-        WHERE restaurant_id = ? AND is_active = 1
+        WHERE restaurant_id = ? AND is_active = 1{$areaSql}
         ORDER BY capacity ASC
     ");
-    $stmtT->execute([$restId]);
+    $params = [$restId];
+    if ($areaId !== null) $params[] = $areaId;
+    $stmtT->execute($params);
     $allTables = $stmtT->fetchAll(PDO::FETCH_ASSOC);
 
     if (empty($allTables)) {
@@ -141,6 +145,52 @@ function find_available_table(
                 'table_ids'      => $memberIds,
                 'merge_group_id' => (int)$group['group_id'],
             ];
+        }
+    }
+
+    // 6b. all_tables_mergeable: katerakoli kombinacija prostih miz znotraj iste cone
+    $allMergeable = false;
+    try {
+        $restRow = $pdo->prepare("SELECT all_tables_mergeable FROM restaurants WHERE id = ?");
+        $restRow->execute([$restId]);
+        $allMergeable = (bool)$restRow->fetchColumn();
+    } catch (\Throwable $e) {
+        // Stolpec morda še ne obstaja (migracija ni bila izvedena)
+    }
+
+    if ($allMergeable && !empty($freeTables)) {
+        if ($areaId !== null) {
+            // Že filtrirano na cono – direktno greedy
+            $freeArr = array_values($freeTables);
+            usort($freeArr, fn($a, $b) => $b['capacity'] <=> $a['capacity']);
+            $accumulated = 0;
+            $chosen = [];
+            foreach ($freeArr as $t) {
+                $chosen[] = (int)$t['id'];
+                $accumulated += (int)$t['capacity'];
+                if ($accumulated >= $guestCount) {
+                    return ['mode' => 'merge', 'table_ids' => $chosen, 'merge_group_id' => null];
+                }
+            }
+        } else {
+            // Združuj samo znotraj iste cone (NULL area_id = lastna skupina)
+            $byArea = [];
+            foreach ($freeTables as $t) {
+                $key = ($t['area_id'] !== null) ? (int)$t['area_id'] : '__none__';
+                $byArea[$key][] = $t;
+            }
+            foreach ($byArea as $group) {
+                usort($group, fn($a, $b) => $b['capacity'] <=> $a['capacity']);
+                $accumulated = 0;
+                $chosen = [];
+                foreach ($group as $t) {
+                    $chosen[] = (int)$t['id'];
+                    $accumulated += (int)$t['capacity'];
+                    if ($accumulated >= $guestCount) {
+                        return ['mode' => 'merge', 'table_ids' => $chosen, 'merge_group_id' => null];
+                    }
+                }
+            }
         }
     }
 
@@ -242,7 +292,7 @@ function get_available_tables_for_slot(
 ): array {
     // Vsi termini se izračunajo enako kot v find_available_table
     $stmtT = $pdo->prepare("
-        SELECT rt.id, rt.name, rt.capacity, ra.name AS area_name
+        SELECT rt.id, rt.name, rt.capacity, rt.area_id, ra.name AS area_name
         FROM restaurant_tables rt
         LEFT JOIN restaurant_areas ra ON rt.area_id = ra.id
         WHERE rt.restaurant_id = ? AND rt.is_active = 1
@@ -323,6 +373,48 @@ function get_available_tables_for_slot(
                 'table_names'    => $group['table_names'],
                 'total_capacity' => (int)$group['total_capacity'],
             ];
+        }
+    }
+
+    // Greedy all_tables_mergeable: če ni predefiniranih skupin za gostujoče število, dodaj samodejno možnost
+    if (empty($freeMergeGroups) && empty($freeTables)) {
+        $allMergeable = false;
+        try {
+            $amStmt = $pdo->prepare("SELECT all_tables_mergeable FROM restaurants WHERE id = ?");
+            $amStmt->execute([$restId]);
+            $allMergeable = (bool)$amStmt->fetchColumn();
+        } catch (\Throwable $e) {}
+
+        if ($allMergeable) {
+            // Zberi proste mize in jih združi po conah
+            $freeByArea = [];
+            foreach ($allTables as $t) {
+                if (isset($allFreeSet[$t['id']])) {
+                    $key = ($t['area_id'] !== null) ? (int)$t['area_id'] : '__none__';
+                    $freeByArea[$key][] = $t;
+                }
+            }
+            foreach ($freeByArea as $group) {
+                usort($group, fn($a, $b) => $b['capacity'] <=> $a['capacity']);
+                $acc = 0; $chosen = []; $names = [];
+                foreach ($group as $t) {
+                    $chosen[] = (int)$t['id'];
+                    $names[]  = $t['name'];
+                    $acc += (int)$t['capacity'];
+                    if ($acc >= $guestCount) {
+                        $freeMergeGroups[] = [
+                            'id'             => null,
+                            'name'           => implode(' + ', $names),
+                            'table_ids'      => $chosen,
+                            'table_names'    => implode(', ', $names),
+                            'total_capacity' => $acc,
+                            'auto_merge'     => true,
+                        ];
+                        break;
+                    }
+                }
+                if (!empty($freeMergeGroups)) break;
+            }
         }
     }
 

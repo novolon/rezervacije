@@ -84,6 +84,7 @@ if ($isAdmin) {
 $daySchedulesMap = [];
 $blackoutDatesMap = [];
 $hasTablesMap    = [];
+$tablesMap       = [];
 if ($restaurants) {
     try {
         $restIds = array_column($restaurants, 'id');
@@ -126,13 +127,51 @@ if ($restaurants) {
     // has_tables: uporabimo COUNT(*) direktno – zanesljivo na vseh MySQL verzijah
     foreach ($restaurants as $r) {
         try {
-            $chk = $pdo->prepare("SELECT COUNT(*) FROM restaurant_tables WHERE restaurant_id = ? AND is_active = 1");
+            $chk = $pdo->prepare("SELECT COUNT(*), SUM(is_active) FROM restaurant_tables WHERE restaurant_id = ?");
             $chk->execute([(int)$r['id']]);
-            if ((int)$chk->fetchColumn() > 0) {
+            $row = $chk->fetch(PDO::FETCH_NUM);
+            if ((int)$row[0] > 0) {
                 $hasTablesMap[(int)$r['id']] = true;
             }
         } catch (PDOException $e) { /* tabela še ne obstaja */ }
     }
+
+    // Več terminov na dan (restaurant_day_periods)
+    $dayPeriodsMap = [];
+    try {
+        $dpStmt = $pdo->prepare("SELECT restaurant_id, day_of_week, start_time, end_time FROM restaurant_day_periods WHERE restaurant_id IN ($placeholders) ORDER BY restaurant_id, day_of_week, start_time");
+        $dpStmt->execute($restIds);
+        foreach ($dpStmt->fetchAll() as $dp) {
+            $dayPeriodsMap[(int)$dp['restaurant_id']][] = [
+                'day_of_week' => (int)$dp['day_of_week'],
+                'start_time'  => (int)$dp['start_time'],
+                'end_time'    => (int)$dp['end_time'],
+            ];
+        }
+    } catch (PDOException $e) { /* tabela še ne obstaja */ }
+
+    // Mize za Gantt timeline rows
+    try {
+        $tblIds = array_column($restaurants, 'id');
+        $tblPh  = implode(',', array_fill(0, count($tblIds), '?'));
+        $tblStmt = $pdo->prepare("
+            SELECT t.id, t.restaurant_id, t.name, t.capacity,
+                   a.name AS area_name, COALESCE(a.sort_order, 999) AS asort, t.sort_order
+            FROM restaurant_tables t
+            LEFT JOIN restaurant_areas a ON t.area_id = a.id
+            WHERE t.restaurant_id IN ($tblPh)
+            ORDER BY t.restaurant_id, asort, a.name, t.sort_order, t.name
+        ");
+        $tblStmt->execute($tblIds);
+        foreach ($tblStmt->fetchAll() as $tbl) {
+            $tablesMap[(int)$tbl['restaurant_id']][] = [
+                'id'        => (int)$tbl['id'],
+                'name'      => $tbl['name'],
+                'area_name' => $tbl['area_name'],
+                'capacity'  => (int)$tbl['capacity'],
+            ];
+        }
+    } catch (PDOException $e) { /* tabela še ne obstaja */ }
 }
 ?>
 <!DOCTYPE html>
@@ -145,7 +184,7 @@ if ($restaurants) {
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css?v=4">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/calendar.css?v=2">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/schedule.css?v=2">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/schedule.css?v=7">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/modal.css?v=2">
 </head>
 <body>
@@ -165,7 +204,6 @@ if ($restaurants) {
         <?php if ($isAdmin && count($restaurants) > 1): ?>
             <span class="restaurant-label">Restavracija:</span>
             <select id="restaurant-select">
-                <option value="">— Vse —</option>
                 <?php foreach ($restaurants as $r): ?>
                     <option value="<?= $r['id'] ?>"><?= h($r['name']) ?></option>
                 <?php endforeach; ?>
@@ -261,36 +299,34 @@ if ($restaurants) {
     </div>
 </div>
 <?php else: ?>
-<!-- ── Dvosteberna postavitev ─────────────────────────────── -->
-<div class="app-layout">
+<!-- ── Nova postavitev: razpored zgoraj, koledar spodaj ─────── -->
+<div class="app-layout-v2">
 
-    <!-- ── Levi panel: dnevni razpored ─────────────────────── -->
-    <aside class="panel-schedule">
-        <div class="schedule-header">
-            <div id="schedule-date-label" class="schedule-date-label">Danes</div>
-            <div class="schedule-meta">
-                <div class="schedule-stats">
-                    <div class="stat-pill">Rezervacije: <span id="stat-count">0</span></div>
-                    <div class="stat-pill">Osebe: <span id="stat-guests">0</span></div>
-                </div>
-                <button id="btn-today" style="display:none">↩ Danes</button>
+    <!-- ── Zgornja vrstica: datum, stats, gumb ────────────────── -->
+    <div class="schedule-top-bar">
+        <div class="schedule-top-bar-left">
+            <div class="schedule-date-label-wrap">
+                <div id="schedule-date-label" class="schedule-date-label">&nbsp;</div>
+                <button id="btn-today" style="display:none">Na današnji dan</button>
+            </div>
+            <div class="schedule-stats">
+                <div class="stat-pill">Rezervacije: <span id="stat-count">0</span></div>
+                <div class="stat-pill">Osebe: <span id="stat-guests">0</span></div>
             </div>
         </div>
-
-        <div class="schedule-add-btn">
-            <button id="btn-add-reservation" class="btn-add-reservation">
+        <div class="schedule-top-bar-right">
+            <button id="btn-add-reservation" class="btn-add-reservation" style="display:none">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-                Nova rezervacija
+                Dodaj rezervacijo
             </button>
         </div>
+    </div>
 
-        <div id="schedule-body" class="schedule-body">
-            <!-- Dinamično generirano z JS -->
-        </div>
-    </aside>
+    <!-- ── Gantt timeline ─────────────────────────────────────── -->
+    <div id="schedule-body" class="schedule-body"></div>
 
-    <!-- ── Desni panel: mesečni koledar ────────────────────── -->
-    <main class="panel-calendar">
+    <!-- ── Spodnja vrstica: koledar + čakajoče ───────────────── -->
+    <div class="schedule-bottom-row">
         <div class="calendar-wrapper">
             <div class="calendar-nav">
                 <button id="cal-prev" class="cal-nav-btn" title="Prejšnji mesec">
@@ -320,7 +356,7 @@ if ($restaurants) {
             </div>
             <div id="pending-list"></div>
         </div>
-    </main>
+    </div>
 
 </div>
 
@@ -334,7 +370,7 @@ window.APP_STATE = <?= json_encode([
     'role'         => $_SESSION['role'],
     'restaurantId' => $restId ? (int)$restId : null,
     'fullName'     => $fullName,
-    'restaurants'  => array_map(function($r) {
+    'restaurants'  => array_map(function($r) use ($hasTablesMap, $tablesMap, $daySchedulesMap, $blackoutDatesMap, $dayPeriodsMap) {
         return [
             'id'                    => (int)$r['id'],
             'name'                  => $r['name'],
@@ -346,6 +382,7 @@ window.APP_STATE = <?= json_encode([
             'booking_token'         => $r['booking_token'] ?? null,
             'booking_enabled'       => (bool)($r['booking_enabled'] ?? false),
             'has_tables'            => isset($hasTablesMap[(int)$r['id']]),
+            'tables'                => $tablesMap[(int)$r['id']] ?? [],
             'employees_can_override_schedule' => (bool)($r['employees_can_override_schedule'] ?? false),
             'blackout_dates'        => $blackoutDatesMap[(int)$r['id']] ?? [],
             'day_schedules'         => array_map(function($ds) {
@@ -356,6 +393,7 @@ window.APP_STATE = <?= json_encode([
                     'end_time'    => (int)$ds['end_time'],
                 ];
             }, $daySchedulesMap[(int)$r['id']] ?? []),
+            'day_periods'           => $dayPeriodsMap[(int)$r['id']] ?? [],
         ];
     }, $restaurants),
     'pendingCount' => $pendingCount,
@@ -368,11 +406,12 @@ window.APP_STATE = <?= json_encode([
 </script>
 
 <!-- ── JavaScript ─────────────────────────────────────────── -->
-<script src="<?= BASE_PATH ?>/assets/js/api.js?v=3"></script>
-<script src="<?= BASE_PATH ?>/assets/js/calendar.js?v=2"></script>
-<script src="<?= BASE_PATH ?>/assets/js/schedule.js?v=4"></script>
-<script src="<?= BASE_PATH ?>/assets/js/modal.js?v=14"></script>
-<script src="<?= BASE_PATH ?>/assets/js/app.js?v=6"></script>
+<?php $cv = time(); ?>
+<script src="<?= BASE_PATH ?>/assets/js/api.js?v=<?= $cv ?>"></script>
+<script src="<?= BASE_PATH ?>/assets/js/calendar.js?v=<?= $cv ?>"></script>
+<script src="<?= BASE_PATH ?>/assets/js/schedule.js?v=<?= $cv ?>"></script>
+<script src="<?= BASE_PATH ?>/assets/js/modal.js?v=<?= $cv ?>"></script>
+<script src="<?= BASE_PATH ?>/assets/js/app.js?v=<?= $cv ?>"></script>
 
 </body>
 </html>

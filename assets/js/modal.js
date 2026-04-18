@@ -205,6 +205,11 @@ const ReservationModal = (() => {
 
         document.body.appendChild(overlay);
 
+        // Inicializiraj izbiro mize (DOM je zdaj v dokumentu)
+        if (mode === 'create' && APP_STATE.hasTableMgmt) {
+            initTableSection();
+        }
+
         // Fokus na prvo polje
         if (mode !== 'view') {
             setTimeout(() => {
@@ -546,166 +551,160 @@ const ReservationModal = (() => {
             wrap.appendChild(fieldEl);
         });
 
-        // ── Izbira mize (samo create + hasTableMgmt + restavracija ima mize) ──
+        // table-selection-section se doda tukaj kot placeholder; initTableSection() ga zapolni
         if (currentMode === 'create' && APP_STATE.hasTableMgmt) {
-            const tableSection = document.createElement('div');
-            tableSection.id = 'table-selection-section';
-            tableSection.style.cssText = 'display:none;margin-top:4px';
-
-            const tableHdr = document.createElement('label');
-            tableHdr.textContent = 'Miza';
-            tableHdr.style.cssText = 'display:block;font-size:.8125rem;font-weight:600;color:#374151;margin-bottom:6px';
-            tableSection.appendChild(tableHdr);
-
-            const tableStatus = document.createElement('div');
-            tableStatus.id = 'table-status';
-            tableStatus.style.cssText = 'font-size:.8rem;color:#6B7280;min-height:20px';
-            tableStatus.textContent = 'Izpolnite datum, čas in število gostov za prikaz miz.';
-            tableSection.appendChild(tableStatus);
-
-            const tableRadios = document.createElement('div');
-            tableRadios.id = 'table-radios';
-            tableRadios.style.cssText = 'display:none;flex-direction:column;gap:6px;margin-top:8px';
-            tableSection.appendChild(tableRadios);
-
-            const tableError = document.createElement('div');
-            tableError.id = 'table-no-availability';
-            tableError.style.cssText = 'display:none;font-size:.8rem;color:#DC2626;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:8px 12px;margin-top:6px';
-            tableError.textContent = 'Ni razpoložljivih miz za ta termin. Spremenite čas ali zmanjšajte število gostov.';
-            tableSection.appendChild(tableError);
-
-            // hidden input za prenos izbrane mize
-            const hiddenTableId    = document.createElement('input');
-            hiddenTableId.type = 'hidden'; hiddenTableId.name = 'selected_table_id'; hiddenTableId.id = 'selected_table_id';
-            const hiddenMergeId    = document.createElement('input');
-            hiddenMergeId.type = 'hidden'; hiddenMergeId.name = 'selected_merge_group_id'; hiddenMergeId.id = 'selected_merge_group_id';
-            tableSection.appendChild(hiddenTableId);
-            tableSection.appendChild(hiddenMergeId);
-
-            wrap.appendChild(tableSection);
-
-            // Debounced fetch ko se spremenijo polja
-            let _tFetchTimer = null;
-            function scheduleTableFetch() {
-                if (_tFetchTimer) clearTimeout(_tFetchTimer);
-                _tFetchTimer = setTimeout(fetchAvailableTables, 200);
-            }
-
-            async function fetchAvailableTables() {
-                const ov = document.getElementById('modal-overlay');
-                if (!ov) return;
-                const restIdEl   = ov.querySelector('[name="restaurant_id"]');
-                const dateEl     = ov.querySelector('[name="reservation_date"]');
-                const timeEl     = ov.querySelector('[name="reservation_time"]');
-                const guestEl    = ov.querySelector('[name="guest_count"]');
-                const durationEl = ov.querySelector('[name="duration"]');
-
-                const rId  = restIdEl && restIdEl.value
-                    ? parseInt(restIdEl.value)
-                    : (parseInt(currentData?.restaurantId || currentData?.restaurant_id) || APP_STATE.restaurantId || 0);
-                const date = dateEl    ? dateEl.value               : '';
-                const time = timeEl    ? timeEl.value               : '';
-                const g    = guestEl   ? parseInt(guestEl.value)    : 0;
-                const dur  = durationEl? parseInt(durationEl.value) : 60;
-
-                if (!rId || !date || !time || !g) {
-                    tableSection.style.display = 'none';
-                    return;
-                }
-
-                // Preveri ali ima restavracija mize
-                const rest = APP_STATE.restaurants.find(r => r.id === rId);
-                if (!rest || !rest.has_tables) {
-                    tableSection.style.display = 'none';
-                    return;
-                }
-
-                tableSection.style.display = '';
-                tableStatus.textContent = 'Nalagam mize...';
-                tableRadios.style.display = 'none';
-                tableError.style.display = 'none';
-                hiddenTableId.value = '';
-                hiddenMergeId.value = '';
-
-                try {
-                    const params = new URLSearchParams({ restaurant_id: rId, action: 'available', date, time, guests: g, duration: dur });
-                    const data = await API.get(`/api/tables.php?${params}`);
-                    const tables      = data.tables      || [];
-                    const mergeGroups = data.merge_groups || [];
-
-                    if (!tables.length && !mergeGroups.length) {
-                        tableStatus.textContent = '';
-                        tableError.style.display = 'block';
-                        tableRadios.style.display = 'none';
-                        // Onemogoči submit
-                        const saveBtn = document.getElementById('modal-save-btn');
-                        if (saveBtn) saveBtn.dataset.tableBlocked = '1';
-                        return;
-                    }
-
-                    // Omogoči submit
-                    const saveBtn = document.getElementById('modal-save-btn');
-                    if (saveBtn) delete saveBtn.dataset.tableBlocked;
-                    tableError.style.display = 'none';
-                    tableStatus.textContent = '';
-                    tableRadios.innerHTML = '';
-                    tableRadios.style.display = 'flex';
-
-                    function addRadio(value, type, label, capacity) {
-                        const lbl = document.createElement('label');
-                        lbl.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;border:1.5px solid #E5E7EB;border-radius:8px;cursor:pointer;font-size:.875rem;transition:border-color .15s';
-                        const rb = document.createElement('input');
-                        rb.type = 'radio'; rb.name = '_table_radio'; rb.value = value;
-                        rb.style.accentColor = '#1B4332';
-                        rb.addEventListener('change', () => {
-                            tableRadios.querySelectorAll('label').forEach(l => l.style.borderColor = '#E5E7EB');
-                            lbl.style.borderColor = '#1B4332';
-                            if (type === 'table') {
-                                hiddenTableId.value = value;
-                                hiddenMergeId.value = '';
-                            } else {
-                                hiddenMergeId.value = value;
-                                hiddenTableId.value = '';
-                            }
-                        });
-                        const txt = document.createElement('span');
-                        txt.innerHTML = `<strong>${label}</strong><span style="color:#9CA3AF;font-size:.75rem;margin-left:6px">${capacity} os.</span>`;
-                        lbl.appendChild(rb);
-                        lbl.appendChild(txt);
-                        tableRadios.appendChild(lbl);
-                    }
-
-                    tables.forEach(t => addRadio(t.id, 'table', (t.area_name ? t.area_name + ' – ' : '') + t.name, t.capacity));
-                    mergeGroups.forEach(mg => addRadio(mg.id, 'merge', mg.name, mg.total_capacity));
-
-                    // Samodejno izberi prvo
-                    const firstRb = tableRadios.querySelector('input[type="radio"]');
-                    if (firstRb) {
-                        firstRb.checked = true;
-                        firstRb.dispatchEvent(new Event('change'));
-                        firstRb.closest('label').style.borderColor = '#1B4332';
-                    }
-                } catch (e) {
-                    tableStatus.textContent = 'Napaka pri nalaganju miz.';
-                }
-            }
-
-            // Shrani referenco za validateForm
-            _doTableFetch = fetchAvailableTables;
-
-            // Sproži fetch ob spremembi relevantnih polj + takoj ob odprtju
-            setTimeout(() => {
-                const ov = document.getElementById('modal-overlay');
-                if (!ov) return;
-                ['reservation_date','reservation_time','guest_count','duration','restaurant_id'].forEach(n => {
-                    ov.querySelector(`[name="${n}"]`)?.addEventListener('change', scheduleTableFetch);
-                    ov.querySelector(`[name="${n}"]`)?.addEventListener('input',  scheduleTableFetch);
-                });
-                fetchAvailableTables();
-            }, 0);
+            const placeholder = document.createElement('div');
+            placeholder.id = 'table-selection-section';
+            placeholder.style.cssText = 'margin-top:4px';
+            wrap.appendChild(placeholder);
         }
 
         return wrap;
+    }
+
+    // ── Izbira mize – inicializacija po appendu v DOM ─────────────
+    let _tableFetchTimer = null;
+
+    function initTableSection() {
+        const sec = document.getElementById('table-selection-section');
+        if (!sec) return;
+
+        sec.innerHTML = `
+            <label style="display:block;font-size:.8125rem;font-weight:600;color:#374151;margin-bottom:6px">Miza</label>
+            <div id="ts-status" style="font-size:.8rem;color:#6B7280">Nalagam mize…</div>
+            <div id="ts-radios" style="display:none;flex-direction:column;gap:6px;margin-top:8px"></div>
+            <div id="ts-error" style="display:none;font-size:.8rem;color:#DC2626;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:8px 12px;margin-top:6px">
+                Ni razpoložljivih miz za ta termin.
+            </div>
+            <input type="hidden" name="selected_table_id" id="ts-table-id">
+            <input type="hidden" name="selected_merge_group_id" id="ts-merge-id">
+        `;
+
+        // Event listenerji na poljih
+        ['reservation_date','reservation_time','guest_count','duration','restaurant_id'].forEach(n => {
+            document.querySelector(`#modal-overlay [name="${n}"]`)?.addEventListener('change', scheduleTableRefresh);
+            document.querySelector(`#modal-overlay [name="${n}"]`)?.addEventListener('input',  scheduleTableRefresh);
+        });
+
+        _doTableFetch = refreshTables;
+        refreshTables();
+    }
+
+    function scheduleTableRefresh() {
+        clearTimeout(_tableFetchTimer);
+        _tableFetchTimer = setTimeout(refreshTables, 250);
+    }
+
+    async function refreshTables() {
+        const ov = document.getElementById('modal-overlay');
+        const sec = document.getElementById('table-selection-section');
+        if (!ov || !sec) return;
+
+        const restIdEl   = ov.querySelector('[name="restaurant_id"]');
+        const dateEl     = ov.querySelector('[name="reservation_date"]');
+        const timeEl     = ov.querySelector('[name="reservation_time"]');
+        const guestEl    = ov.querySelector('[name="guest_count"]');
+        const durationEl = ov.querySelector('[name="duration"]');
+
+        const rId = (restIdEl && restIdEl.value)
+            ? parseInt(restIdEl.value)
+            : (parseInt(currentData && (currentData.restaurantId || currentData.restaurant_id)) || APP_STATE.restaurantId || 0);
+        const date = dateEl    ? dateEl.value.trim()        : '';
+        const time = timeEl    ? timeEl.value.trim()        : '';
+        const g    = guestEl   ? parseInt(guestEl.value)    : 0;
+        const dur  = durationEl? parseInt(durationEl.value) : 60;
+
+        const statusEl = document.getElementById('ts-status');
+        const radiosEl = document.getElementById('ts-radios');
+        const errorEl  = document.getElementById('ts-error');
+        const tblId    = document.getElementById('ts-table-id');
+        const mrgId    = document.getElementById('ts-merge-id');
+        const saveBtn  = document.getElementById('modal-save-btn');
+
+        if (!rId || !date || !time || !g) {
+            sec.style.display = 'none';
+            return;
+        }
+
+        // Začasno pokaži sekcijo med nalaganjem (API bo določil končno vidnost)
+        sec.style.display = 'block';
+        if (statusEl) statusEl.textContent = 'Nalagam mize…';
+        if (radiosEl) { radiosEl.innerHTML = ''; radiosEl.style.display = 'none'; }
+        if (errorEl)  errorEl.style.display = 'none';
+        if (tblId)    tblId.value = '';
+        if (mrgId)    mrgId.value = '';
+        if (saveBtn)  delete saveBtn.dataset.tableBlocked;
+
+        try {
+            const params = new URLSearchParams({ restaurant_id: rId, action: 'available', date, time, guests: g, duration: isNaN(dur) ? 60 : dur });
+            const apiData = await API.get(`/api/tables.php?${params}`);
+            const tables      = apiData.tables      || [];
+            const mergeGroups = apiData.merge_groups || [];
+
+            if (!tables.length && !mergeGroups.length) {
+                if (!apiData.restaurant_has_tables) {
+                    // Restavracija sploh nima miz → skrij sekcijo, dovoli oddajo
+                    sec.style.display = 'none';
+                } else {
+                    // Mize so zasedene za ta termin → prikaži napako, blokiraj
+                    if (statusEl) statusEl.textContent = '';
+                    if (errorEl)  errorEl.style.display = 'block';
+                    if (saveBtn)  saveBtn.dataset.tableBlocked = '1';
+                }
+                return;
+            }
+
+            if (statusEl) statusEl.textContent = '';
+            if (radiosEl) {
+                radiosEl.style.display = 'flex';
+
+                // Merge grupe so fallback: prikaži jih samo če ni proste samostojne mize
+                const showMerge = tables.length === 0;
+
+                function addOpt(value, type, label, cap, autoMerge = false) {
+                    const lbl = document.createElement('label');
+                    lbl.style.cssText = 'display:flex;align-items:center;gap:8px;padding:8px 12px;border:1.5px solid #E5E7EB;border-radius:8px;cursor:pointer;font-size:.875rem';
+                    const rb = document.createElement('input');
+                    rb.type = 'radio'; rb.name = '_table_radio'; rb.value = value || 'auto';
+                    rb.style.accentColor = '#1B4332';
+                    rb.addEventListener('change', () => {
+                        radiosEl.querySelectorAll('label').forEach(l => l.style.borderColor = '#E5E7EB');
+                        lbl.style.borderColor = '#1B4332';
+                        if (autoMerge) {
+                            // Samodejno združevanje – pustimo ID-je prazne, backend sam dodeli
+                            if (tblId) tblId.value = '';
+                            if (mrgId) mrgId.value = '';
+                        } else {
+                            if (tblId) tblId.value = type === 'table' ? value : '';
+                            if (mrgId) mrgId.value = type === 'merge' ? value : '';
+                        }
+                    });
+                    const suffix = autoMerge ? ' <span style="font-size:.7rem;color:#6B7280">(samodejno)</span>' : '';
+                    lbl.innerHTML = `<strong style="font-size:.875rem">${label}</strong><span style="color:#9CA3AF;font-size:.75rem;margin-left:6px">${cap} os.</span>${suffix}`;
+                    lbl.prepend(rb);
+                    radiosEl.appendChild(lbl);
+                }
+
+                function addSectionHeader(text) {
+                    const h = document.createElement('div');
+                    h.style.cssText = 'font-size:.7rem;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.06em;padding:6px 2px 2px';
+                    h.textContent = text;
+                    radiosEl.appendChild(h);
+                }
+
+                if (tables.length) {
+                    tables.forEach(t => addOpt(t.id, 'table', (t.area_name ? t.area_name + ' – ' : '') + t.name, t.capacity));
+                } else if (showMerge && mergeGroups.length) {
+                    addSectionHeader('Združene mize');
+                    mergeGroups.forEach(mg => addOpt(mg.id, 'merge', mg.name, mg.total_capacity, !!mg.auto_merge));
+                }
+
+                const first = radiosEl.querySelector('input[type="radio"]');
+                if (first) { first.checked = true; first.dispatchEvent(new Event('change')); first.closest('label').style.borderColor = '#1B4332'; }
+            }
+        } catch (e) {
+            if (statusEl) statusEl.textContent = 'Napaka: ' + e.message;
+        }
     }
 
     function makeField(name, label, required = false) {
@@ -773,19 +772,65 @@ const ReservationModal = (() => {
             }
         }
 
-        // Validacija časa znotraj urnika restavracije
-        const timeEl = overlay.querySelector('[name="reservation_time"]');
-        if (timeEl && timeEl.value) {
-            let schedRestId;
-            if (APP_STATE.role === 'admin' && currentMode === 'create') {
-                schedRestId = overlay.querySelector('[name="restaurant_id"]')?.value;
-            } else if (currentMode === 'edit') {
-                schedRestId = currentData?.restaurant_id;
-            } else {
-                schedRestId = APP_STATE.restaurantId;
+        // Validacija datuma in časa glede na urnik + blackout (za zaposlene brez override)
+        const dateEl2 = overlay.querySelector('[name="reservation_date"]');
+        const timeEl  = overlay.querySelector('[name="reservation_time"]');
+
+        let schedRestId;
+        if (APP_STATE.role === 'admin' && currentMode === 'create') {
+            schedRestId = overlay.querySelector('[name="restaurant_id"]')?.value;
+        } else if (currentMode === 'edit') {
+            schedRestId = currentData?.restaurant_id;
+        } else {
+            schedRestId = APP_STATE.restaurantId;
+        }
+        const rest = schedRestId ? APP_STATE.restaurants.find(r => r.id == schedRestId) : null;
+        const canOverride = rest ? !!rest.employees_can_override_schedule : true;
+
+        if (rest && dateEl2 && dateEl2.value && !canOverride && currentMode === 'create') {
+            const dateVal = dateEl2.value;
+            function fmt(m) { return String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0'); }
+
+            // Preverba izklopljenih dni
+            const dt   = new Date(dateVal + 'T12:00:00');
+            const dow  = (dt.getDay() + 6) % 7; // 0=Pon
+            const dsDay = (rest.day_schedules || []).find(d => d.day_of_week === dow);
+            if (dsDay && !dsDay.is_open) {
+                const errSpan = dateEl2.closest('.field')?.querySelector('.field-error');
+                if (errSpan) errSpan.textContent = 'Ta dan je zaprt. Kontaktirajte admina, da vklopi rezervacije za ta dan.';
+                dateEl2.closest('.field')?.classList.add('invalid');
+                valid = false;
             }
-            const rest = schedRestId ? APP_STATE.restaurants.find(r => r.id == schedRestId) : null;
-            if (rest && rest.schedule_start != null && rest.schedule_end != null) {
+
+            // Preverba blokiranih datumov
+            if (valid) {
+                const blackouts = rest.blackout_dates || [];
+                const blk = blackouts.find(b => b.date === dateVal);
+                if (blk) {
+                    if (blk.block_start === null) {
+                        // Cel dan blokiran
+                        const errSpan = dateEl2.closest('.field')?.querySelector('.field-error');
+                        if (errSpan) errSpan.textContent = 'Ta datum je blokiran. Kontaktirajte admina, da vklopi rezervacije za ta dan.';
+                        dateEl2.closest('.field')?.classList.add('invalid');
+                        valid = false;
+                    } else if (timeEl && timeEl.value) {
+                        // Delno blokiran – preverimo čas
+                        const [th, tm] = timeEl.value.split(':').map(Number);
+                        const tMins = th * 60 + tm;
+                        if (tMins >= blk.block_start && tMins < blk.block_end) {
+                            const errSpan = timeEl.closest('.field')?.querySelector('.field-error');
+                            if (errSpan) errSpan.textContent = `Ta čas je blokiran (${fmt(blk.block_start)}–${fmt(blk.block_end)}). Kontaktirajte admina.`;
+                            timeEl.closest('.field')?.classList.add('invalid');
+                            valid = false;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Validacija časa znotraj urnika restavracije
+        if (timeEl && timeEl.value && rest && valid) {
+            if (rest.schedule_start != null && rest.schedule_end != null) {
                 const [hh, mm] = timeEl.value.split(':').map(Number);
                 const timeMins = hh * 60 + mm;
                 function fmt(m) { return String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0'); }
@@ -800,51 +845,35 @@ const ReservationModal = (() => {
 
         // Blokira submit, če restavracija ima mize ampak nobena ni izbrana
         if (currentMode === 'create' && APP_STATE.hasTableMgmt) {
-            const rIdEl = overlay.querySelector('[name="restaurant_id"]');
-            const rId   = (rIdEl && rIdEl.value)
-                ? parseInt(rIdEl.value)
-                : (parseInt(currentData?.restaurantId || currentData?.restaurant_id) || APP_STATE.restaurantId || 0);
-            const rest  = rId ? APP_STATE.restaurants.find(r => r.id === rId) : null;
-
-            if (rest && rest.has_tables) {
-                const saveBtn       = document.getElementById('modal-save-btn');
-                const tableErrDiv   = document.getElementById('table-no-availability');
-                const tableSection  = document.getElementById('table-selection-section');
-                const selTableId    = (overlay.querySelector('[name="selected_table_id"]')?.value  || '').trim();
-                const selMergeId    = (overlay.querySelector('[name="selected_merge_group_id"]')?.value || '').trim();
+            const tableSection = document.getElementById('table-selection-section');
+            // Sekcija je vidna samo če je API vrnil mize za to restavracijo
+            if (tableSection && tableSection.style.display === 'block') {
+                const saveBtn    = document.getElementById('modal-save-btn');
+                const errorEl    = document.getElementById('ts-error');
+                const selTableId = (overlay.querySelector('[name="selected_table_id"]')?.value  || '').trim();
+                const selMergeId = (overlay.querySelector('[name="selected_merge_group_id"]')?.value || '').trim();
 
                 if (saveBtn && saveBtn.dataset.tableBlocked) {
-                    // Ni prostih miz
-                    if (tableErrDiv) {
-                        tableErrDiv.style.display = 'block';
-                        tableErrDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    // Termin zaseden – prikaži napako
+                    if (errorEl) {
+                        errorEl.style.display = 'block';
+                        errorEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                     }
                     valid = false;
                 } else if (!selTableId && !selMergeId) {
-                    // Miza ni izbrana – pokliči fetch in blokiraj
-                    if (tableSection) {
-                        tableSection.style.display = '';
-                        const statusEl = document.getElementById('table-status');
-                        if (statusEl && !statusEl.textContent.includes('Napaka')) {
-                            statusEl.textContent = 'Nalagam mize…';
-                        }
+                    // Miza ni izbrana
+                    let msgEl = document.getElementById('table-required-msg');
+                    if (!msgEl) {
+                        msgEl = document.createElement('div');
+                        msgEl.id = 'table-required-msg';
+                        msgEl.style.cssText = 'font-size:.8rem;color:#DC2626;margin-top:6px';
+                        tableSection.appendChild(msgEl);
                     }
-                    if (_doTableFetch) _doTableFetch();
-                    // Prikaži napako pod table section
-                    if (tableSection) {
-                        let msgEl = document.getElementById('table-required-msg');
-                        if (!msgEl) {
-                            msgEl = document.createElement('div');
-                            msgEl.id = 'table-required-msg';
-                            msgEl.style.cssText = 'font-size:.8rem;color:#DC2626;margin-top:6px';
-                            tableSection.appendChild(msgEl);
-                        }
-                        msgEl.textContent = 'Izberite mizo za to rezervacijo.';
-                        tableSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                    }
+                    msgEl.textContent = 'Izberite mizo za to rezervacijo.';
+                    tableSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                     valid = false;
                 } else {
-                    // Miza je izbrana – počisti morebitno napako
+                    // Miza je izbrana – počisti napako
                     const msgEl = document.getElementById('table-required-msg');
                     if (msgEl) msgEl.textContent = '';
                 }
@@ -994,23 +1023,36 @@ const ReservationModal = (() => {
 
     // ── Prestavi mizo (dialog) ────────────────────────────────────
     async function openTableMoveDialog(data, box) {
-        const base = APP_STATE.base || '';
-        const restId = data.restaurant_id;
-        if (!restId) return;
+        const base    = APP_STATE.base || '';
+        const restId  = data.restaurant_id;
+        const date    = data.reservation_date || '';
+        const time    = (data.reservation_time || '').substring(0, 5);
+        const guests  = parseInt(data.guest_count) || 1;
+        const dur     = parseInt(data.duration) || 60;
+        if (!restId || !date || !time) return;
 
-        // Naloži razpoložljive mize za restavracijo
-        let tablesResp;
+        // Naloži razpoložljive mize za ta termin (izključi to rezervacijo)
+        let apiData;
         try {
-            const r = await fetch(`${base}/api/tables.php?restaurant_id=${restId}`, { credentials:'same-origin' });
-            tablesResp = await r.json();
+            const params = new URLSearchParams({ restaurant_id: restId, action: 'available', date, time, guests, duration: dur, exclude_reservation_id: data.id });
+            const r = await fetch(`${base}/api/tables.php?${params}`, { credentials:'same-origin' });
+            const json = await r.json();
+            if (!json.success) throw new Error(json.error || 'Napaka');
+            apiData = json.data;
         } catch(e) { if (window.App) App.showToast('Napaka pri nalaganju miz.','error'); return; }
-        if (!tablesResp.success || !tablesResp.data?.tables?.length) {
-            if (window.App) App.showToast('Za to restavracijo ni definiranih miz.','error');
+
+        const tables = apiData.tables || [];
+        // Merge grupe so fallback: prikaži samo če ni proste samostojne mize
+        const showMerge = tables.length === 0;
+        const mergeGroups = showMerge ? (apiData.merge_groups || []) : [];
+
+        if (!tables.length && !mergeGroups.length) {
+            if (window.App) App.showToast('Za ta termin ni razpoložljivih miz.', 'warning');
             return;
         }
 
-        const allTables = tablesResp.data.tables.filter(t => t.is_active);
-        const currentAssigned = (data.table_assignments || []).map(a => a.table_id);
+        const currentAssigned    = (data.table_assignments || []).map(a => a.table_id);
+        const currentMergeGrpId  = (data.table_assignments || []).find(a => a.merge_group_id)?.merge_group_id || null;
 
         // Mini-dialog overlay
         const overlay = document.createElement('div');
@@ -1018,47 +1060,83 @@ const ReservationModal = (() => {
 
         const dlg = document.createElement('div');
         dlg.style.cssText = 'background:#fff;border-radius:14px;max-width:420px;width:100%;padding:24px;box-shadow:0 8px 30px rgba(0,0,0,.18)';
+
+        const list = document.createElement('div');
+        list.style.cssText = 'display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;margin-bottom:16px';
+
+        function addMoveOpt(value, type, label, cap, isCurrent) {
+            const lbl = document.createElement('label');
+            lbl.style.cssText = `display:flex;align-items:center;gap:8px;padding:8px 12px;border:1.5px solid ${isCurrent?'#7C3AED':'#E5E7EB'};border-radius:8px;cursor:pointer;background:${isCurrent?'#F5F3FF':'#FAFAFA'}`;
+            lbl.innerHTML = `
+                <input type="radio" name="move-table" value="${value}" data-type="${type}" ${isCurrent?'checked':''} style="accent-color:#7C3AED;flex-shrink:0">
+                <span style="flex:1;font-size:.875rem;font-weight:500">${label}</span>
+                <span style="font-size:.75rem;color:#6B7280">${cap} os.</span>
+            `;
+            lbl.querySelector('input').addEventListener('change', () => {
+                list.querySelectorAll('label').forEach(l => { l.style.borderColor='#E5E7EB'; l.style.background='#FAFAFA'; });
+                lbl.style.borderColor = '#7C3AED';
+                lbl.style.background  = '#F5F3FF';
+            });
+            list.appendChild(lbl);
+        }
+
+        tables.forEach(t => {
+            const isCurrent = currentAssigned.includes(t.id) && !currentMergeGrpId;
+            addMoveOpt(t.id, 'table', escText(t.area_name ? t.area_name + ' – ' + t.name : t.name), t.capacity, isCurrent);
+        });
+
+        if (mergeGroups.length) {
+            const hdr = document.createElement('div');
+            hdr.style.cssText = 'font-size:.7rem;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.06em;padding:6px 2px 2px';
+            hdr.textContent = 'Združene mize';
+            list.appendChild(hdr);
+            mergeGroups.forEach(mg => {
+                const isCurrent = currentMergeGrpId == mg.id;
+                addMoveOpt(mg.id, 'merge', escText(mg.name), mg.total_capacity, isCurrent);
+            });
+        }
+
         dlg.innerHTML = `
             <h3 style="margin:0 0 16px;font-size:1rem;font-weight:700">Prestavi mizo</h3>
-            <p style="font-size:.8rem;color:#6B7280;margin:0 0 12px">Izberite mizo za rezervacijo <strong>${escText(data.guest_name)}</strong> (${data.guest_count} os.):</p>
-            <div id="move-table-list" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;margin-bottom:16px">
-                ${allTables.map(t => `
-                    <label style="display:flex;align-items:center;gap:8px;padding:8px 12px;border:1.5px solid ${currentAssigned.includes(t.id)?'#7C3AED':'#E5E7EB'};border-radius:8px;cursor:pointer;background:${currentAssigned.includes(t.id)?'#F5F3FF':'#FAFAFA'}">
-                        <input type="radio" name="move-table" value="${t.id}" ${currentAssigned.includes(t.id)?'checked':''} style="accent-color:#7C3AED">
-                        <span style="flex:1;font-size:.875rem;font-weight:500">${escText(t.name)}</span>
-                        <span style="font-size:.75rem;color:#6B7280">${t.capacity} os.</span>
-                        ${t.area_name ? `<span style="font-size:.7rem;padding:2px 6px;border-radius:4px;background:#EDE9FE;color:#5B21B6">${escText(t.area_name)}</span>` : ''}
-                    </label>
-                `).join('')}
-            </div>
+            <p style="font-size:.8rem;color:#6B7280;margin:0 0 12px">Izberite mizo za <strong>${escText(data.guest_name)}</strong> (${data.guest_count} os.):</p>
+        `;
+        dlg.appendChild(list);
+        dlg.insertAdjacentHTML('beforeend', `
             <div style="display:flex;gap:8px;justify-content:flex-end">
                 <button id="move-cancel" class="btn btn-ghost">Prekliči</button>
                 <button id="move-confirm" class="btn btn-primary" style="background:#7C3AED;border-color:#7C3AED">Prestavi</button>
             </div>
-        `;
+        `);
 
         overlay.appendChild(dlg);
         document.body.appendChild(overlay);
         overlay.addEventListener('click', e => { if(e.target===overlay) overlay.remove(); });
-        document.getElementById('move-cancel').addEventListener('click', () => overlay.remove());
+        dlg.querySelector('#move-cancel').addEventListener('click', () => overlay.remove());
 
-        document.getElementById('move-confirm').addEventListener('click', async () => {
+        dlg.querySelector('#move-confirm').addEventListener('click', async () => {
             const sel = dlg.querySelector('input[name="move-table"]:checked');
             if (!sel) { if(window.App) App.showToast('Izberite mizo.','error'); return; }
-            const tableId = parseInt(sel.value);
+            const type    = sel.dataset.type;
+            const selId   = parseInt(sel.value);
+            let payload;
+            if (type === 'merge') {
+                const mg = mergeGroups.find(m => m.id == selId);
+                payload = { reservation_id: data.id, table_ids: mg.table_ids, merge_group_id: selId };
+            } else {
+                payload = { reservation_id: data.id, table_ids: [selId], merge_group_id: null };
+            }
             try {
                 const res = await fetch(`${base}/api/table_assignment.php`, {
                     method: 'PUT',
                     headers: { 'Content-Type':'application/json' },
                     credentials: 'same-origin',
-                    body: JSON.stringify({ reservation_id: data.id, table_ids: [tableId], merge_group_id: null }),
+                    body: JSON.stringify(payload),
                 });
                 const json = await res.json();
                 if (!json.success) throw new Error(json.error || 'Napaka');
                 overlay.remove();
                 if (window.App) App.showToast('Miza prestavljena.','success');
-                // Osveži modal z novimi podatki
-                data.table_assignments = json.data?.table_assignments || [{ table_id: tableId, table_name: sel.closest('label').querySelector('span').textContent }];
+                data.table_assignments = json.data?.table_assignments || [];
                 open('view', data);
             } catch(e) { if(window.App) App.showToast(e.message,'error'); }
         });

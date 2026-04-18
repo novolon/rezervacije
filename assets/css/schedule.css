@@ -14,7 +14,6 @@
     font-weight: 700;
     color: var(--color-text);
     letter-spacing: -.01em;
-    margin-bottom: 8px;
 }
 
 .schedule-meta {
@@ -46,19 +45,22 @@
 
 #btn-today {
     font-size: .75rem;
-    padding: 5px 12px;
-    border-radius: 7px;
-    background: var(--color-accent);
-    color: #fff;
+    color: var(--color-accent);
     border: none;
     cursor: pointer;
     font-family: var(--font);
     font-weight: 600;
-    transition: background var(--transition);
     white-space: nowrap;
 }
 
-#btn-today:hover { background: var(--color-accent-hover); }
+#btn-today:hover { color: var(--color-accent-hover); }
+
+.schedule-date-label-wrap {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    margin-bottom: 4px;
+}
 
 /* Gumb za novo rezervacijo */
 .schedule-add-btn {
@@ -168,7 +170,7 @@
     background: var(--color-surface);
     border-radius: 8px;
     border-left: 3px solid var(--color-accent);
-    padding: 8px 10px;
+    padding: 6px 6px;
     cursor: pointer;
     box-shadow: var(--shadow);
     transition: box-shadow var(--transition), transform var(--transition);
@@ -178,7 +180,7 @@
 
 .reservation-card:hover {
     box-shadow: var(--shadow-md);
-    transform: translateY(-1px);
+    filter: brightness(.96);
 }
 
 .card-name {
@@ -188,6 +190,7 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    line-height: 1em;
 }
 
 .card-meta {
@@ -286,7 +289,7 @@
     cursor: cell;
 }
 
-/* Mrežne črte */
+/* Mrežne črte – stari vertikalni layout (ne briši, je fallback) */
 .tl-grid-line {
     position: absolute;
     left: 0;
@@ -295,6 +298,19 @@
     background: var(--color-border);
     z-index: 0;
     pointer-events: none;
+}
+
+/* Mrežne črte – horizontalni Gantt (vertikalne linije po urah) */
+.tl-row-content .tl-grid-line {
+    left: auto;
+    right: auto;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    height: auto;
+    background: var(--color-border, #E5E7EB);
+    opacity: 0.6;
+    margin-left: -1px;
 }
 
 .tl-grid-minor {
@@ -320,6 +336,63 @@
     border-left: 3px solid transparent;
 }
 
+/* Overlay za zaprte/blokirane dni */
+.tl-block-overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    z-index: 1;
+    pointer-events: none;
+    border-radius: 4px;
+}
+.tl-block-overlay.full {
+    top: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+        -45deg,
+        rgba(220,38,38,.06),
+        rgba(220,38,38,.06) 6px,
+        rgba(220,38,38,.02) 6px,
+        rgba(220,38,38,.02) 12px
+    );
+    border-left: 3px solid rgba(220,38,38,.35);
+}
+.tl-block-overlay.partial {
+    background: repeating-linear-gradient(
+        -45deg,
+        rgba(245,158,11,.08),
+        rgba(245,158,11,.08) 6px,
+        rgba(245,158,11,.03) 6px,
+        rgba(245,158,11,.03) 12px
+    );
+    border-left: 3px solid rgba(245,158,11,.45);
+}
+.tl-block-overlay.closed {
+    top: 0;
+    bottom: 0;
+    background: repeating-linear-gradient(
+        -45deg,
+        rgba(107,114,128,.05),
+        rgba(107,114,128,.05) 6px,
+        rgba(107,114,128,.02) 6px,
+        rgba(107,114,128,.02) 12px
+    );
+    border-left: 3px solid rgba(107,114,128,.3);
+}
+.tl-block-label {
+    position: absolute;
+    top: 6px;
+    left: 8px;
+    font-size: .68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    pointer-events: none;
+}
+.tl-block-overlay.full   .tl-block-label { color: rgba(220,38,38,.6); }
+.tl-block-overlay.partial .tl-block-label { color: rgba(180,90,0,.6); }
+.tl-block-overlay.closed  .tl-block-label { color: rgba(107,114,128,.55); }
+
 /* Responsive – telefon */
 @media (max-width: 768px) {
     .schedule-header { padding: 12px 14px 10px; }
@@ -339,4 +412,369 @@
     .reservation-card { padding: 6px 8px; }
     .card-name { font-size: .78rem; }
     .card-time { font-size: .68rem; }
+}
+
+/* =============================================
+   Horizontalni Gantt layout (nova postavitev)
+   ============================================= */
+
+.app-layout-v2 {
+    display: flex;
+    flex-direction: column;
+    padding: calc(var(--header-h) + 24px) 20px 24px 20px;
+    gap: 0;
+    min-height: calc(100vh - 64px);
+}
+
+/* Zgornja vrstica: datum, stats, gumb dodaj */
+.schedule-top-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 0 14px;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+
+.schedule-top-bar-left {
+    display: flex;
+    flex-wrap: wrap;
+    flex-direction: column;
+}
+
+.schedule-top-bar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.schedule-top-bar .btn-add-reservation {
+    flex: none;
+    padding: 9px 20px;
+    white-space: nowrap;
+}
+
+/* schedule-body: v novi postavitvi brez scroll-a */
+.app-layout-v2 .schedule-body {
+    overflow: visible;
+    padding-bottom: 0;
+    flex: none;
+}
+
+/* Wrapper za horizontalni scroll */
+.tl-wrap {
+    overflow-x: auto;
+    overflow-y: visible;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius);
+    background: var(--color-surface);
+}
+
+/* Header vrstica: corner + časovna os */
+.tl-time-header {
+    display: flex;
+    border-bottom: 2px solid var(--color-border);
+    background: var(--color-bg);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    min-width: 1040px;
+}
+
+/* Corner (nad label stolpcem) */
+.tl-corner {
+    width: 140px;
+    min-width: 140px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--color-border);
+    background: var(--color-bg);
+}
+
+/* Časovna os */
+.tl-time-axis {
+    flex: 1;
+    position: relative;
+    height: 36px;
+    min-width: 900px;
+}
+
+.tl-time-axis .tl-hour-label {
+    position: absolute;
+    top: 50%;
+    right: auto;
+    transform: translate(-50%, -50%);
+    font-size: .72rem;
+    font-weight: 600;
+    color: var(--color-muted);
+    white-space: nowrap;
+    pointer-events: none;
+    background: transparent;
+}
+
+.tl-time-axis .tl-hour-label:nth-last-child(2) {
+    transform: translate(-100%, -50%);
+    padding-right: 5px;
+}
+
+.tl-time-axis .tl-hour-label:first-child {
+    transform: translate(0%, -50%);
+    padding-left: 5px;
+}
+
+/* Now badge v headerju */
+.tl-now-badge {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    transform: translateX(-50%);
+    background: #F59E0B;
+    color: #fff;
+    font-size: .7rem;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    white-space: nowrap;
+    z-index: 3;
+    pointer-events: none;
+}
+
+/* Body: stolpec vrstic */
+.tl-body {
+    display: flex;
+    flex-direction: column;
+    min-width: 1040px;
+}
+
+/* Vrstica */
+.tl-row {
+    display: flex;
+    border-bottom: 1px solid var(--color-border);
+    min-height: 48px;
+}
+
+.tl-row:last-child {
+    border-bottom: none;
+}
+
+/* Label stolpec */
+.tl-row-label {
+    width: 140px;
+    min-width: 140px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 6px 12px;
+    border-right: 1px solid var(--color-border);
+    background: var(--color-bg);
+    position: sticky;
+    left: 0;
+    z-index: 10;
+}
+
+.tl-row-label-name {
+    font-size: .8rem;
+    font-weight: 600;
+    color: var(--color-text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tl-row-label-area {
+    font-size: .68rem;
+    color: var(--color-muted);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Content area */
+.tl-row-content {
+    flex: 1;
+    position: relative;
+    height: 48px;
+    min-width: 900px;
+    cursor: cell;
+    transition: background var(--transition);
+}
+
+.tl-row-content:hover {
+    background: rgba(245,158,11,.02);
+}
+
+/* Enojni row (brez miz – brez labela) */
+.tl-row.tl-row-single .tl-row-content {
+    min-height: 48px;
+    height: auto;
+}
+
+/* Overlays v horizontalnem načinu */
+.tl-row-content .tl-block-overlay {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: auto;
+    z-index: 1;
+    pointer-events: none;
+    border-radius: 0;
+}
+
+.tl-row-content .tl-block-overlay.partial,
+.tl-row-content .tl-block-overlay.tl-off-hours {
+    right: auto; /* left + width nastavljata pozicijo */
+}
+
+/* Off-hours (izven terminov) – indigo */
+.tl-row-content .tl-block-overlay.tl-off-hours {
+    background: repeating-linear-gradient(
+        -45deg,
+        rgba(107,114,128,.07),
+        rgba(107,114,128,.07) 6px,
+        rgba(107,114,128,.025) 6px,
+        rgba(107,114,128,.025) 12px
+    );
+    border-left: 2px solid rgba(107,114,128,.25);
+}
+
+/* Label znotraj horizontalnega overlaya */
+.tl-row-content .tl-block-label {
+    top: 50%;
+    transform: translateY(-50%);
+    white-space: nowrap;
+    overflow: hidden;
+}
+
+/* Oranžna now-line v vrstici */
+.tl-now-line {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #F59E0B;
+    transform: translateX(-50%);
+    z-index: 4;
+    pointer-events: none;
+}
+
+/* Merged miza placeholder */
+.tl-merged-placeholder {
+    position: absolute;
+    background: var(--color-bg);
+    border: 1px dashed var(--color-border);
+    border-left: 3px solid #9CA3AF;
+    border-radius: 8px;
+    padding: 0 10px;
+    cursor: pointer;
+    font-size: .75rem;
+    color: var(--color-muted);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-sizing: border-box;
+    z-index: 2;
+}
+
+.tl-merged-placeholder:hover {
+    background: rgba(0,0,0,.03);
+}
+
+/* Single-row mode: skrij corner da se čas axis poravna z vrstico */
+.tl-wrap--no-label .tl-corner {
+    width: 0;
+    min-width: 0;
+    border-right: none;
+    padding: 0;
+    overflow: hidden;
+}
+
+/* Ločnica med conami (area separator) */
+.tl-area-sep {
+    height: 6px;
+    background: var(--color-bg);
+    border-bottom: 1px solid var(--color-border);
+    border-top: 1px solid var(--color-border);
+}
+
+/* Izmenični background vrstic */
+.tl-row:nth-child(even) .tl-row-content {
+    background: rgba(0,0,0,.018);
+}
+.tl-row:nth-child(even) .tl-row-label {
+    background: #FAFAFA;
+}
+
+/* Legenda */
+.tl-legend {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    border-top: 1px solid var(--color-border);
+    background: var(--color-bg);
+    position: sticky;
+    left: 0;
+    justify-content: center;
+}
+
+.tl-legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: .72rem;
+    color: var(--color-muted);
+    white-space: nowrap;
+}
+
+.tl-legend-dot {
+    display: inline-block;
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+/* Spodnja vrstica: koledar + čakajoče */
+.schedule-bottom-row {
+    display: flex;
+    gap: 24px;
+    padding-top: 20px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+}
+
+.schedule-bottom-row .calendar-wrapper {
+    flex: none;
+}
+
+.schedule-bottom-row .pending-section {
+    flex: 1;
+    min-width: 280px;
+}
+
+/* Mobile */
+@media (max-width: 768px) {
+    .app-layout-v2 {
+        padding: 10px 12px 20px;
+    }
+    .schedule-top-bar {
+        padding-bottom: 10px;
+        gap: 8px;
+    }
+    .tl-corner,
+    .tl-row-label {
+        width: 90px;
+        min-width: 90px;
+    }
+    .tl-row-label-name { font-size: .72rem; }
+    .schedule-bottom-row { gap: 16px; }
 }

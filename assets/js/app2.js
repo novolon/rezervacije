@@ -186,19 +186,6 @@
     }
 
     function getActiveScheduleBounds() {
-        const dayIdx = (state.currentDate.getDay() + 6) % 7;
-        const r = APP_STATE.restaurants.find(x => x.id === state.restaurantId) || APP_STATE.restaurants[0];
-        if (!r) return { start: 480, end: 1380 };
-        // Najprej day_periods (multi-period), fallback na day_schedules
-        const periods = (r.day_periods || []).length > 0
-            ? (r.day_periods || []).filter(d => d.day_of_week === dayIdx)
-            : (r.day_schedules || []).filter(d => d.day_of_week === dayIdx && d.is_open);
-        if (periods.length > 0) {
-            return {
-                start: Math.min(...periods.map(p => p.start_time)),
-                end:   Math.max(...periods.map(p => p.end_time)),
-            };
-        }
         return { start: 480, end: 1380 };
     }
 

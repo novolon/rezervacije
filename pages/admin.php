@@ -161,19 +161,20 @@ if (!empty($_SESSION['payment_failed'])) {
                                 <th>Ime</th>
                                 <th>Email / Uporabniško ime</th>
                                 <th>Restavracija</th>
+                                <th>Vloga</th>
                                 <th>Status</th>
                                 <th></th>
                             </tr>
                         </thead>
                         <tbody id="users-tbody">
-                            <tr><td colspan="5" class="table-empty">Nalagam...</td></tr>
+                            <tr><td colspan="6" class="table-empty">Nalagam...</td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
 
             <div style="margin-top:16px;padding:14px 16px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:var(--radius);font-size:.825rem;color:#1D4ED8">
-                <strong>Opomba:</strong> Uporabniki vidijo in upravljajo rezervacije samo za svojo dodeljeno restavracijo. Dodajate jih lahko samo k lastnim restavracijam.
+                <strong>Vloge:</strong> <strong>Uporabnik</strong> – vidi in ureja rezervacije za dodeljeno restavracijo. <strong>Admin</strong> – upravlja restavracijo (urnik, nastavitve, zaposleni). Dodajate jih lahko samo k lastnim restavracijam.
             </div>
         </div>
     </div>
@@ -194,7 +195,7 @@ window.APP_STATE = <?= json_encode([
 </script>
 
 <script src="<?= BASE_PATH ?>/assets/js/api.js?v=2"></script>
-<script src="<?= BASE_PATH ?>/assets/js/admin.js?v=7"></script>
+<script src="<?= BASE_PATH ?>/assets/js/admin.js?v=9"></script>
 
 </body>
 </html>

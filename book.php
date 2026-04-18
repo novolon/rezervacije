@@ -263,10 +263,29 @@ $apiBase = BASE_PATH . '/api/book.php';
                 </div>
             </div>
 
+            <!-- ── Korak 3b: Izbira cone (opcijsko) ── -->
+            <div id="step-3b" class="step">
+                <div class="flex items-center gap-3 mb-2">
+                    <button onclick="goStep(3)" class="text-forest/50 hover:text-forest transition-colors">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+                    </button>
+                    <h2 class="text-2xl font-bold text-forest">Izberite prostor</h2>
+                </div>
+                <p id="step3b-subtitle" class="text-sm text-forest/60 mb-6 ml-9"></p>
+
+                <div id="area-loading" class="text-center py-10 text-forest/40">
+                    <svg class="animate-spin mx-auto mb-3" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                    </svg>
+                    Nalagam razpoložljivost...
+                </div>
+                <div id="area-btns" class="hidden space-y-3"></div>
+            </div>
+
             <!-- ── Korak 4: Podatki ── -->
             <div id="step-4" class="step">
                 <div class="flex items-center gap-3 mb-2">
-                    <button onclick="goStep(3)" class="text-forest/50 hover:text-forest transition-colors">
+                    <button onclick="state.restaurant?.allow_area_choice ? goStep('3b') : goStep(3)" class="text-forest/50 hover:text-forest transition-colors">
                         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
                     </button>
                     <h2 class="text-2xl font-bold text-forest">Vaši podatki</h2>
@@ -394,6 +413,7 @@ const state = {
     guests:        null,
     date:          null,
     time:          null,
+    areaId:        null,   // izbrana cona (null = vseeno mi je)
     calYear:       new Date().getFullYear(),
     calMonth:      new Date().getMonth(), // 0-based
     _isWaitlist:   false,
@@ -564,16 +584,13 @@ function renderCalendar() {
         const cell = document.createElement('div');
         cell.textContent = d;
 
-        const isFutureUnavailable = !isPast && (!isOpen || isBlackout);
         if (isPast) {
             cell.className = `cal-day disabled${isToday ? ' today' : ''}`;
-        } else if (isFutureUnavailable && state.restaurant?.waitlist_enabled) {
-            // Klikljiv za čakalno listo – brez 'disabled' razreda (pointer-events:none)
-            cell.className = `cal-day cal-day-waitlist${isToday ? ' today' : ''}`;
-            cell.title = 'Ni terminov – kliknite za čakalno listo';
-            cell.style.opacity = '0.45';
-            cell.onclick = () => selectDateWaitlist(dateStr);
-        } else if (isFutureUnavailable) {
+        } else if (isBlackout) {
+            // Popolnoma blokiran datum – ni klika
+            cell.className = `cal-day disabled${isToday ? ' today' : ''}`;
+        } else if (!isOpen) {
+            // Izklopljen dan v tednu – ni klika (brez čakalne liste)
             cell.className = `cal-day disabled${isToday ? ' today' : ''}`;
         } else {
             cell.className = `cal-day available${isToday ? ' today' : ''}${isSelected ? ' selected' : ''}`;
@@ -719,11 +736,80 @@ async function loadSlots(date) {
 
 function selectSlot(time, btn) {
     state.time = time;
+    state.areaId = null;
     document.querySelectorAll('.slot-btn').forEach(b => b.classList.remove('selected'));
     btn.classList.add('selected');
-    // Skrij morebitni odprti waitlist panel
     state._isWaitlist = false;
     document.getElementById('slot-waitlist-panel')?.classList.add('hidden');
+
+    if (state.restaurant?.allow_area_choice) {
+        setTimeout(() => loadAreas(state.date, time), 200);
+    } else {
+        setTimeout(() => goStep(4), 200);
+    }
+}
+
+async function loadAreas(date, time) {
+    const areaLoading = document.getElementById('area-loading');
+    const areaBtns    = document.getElementById('area-btns');
+    areaLoading.classList.remove('hidden');
+    areaBtns.classList.add('hidden');
+    areaBtns.innerHTML = '';
+
+    goStep('3b');
+
+    // Podnaslov
+    const d = new Date(date + 'T12:00:00');
+    const dow = DAYS_SL[(d.getDay() + 6) % 7];
+    document.getElementById('step3b-subtitle').textContent =
+        `${dow}, ${d.getDate()}. ${MONTHS[d.getMonth()]} ${d.getFullYear()} · ${time} · ${state.guests} ${guestLabel(state.guests)}`;
+
+    try {
+        const res  = await fetch(`${API_URL}?t=${encodeURIComponent(TOKEN)}&date=${date}&time=${time}&guest_count=${state.guests || 1}`);
+        const json = await res.json();
+        if (!json.success) throw new Error(json.error);
+
+        const areas = json.data?.areas || [];
+        areaLoading.classList.add('hidden');
+
+        // Gumb "Vseeno mi je" (vedno na vrhu)
+        const anyBtn = document.createElement('button');
+        anyBtn.className = 'w-full text-left border-2 border-sage-light rounded-2xl px-5 py-4 hover:border-forest transition-colors';
+        anyBtn.innerHTML = `<div class="font-semibold text-forest">Vseeno mi je</div>
+            <div class="text-sm text-forest/50 mt-0.5">Sistem samodejno izbere najboljši prostor</div>`;
+        anyBtn.onclick = () => selectArea(null, anyBtn);
+        areaBtns.appendChild(anyBtn);
+
+        areas.forEach(area => {
+            const btn = document.createElement('button');
+            const disabled = !area.available;
+            btn.className = `w-full text-left border-2 rounded-2xl px-5 py-4 transition-colors ${
+                disabled ? 'border-sage-light opacity-40 cursor-not-allowed' : 'border-sage-light hover:border-forest cursor-pointer'
+            }`;
+            btn.disabled = disabled;
+            btn.innerHTML = `<div class="font-semibold text-forest">${escHtml(area.name)}</div>
+                ${disabled ? '<div class="text-sm text-forest/40 mt-0.5">Ni prostih miz za vaš termin</div>' : ''}`;
+            if (!disabled) btn.onclick = () => selectArea(area.id, btn);
+            areaBtns.appendChild(btn);
+        });
+
+        areaBtns.classList.remove('hidden');
+
+        // Če ni nobene cone definirane, preskočimo ta korak
+        if (!areas.length) {
+            goStep(4);
+            return;
+        }
+    } catch (e) {
+        // Napaka – preskočimo izbiro cone in nadaljujemo
+        goStep(4);
+    }
+}
+
+function selectArea(areaId, btn) {
+    state.areaId = areaId;
+    document.querySelectorAll('#area-btns button').forEach(b => b.classList.remove('border-forest', 'bg-cream'));
+    btn.classList.add('border-forest', 'bg-cream');
     setTimeout(() => goStep(4), 200);
 }
 
@@ -950,6 +1036,7 @@ document.getElementById('btn-submit').onclick = async () => {
                 date: state.date, time: state.time,
                 guest_name: name, email, phone, notes,
                 guest_count: state.guests,
+                area_id: state.areaId,
                 custom_fields: customFields,
                 gdpr_consent: true,
                 marketing_consent: marketing ? true : false,
@@ -1024,12 +1111,15 @@ function goStep(n) {
     document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
     document.getElementById(`step-${n}`).classList.add('active');
 
+    // Step '3b' se mapira na vizualni korak 3 v progress indikatorju
+    const progressStep = (n === '3b') ? 3 : n;
+
     // Progress indikator
     for (let i = 1; i <= 4; i++) {
         const num = document.querySelector(`.step-num-${i}`);
         const lbl = document.querySelector(`.step-lbl-${i}`);
-        const done = i < n;
-        const active = i === n;
+        const done = i < progressStep;
+        const active = i === progressStep;
         num.className = `step-num-${i} w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ` +
             (done ? 'bg-sage text-white' : active ? 'bg-forest text-white' : 'bg-sage-light text-forest/40');
         if (lbl) lbl.className = `step-lbl-${i} text-xs font-medium hidden sm:block ` +
@@ -1060,6 +1150,7 @@ function resetBooking() {
     state.guests      = null;
     state.date        = null;
     state.time        = null;
+    state.areaId      = null;
     state._isWaitlist = false;
     document.querySelectorAll('.guest-btn').forEach(b => b.classList.remove('selected'));
     document.getElementById('btn-guests-next').disabled = true;

@@ -10,7 +10,7 @@
 [x] kako lahko zagotovimo, da ce admin doda rezervacijo, da bo to tudi vidno v user accountu brez refresha strani, in obratno
 [x] admin naj bo admin samo za svoje restavracije, lahko je vec adminov, ki vidijo samo svoje restavracije, vseeno pa omogoci vec adminov na restavracijo
 [x] ko se nov user registrira ne pusti dodati rezervacije, dokler ne doda restavracije!
-[ ] Dodali bomo pakete za placilo aplikacije. Vsak nov racun je free za en mesec, en teden pred pretekom brezplacnega racuna, naj se pojavi obvestilo da bo trial potekel in da je potrebno placilo. Placilo bo izvedeno preko stripe-a. Imamo Osnovni paket, imamo Napredni paket in imamo Premium paket. Placuje se mesecno ali letno. Ce bo placilo mesecno, se mora to urediti avtomatsko preko stripa, je to mozno? V primeru letnega placila je moznost tudi placila po predracunu - v tem primeru jaz dobim email z zahtevkom.
+[x] Dodali bomo pakete za placilo aplikacije. Vsak nov racun je free za en mesec, en teden pred pretekom brezplacnega racuna, naj se pojavi obvestilo da bo trial potekel in da je potrebno placilo. Placilo bo izvedeno preko stripe-a. Imamo Osnovni paket, imamo Napredni paket in imamo Premium paket. Placuje se mesecno ali letno. Ce bo placilo mesecno, se mora to urediti avtomatsko preko stripa, je to mozno? V primeru letnega placila je moznost tudi placila po predracunu - v tem primeru jaz dobim email z zahtevkom.
 Osnovni paket:
 - enake funkcionalnosti kot ima trial
 - cena mesecnega placila 4,99 eur, letno 49,99 eur.
@@ -33,3 +33,16 @@ Premium paket:
 Vse skupaj naj bo narejeno tako da bo enostavno kasneje dodajati funkcionalnosti v vsak paket posebaj.
 Paketi naj imajo tudi moznost dodajanja zacasnih znizanih cen - superadmin.
 Superadmin naj ima moznost rocno dolociti paket uporabniku brez placila, z omejitvijo trajanja.
+
+
+
+
+- ✅ Ce je v urniku dan v tednu izklopljen, naj sploh ne bo clickable v spletni rezervaciji in v embedu.
+- ✅ dodaj podporo za vec terminov vsak dan pri urniku (dopoldan + popoldan)
+- ✅ pri blokiranih dnevih dodaj možnost, da se blokira samo del dneva
+- ✅ V urnik dodaj toggle, da admin dovoli zaposlenim rezervacije na zaprte/blokirane dni
+- ✅ če zaposleni želi dodati rezervacijo na blokiran/zaprt datum in override ni vklopljen, javi sporočilo z navodilom
+
+
+
+- 

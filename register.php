@@ -12,9 +12,9 @@ $errors  = [];
 $success = false;
 $post    = [];
 
-$validPlans    = ['trial', 'basic', 'advanced', 'premium'];
-$selectedPlan  = in_array($_GET['plan'] ?? '', $validPlans) ? $_GET['plan'] : 'trial';
-$planNames     = ['trial' => 'Trial', 'basic' => 'Basic', 'advanced' => 'Advanced', 'premium' => 'Premium'];
+$validPlans    = ['basic', 'advanced', 'premium'];
+$selectedPlan  = in_array($_GET['plan'] ?? '', $validPlans) ? $_GET['plan'] : 'basic';
+$planNames     = ['basic' => 'Basic', 'advanced' => 'Advanced', 'premium' => 'Premium'];
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $post['full_name']         = trim($_POST['full_name']         ?? '');
@@ -95,8 +95,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $newUserId = (int) $pdo->lastInsertId();
 
-            // Ustvari trial subscription – plan_slug je izbrani paket (ali 'trial' če ni izbran)
-            // status ostane 'trial' ves čas brezplačnega obdobja
+            // Ustvari trial subscription z izbranim paketom.
+            // status='trial' označuje brezplačno obdobje; po preteku mora zakupiti.
             $pdo->prepare("
                 INSERT INTO subscriptions (user_id, plan_slug, status, ends_at)
                 VALUES (?, ?, 'trial', ?)
@@ -140,11 +140,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <h1><?= APP_NAME ?></h1>
         <p class="subtitle">Registracija</p>
 
-        <?php if ($selectedPlan !== 'trial'): ?>
-        <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:10px;padding:12px 16px;margin-bottom:20px;text-align:center;font-size:.875rem">
-            Začeli boste z <strong>30-dnevnim brezplačnim preizkusom</strong> paketa <strong><?= h($planNames[$selectedPlan]) ?></strong>.
+        <!-- Plan selector -->
+        <div style="margin-bottom:20px">
+            <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:#6B7280;font-weight:600;margin-bottom:8px">Izberite paket za preizkus</div>
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+                <?php foreach ($planNames as $slug => $name):
+                    $active = $slug === $selectedPlan;
+                    $prices = ['basic' => '4,99 €', 'advanced' => '6,99 €', 'premium' => '9,99 €'];
+                ?>
+                <a href="?plan=<?= $slug ?>" style="text-decoration:none;display:block;border:2px solid <?= $active ? '#F59E0B' : '#E5E7EB' ?>;border-radius:8px;padding:10px 8px;text-align:center;background:<?= $active ? '#FFFBEB' : '#fff' ?>;cursor:pointer;transition:border-color .15s">
+                    <div style="font-size:.8rem;font-weight:700;color:<?= $active ? '#92400E' : '#374151' ?>"><?= h($name) ?></div>
+                    <div style="font-size:.7rem;color:#9CA3AF;margin-top:2px"><?= $prices[$slug] ?>/mes</div>
+                </a>
+                <?php endforeach; ?>
+            </div>
+            <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:10px 14px;margin-top:10px;text-align:center;font-size:.82rem;color:#92400E">
+                Začnete z <strong>30-dnevnim brezplačnim trialom</strong> paketa <strong><?= h($planNames[$selectedPlan]) ?></strong>.<br>
+                <span style="color:#B45309;font-size:.75rem">Med trialom lahko kadar koli prosto preklapljate med paketi.</span>
+            </div>
         </div>
-        <?php endif; ?>
 
         <?php if ($success): ?>
             <div class="register-success">

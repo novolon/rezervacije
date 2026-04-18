@@ -76,7 +76,7 @@ if ($method === 'GET') {
 
     // ?action=available – vrne razpoložljive mize za dani termin
     if (isset($_GET['action']) && $_GET['action'] === 'available') {
-        if ($session['role'] !== 'user') require_once '../includes/table_helper.php';
+        require_once '../includes/table_helper.php';
         $date     = trim($_GET['date']     ?? '');
         $time     = trim($_GET['time']     ?? '');
         $guests   = max(1, (int)($_GET['guests']   ?? 1));
@@ -86,8 +86,8 @@ if ($method === 'GET') {
         if (!$date || !$time) {
             json_response(false, null, 'date in time sta obvezna.', 400);
         }
-
         $result = get_available_tables_for_slot($pdo, $restId, $date, substr($time, 0, 5), $duration, $guests, $excludeId);
+        $result['restaurant_has_tables'] = restaurant_has_tables($pdo, $restId);
         json_response(true, $result);
     }
 

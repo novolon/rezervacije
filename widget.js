@@ -294,6 +294,26 @@ input,textarea{font-family:inherit}
           </div>
         </div>
         <div class="slots-grid" id="wsslots" style="display:none"></div>
+        <div id="wsslots-legend" style="display:none;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:#78350F">
+          <span style="display:inline-block;width:11px;height:11px;border-radius:3px;border:2px solid #F59E0B;background:#FFFBEB;flex-shrink:0"></span> Čakalna lista
+        </div>
+        <!-- Obvestilo ob kliku na waitlist termin (notice + Nadaljuj) -->
+        <div id="wswl-notice" style="display:none;margin-top:14px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:13px;padding:16px">
+          <div style="font-size:13px;font-weight:700;color:#92400E;margin-bottom:4px">Termin je zaseden – čakalna lista</div>
+          <div style="font-size:12px;color:#B45309;margin-bottom:12px">Termin <strong id="wswl-time-label"></strong> je zaseden. Vpišete se lahko na čakalno listo – ko se sprosti mesto, vas bomo obvestili po emailu. Lahko pa izberete drug prosti termin zgoraj.</div>
+          <button class="wl-btn" id="wswl-continue">Nadaljuj →</button>
+        </div>
+      </div>
+
+      <!-- Korak 3b: Izbira cone (opcijsko) -->
+      <div class="step" id="ws3b">
+        <div class="ttl">
+          <button class="back" id="wb3b"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="m13 18-6-6 6-6"/></svg></button>
+          Izberite prostor
+        </div>
+        <div class="sub" id="ws3bsub"></div>
+        <div class="empty" id="ws3bloading">Nalagam razpoložljivost...</div>
+        <div id="ws3bbtns" style="display:none"></div>
       </div>
 
       <!-- Korak 4: Podatki -->
@@ -303,6 +323,10 @@ input,textarea{font-family:inherit}
           Vaši podatki
         </div>
         <div class="sub" id="ws4sub"></div>
+        <!-- Čakalna lista obvestilo (samo v waitlist načinu) -->
+        <div id="ws4-wl-notice" style="display:none;background:#FFFBEB;border:1px solid #FDE68A;border-radius:11px;padding:10px 14px;font-size:12px;color:#92400E;margin-bottom:12px">
+          <strong>Čakalna lista:</strong> Vpisujete se za termin <span id="ws4-wl-time" style="font-weight:700"></span>. Ko se sprosti mesto, vas bomo obvestili po emailu.
+        </div>
         <div class="ferr" id="wferr"></div>
         <div class="field"><label>Ime in priimek <span class="req">*</span></label><input class="inp" id="wfname" type="text" autocomplete="name" placeholder="npr. Janez Novak"></div>
         <div class="field"><label>Email <span class="req">*</span></label><input class="inp" id="wfemail" type="email" autocomplete="email" placeholder="janez@email.com"></div>
@@ -361,21 +385,24 @@ input,textarea{font-family:inherit}
 
     // ── State ─────────────────────────────────────────────────────
     const state = {
-        rest: null, guests: null, date: null, time: null,
+        rest: null, guests: null, date: null, time: null, areaId: null,
         calYear: new Date().getFullYear(), calMonth: new Date().getMonth(),
     };
 
     // ── Progress ──────────────────────────────────────────────────
     function setStep(n) {
-        for (let i = 1; i <= 5; i++) {
-            const s = $('ws' + i);
-            if (s) s.className = 'step' + (i === n ? ' active' : '');
-        }
+        // n může být číslo nebo '3b'
+        const stepIds = [1, 2, 3, '3b', 4, 5];
+        stepIds.forEach(id => {
+            const s = $('ws' + id);
+            if (s) s.className = 'step' + (id === n ? ' active' : '');
+        });
+        const progressN = (n === '3b') ? 3 : (typeof n === 'number' ? n : parseInt(n));
         for (let i = 1; i <= 4; i++) {
             const pi = $('wp' + i);
             if (!pi) continue;
-            pi.className = 'pi' + (i === n ? ' active' : i < n ? ' done' : '');
-            pi.querySelector('.n').textContent = i < n ? '✓' : i;
+            pi.className = 'pi' + (i === progressN ? ' active' : i < progressN ? ' done' : '');
+            pi.querySelector('.n').textContent = i < progressN ? '✓' : i;
         }
         wrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
         if (n === 4) updateStep4Sub();
@@ -514,14 +541,13 @@ input,textarea{font-family:inherit}
             const cell = document.createElement('div');
             cell.textContent = d;
 
-            const futureUnavail = !isPast && (!isOpen || isBlk);
             if (isPast) {
                 cell.className = 'cal-day dis' + (isTd ? ' td' : '');
-            } else if (futureUnavail && state.rest.waitlist_enabled) {
-                cell.className = 'cal-day wl' + (isTd ? ' td' : '');
-                cell.title = 'Ni terminov – kliknite za čakalno listo';
-                cell.addEventListener('click', () => selectDateWaitlist(ds));
-            } else if (futureUnavail) {
+            } else if (isBlk) {
+                // Popolnoma blokiran datum – ni klika
+                cell.className = 'cal-day dis' + (isTd ? ' td' : '');
+            } else if (!isOpen) {
+                // Izklopljen dan v tednu – ni klika (brez čakalne liste)
                 cell.className = 'cal-day dis' + (isTd ? ' td' : '');
             } else {
                 cell.className = 'cal-day av' + (isTd ? ' td' : '') + (isSel ? ' sel' : '');
@@ -581,7 +607,8 @@ input,textarea{font-family:inherit}
         if ($('wwl-done'))  $('wwl-done').style.display  = 'none';
 
         try {
-            const res  = await fetch(`${apiUrl}?t=${encodeURIComponent(token)}&date=${date}`);
+            const guestParam = state.guests ? `&guest_count=${state.guests}` : '';
+            const res  = await fetch(`${apiUrl}?t=${encodeURIComponent(token)}&date=${date}${guestParam}`);
             const json = await res.json();
             if (!json.success) throw new Error(json.error);
             const slots = json.data.slots || [];
@@ -594,6 +621,7 @@ input,textarea{font-family:inherit}
             }
 
             const grid = $('wsslots');
+            let hasWaitlist = false;
             slots.forEach(slotObj => {
                 const time   = typeof slotObj === 'string' ? slotObj : slotObj.time;
                 const status = typeof slotObj === 'string' ? 'available' : (slotObj.status || 'available');
@@ -601,11 +629,19 @@ input,textarea{font-family:inherit}
                 const b = document.createElement('button');
                 b.className = 'slot' + (status === 'waitlist' ? ' wl' : '');
                 b.title = status === 'waitlist' ? 'Zasedeno – vpis na čakalno listo' : '';
-                b.textContent = time;
-                b.addEventListener('click', () => selectSlot(time, b));
+                if (status === 'waitlist') {
+                    hasWaitlist = true;
+                    b.innerHTML = time + '<span style="font-size:.65rem;display:block;font-weight:500;line-height:1.2">čakalna lista</span>';
+                    b.addEventListener('click', () => selectWaitlistSlot(time, b));
+                } else {
+                    b.textContent = time;
+                    b.addEventListener('click', () => selectSlot(time, b));
+                }
                 grid.appendChild(b);
             });
             grid.style.display = '';
+            const legend = $('wsslots-legend');
+            if (legend) legend.style.display = hasWaitlist ? 'flex' : 'none';
 
             const dt  = new Date(date + 'T12:00:00');
             $('ws3sub').textContent = `${DAYS_SL[(dt.getDay() + 6) % 7]}, ${dt.getDate()}. ${MONTHS[dt.getMonth()]} · ${state.guests} ${guestLbl(state.guests)}`;
@@ -617,10 +653,97 @@ input,textarea{font-family:inherit}
         }
     }
 
-    function selectSlot(time, btn) {
-        state.time = time;
+    function selectWaitlistSlot(time, btn) {
         shadow.querySelectorAll('.slot').forEach(b => b.classList.remove('sel'));
         btn.classList.add('sel');
+        state._waitlistTime = time;
+        state._isWaitlist   = false; // še ni potrjeno
+
+        // Pokaži notice panel (isto kot book.php)
+        const lbl = $('wswl-time-label');
+        if (lbl) lbl.textContent = time;
+        const notice = $('wswl-notice');
+        if (notice) {
+            notice.style.display = '';
+            notice.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+
+    function continueToWaitlistWidget() {
+        state._isWaitlist = true;
+        const notice = $('wswl-notice');
+        if (notice) notice.style.display = 'none';
+        // Pokaži banner v koraku 4
+        const n4 = $('ws4-wl-notice');
+        const t4 = $('ws4-wl-time');
+        if (n4) n4.style.display = '';
+        if (t4) t4.textContent = state._waitlistTime || '';
+        // Posodobi label gumba
+        const lbl = $('wbtnlbl');
+        if (lbl) lbl.textContent = 'Vpišem se na čakalno listo';
+        setStep(4);
+    }
+
+    function selectSlot(time, btn) {
+        state.time   = time;
+        state.areaId = null;
+        shadow.querySelectorAll('.slot').forEach(b => b.classList.remove('sel'));
+        btn.classList.add('sel');
+
+        if (state.rest && state.rest.allow_area_choice) {
+            setTimeout(() => loadAreas(state.date, time), 180);
+        } else {
+            setTimeout(() => setStep(4), 180);
+        }
+    }
+
+    async function loadAreas(date, time) {
+        $('ws3bloading').style.display = '';
+        $('ws3bbtns').style.display    = 'none';
+        $('ws3bbtns').innerHTML        = '';
+        setStep('3b');
+
+        const dt = new Date(date + 'T12:00:00');
+        $('ws3bsub').textContent = `${DAYS_SL[(dt.getDay()+6)%7]}, ${dt.getDate()}. ${MONTHS[dt.getMonth()]} · ${time} · ${state.guests} ${guestLbl(state.guests)}`;
+
+        try {
+            const res  = await fetch(`${apiUrl}?t=${encodeURIComponent(token)}&date=${date}&time=${time}&guest_count=${state.guests||1}`);
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error);
+
+            const areas = json.data?.areas || [];
+            $('ws3bloading').style.display = 'none';
+
+            if (!areas.length) { setStep(4); return; }
+
+            // Gumb "Vseeno mi je"
+            const anyBtn = document.createElement('button');
+            anyBtn.className = 'slot';
+            anyBtn.style.cssText = 'width:100%;text-align:left;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:#fff;cursor:pointer;margin-bottom:8px';
+            anyBtn.innerHTML = '<strong style="font-size:.9rem">Vseeno mi je</strong><br><span style="font-size:.78rem;opacity:.6">Sistem samodejno izbere najboljši prostor</span>';
+            anyBtn.onclick = () => selectArea(null, anyBtn);
+            $('ws3bbtns').appendChild(anyBtn);
+
+            areas.forEach(area => {
+                const btn = document.createElement('button');
+                btn.className = 'slot';
+                btn.disabled = !area.available;
+                btn.style.cssText = `width:100%;text-align:left;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:#fff;margin-bottom:8px;cursor:${area.available?'pointer':'not-allowed'};opacity:${area.available?1:0.4}`;
+                btn.innerHTML = `<strong style="font-size:.9rem">${area.name}</strong>${!area.available?'<br><span style="font-size:.78rem;opacity:.6">Ni prostih miz za vaš termin</span>':''}`;
+                if (area.available) btn.onclick = () => selectArea(area.id, btn);
+                $('ws3bbtns').appendChild(btn);
+            });
+
+            $('ws3bbtns').style.display = '';
+        } catch(e) {
+            setStep(4);
+        }
+    }
+
+    function selectArea(areaId, btn) {
+        state.areaId = areaId;
+        $('ws3bbtns').querySelectorAll('button').forEach(b => b.style.borderColor = 'var(--border)');
+        btn.style.borderColor = 'var(--primary)';
         setTimeout(() => setStep(4), 180);
     }
 
@@ -770,6 +893,8 @@ input,textarea{font-family:inherit}
     }
 
     $('wbtnsubmit').addEventListener('click', async () => {
+        if (state._isWaitlist) { await submitWaitlistFromStep4(); return; }
+
         const name  = $('wfname').value.trim();
         const email = $('wfemail').value.trim();
         const phone = $('wfphone').value.trim();
@@ -794,7 +919,7 @@ input,textarea{font-family:inherit}
             const res  = await fetch(`${apiUrl}?t=${encodeURIComponent(token)}`, {
                 method:  'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body:    JSON.stringify({ date: state.date, time: state.time, guest_name: name, email, phone, notes, guest_count: state.guests, custom_fields: customFields, gdpr_consent: true, marketing_consent: mktg ? true : false }),
+                body:    JSON.stringify({ date: state.date, time: state.time, guest_name: name, email, phone, notes, guest_count: state.guests, area_id: state.areaId, custom_fields: customFields, gdpr_consent: true, marketing_consent: mktg ? true : false }),
             });
             const json = await res.json();
             if (!json.success) throw new Error(json.error || 'Napaka strežnika.');
@@ -804,6 +929,56 @@ input,textarea{font-family:inherit}
             setLoading(false);
         }
     });
+
+    async function submitWaitlistFromStep4() {
+        const name  = $('wfname').value.trim();
+        const email = $('wfemail').value.trim();
+        const phone = $('wfphone').value.trim();
+        const gdprOk = $('wgdpr')?.checked;
+
+        if (!name)  { showErr('Ime in priimek sta obvezna.'); return; }
+        if (!email) { showErr('Email naslov je obvezen.'); return; }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showErr('Vnesite veljaven email naslov.'); return; }
+        if (!gdprOk) { showErr('Strinjanje z obdelavo podatkov je obvezno.'); return; }
+
+        const nameParts = name.split(' ');
+        const firstName = nameParts[0] || '';
+        const lastName  = nameParts.slice(1).join(' ') || '';
+
+        setLoading(true);
+        $('wbtnlbl').textContent = 'Pošiljam...';
+        try {
+            const res = await fetch(`${waitlistApiUrl}?t=${encodeURIComponent(token)}`, {
+                method:  'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body:    JSON.stringify({
+                    date:        state.date,
+                    time_pref:   state._waitlistTime || '',
+                    guests:      state.guests || 1,
+                    first_name:  firstName,
+                    last_name:   lastName,
+                    email,
+                    phone,
+                    gdpr_consent: true,
+                }),
+            });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error || 'Napaka strežnika.');
+            // Pokaži potrditev (isto kot book.php waitlist done)
+            $('wcico').textContent = '✅';
+            $('wcttl').textContent = 'Vpisani ste na čakalno listo!';
+            $('wcmsg').textContent = 'Ko se sprosti termin, vas bomo obvestili po emailu.';
+            const dt = new Date(state.date + 'T12:00:00');
+            $('wcsrest').textContent = state.rest.name;
+            $('wcsdate').textContent = `${DAYS_SL[(dt.getDay() + 6) % 7]}, ${dt.getDate()}. ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
+            $('wcstime').textContent = state._waitlistTime || '—';
+            $('wcsgst').textContent  = `${state.guests} ${guestLbl(state.guests)}`;
+            setStep(5);
+        } catch (e) {
+            showErr(e.message);
+            setLoading(false);
+        }
+    }
 
     function showErr(msg) {
         const el = $('wferr');
@@ -844,7 +1019,10 @@ input,textarea{font-family:inherit}
 
     // ── Reset ─────────────────────────────────────────────────────
     $('wbtnreset').addEventListener('click', () => {
-        state.guests = null; state.date = null; state.time = null;
+        state.guests = null; state.date = null; state.time = null; state.areaId = null;
+        state._isWaitlist = false; state._waitlistTime = null;
+        const n4 = $('ws4-wl-notice'); if (n4) n4.style.display = 'none';
+        const wn = $('wswl-notice');   if (wn) wn.style.display = 'none';
         shadow.querySelectorAll('.gbtn,.gmore').forEach(b => b.classList.remove('sel'));
         $('wbtn1').disabled = true;
         $('wgmorewrap').style.display = 'none';
@@ -863,9 +1041,26 @@ input,textarea{font-family:inherit}
         setStep(1);
     });
 
+    // ── Waitlist notice "Nadaljuj" gumb ───────────────────────────
+    $('wswl-continue').addEventListener('click', continueToWaitlistWidget);
+
     // ── Back gumbi ────────────────────────────────────────────────
     $('wb2').addEventListener('click', () => setStep(1));
-    $('wb3').addEventListener('click', () => setStep(2));
-    $('wb4').addEventListener('click', () => setStep(3));
+    $('wb3').addEventListener('click', () => {
+        // Skrij waitlist notice ob vrnitvi na korak 2
+        const notice = $('wswl-notice');
+        if (notice) notice.style.display = 'none';
+        setStep(2);
+    });
+    $('wb3b').addEventListener('click', () => setStep(3));
+    $('wb4').addEventListener('click', () => {
+        // Ponastavi waitlist stanje ob vrnitvi
+        state._isWaitlist = false;
+        const n4 = $('ws4-wl-notice');
+        if (n4) n4.style.display = 'none';
+        const lbl = $('wbtnlbl');
+        if (lbl) lbl.textContent = 'Pošlji rezervacijo';
+        state.rest?.allow_area_choice ? setStep('3b') : setStep(3);
+    });
 
 })();

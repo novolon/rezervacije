@@ -491,57 +491,13 @@ $hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_manag
     <!-- ── Tab: Polja po meri ──────────────────────────────── -->
     <div id="panel-polja" class="re-panel">
         <div class="re-section">
-            <div class="re-section-title">Aktivna polja</div>
-            <div id="cf-list" style="margin-bottom:16px">Nalagam...</div>
-        </div>
-
-        <div class="re-section">
-            <div class="re-section-title">Dodaj novo polje</div>
-            <div class="admin-form">
-                <div class="admin-field-row">
-                    <div class="admin-field">
-                        <label>Oznaka *</label>
-                        <input type="text" id="cf-label" placeholder="npr. Alergije">
-                    </div>
-                    <div class="admin-field" style="max-width:140px">
-                        <label>Tip</label>
-                        <select id="cf-type" onchange="toggleCfOptions(this.value)">
-                            <option value="text">Besedilo</option>
-                            <option value="select">Izbira</option>
-                            <option value="checkbox">Da/Ne</option>
-                        </select>
-                    </div>
-                </div>
-                <div id="cf-options-wrap" style="display:none">
-                    <div class="admin-field">
-                        <label>Možnosti (ena na vrstico) *</label>
-                        <textarea id="cf-options" rows="3" placeholder="Opcija 1&#10;Opcija 2&#10;Opcija 3"
-                            style="width:100%;border:1.5px solid var(--color-border);border-radius:8px;padding:9px 12px;font-size:.875rem;font-family:var(--font);resize:vertical;outline:none;min-height:80px"></textarea>
-                    </div>
-                </div>
-                <div class="admin-field-row">
-                    <div class="admin-field">
-                        <label>Velja za</label>
-                        <select id="cf-applies">
-                            <option value="both">Interno + Splet</option>
-                            <option value="internal">Samo interno</option>
-                            <option value="public">Samo splet</option>
-                        </select>
-                    </div>
-                    <div class="admin-field" style="justify-content:flex-end;padding-top:18px">
-                        <label class="toggle-wrap" style="cursor:pointer">
-                            <span class="toggle">
-                                <input type="checkbox" id="cf-required">
-                                <span class="toggle-track"></span>
-                            </span>
-                            <span class="toggle-label">Obvezno polje</span>
-                        </label>
-                    </div>
-                </div>
-                <div style="text-align:right">
-                    <button class="btn btn-primary" onclick="addCustomField()">Dodaj polje</button>
-                </div>
-            </div>
+            <div class="re-section-title">Polja po meri</div>
+            <div id="cf-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">Nalagam...</div>
+            <button onclick="cfAddCard()" style="width:100%;border:2px dashed var(--color-border);border-radius:8px;padding:10px;font-size:.875rem;color:var(--color-muted);background:none;cursor:pointer;font-family:var(--font);transition:.15s"
+                onmouseenter="this.style.borderColor='var(--color-accent)';this.style.color='var(--color-accent)'"
+                onmouseleave="this.style.borderColor='';this.style.color=''">
+                + Dodaj polje
+            </button>
         </div>
 
         <div class="re-note re-note-blue">
@@ -1194,61 +1150,223 @@ const TYPE_LABELS    = {text:'Besedilo', select:'Izbira', checkbox:'Da/Ne'};
 
 async function loadCustomFields() {
     cfLoaded = true;
+    let fields;
     try {
-        const fields = await apiCall('GET', `/api/customfields.php?restaurant_id=${REST_ID}`);
+        fields = await apiCall('GET', `/api/customfields.php?restaurant_id=${REST_ID}`);
+    } catch(e) {
+        console.error('CF load error:', e);
+        document.getElementById('cf-list').innerHTML = `<p style="color:var(--color-danger);font-size:.875rem">Napaka pri nalaganju: ${e.message}</p>`;
+        return;
+    }
+    try {
         renderCustomFields(fields || []);
-    } catch(e) { document.getElementById('cf-list').innerHTML='<p style="color:var(--color-danger);font-size:.875rem">Napaka pri nalaganju.</p>'; }
+    } catch(e) {
+        console.error('CF render error:', e);
+        document.getElementById('cf-list').innerHTML = `<p style="color:var(--color-danger);font-size:.875rem">Napaka pri prikazu: ${e.message}</p>`;
+    }
 }
+
+let cfCardCounter = 0;
+let cfOptCounter  = 0;
 
 function renderCustomFields(fields) {
-    const el = document.getElementById('cf-list');
-    if (!fields.length) { el.innerHTML='<p style="font-size:.875rem;color:var(--color-muted)">Ni polj po meri.</p>'; return; }
-    el.innerHTML = fields.map(f=>`
-        <div class="item-row" id="cf-row-${f.id}">
-            <span class="item-row-name">${h(f.label)}</span>
-            <span class="cf-badge cf-badge-type">${TYPE_LABELS[f.field_type]||f.field_type}</span>
-            <span class="cf-badge ${APPLIES_CLASS[f.applies_to]||''}">${APPLIES_LABELS[f.applies_to]||f.applies_to}</span>
-            ${f.is_required?'<span class="cf-badge cf-badge-req">Obvezno</span>':''}
-            <button class="item-row-del" onclick="removeCustomField(${f.id})" title="Odstrani">×</button>
-        </div>`).join('');
+    const list = document.getElementById('cf-list');
+    list.innerHTML = '';
+    (fields || []).forEach(f => cfAddCard(f));
+    initCfDragDrop();
 }
 
-window.toggleCfOptions = (type) => {
-    document.getElementById('cf-options-wrap').style.display = type==='select' ? '' : 'none';
-};
+function cfAddCard(data = null) {
+    cfCardCounter++;
+    const ck      = `cfc${cfCardCounter}`;
+    const id      = data ? data.id : null;
+    const label   = data ? (data.label || '') : '';
+    const type    = data ? (data.field_type || 'text') : 'text';
+    const applies = data ? (data.applies_to || 'both') : 'both';
+    const req     = data ? !!data.is_required : false;
+    const opts    = data && data.options ? data.options : [];
 
-window.addCustomField = async () => {
-    const label   = document.getElementById('cf-label').value.trim();
-    const type    = document.getElementById('cf-type').value;
-    const applies = document.getElementById('cf-applies').value;
-    const req     = document.getElementById('cf-required').checked ? 1 : 0;
-    const optsTxt = document.getElementById('cf-options')?.value||'';
-    if (!label) { toast('Oznaka je obvezna.','error'); return; }
-    const options = type==='select' ? optsTxt.split('\n').map(s=>s.trim()).filter(Boolean) : [];
-    if (type==='select' && !options.length) { toast('Vnesite vsaj eno možnost.','error'); return; }
-    try {
-        await apiCall('POST', '/api/customfields.php', {
-            restaurant_id:REST_ID, label, field_type:type,
-            applies_to:applies, is_required:req, options,
-        });
-        document.getElementById('cf-label').value='';
-        document.getElementById('cf-options').value='';
-        document.getElementById('cf-required').checked=false;
-        await loadCustomFields();
-        toast('Polje dodano!');
-    } catch(e) { toast(e.message,'error'); }
-};
+    const typeOpts = Object.entries(TYPE_LABELS).map(([v,l]) =>
+        `<option value="${v}"${v===type?' selected':''}>${l}</option>`).join('');
+    const appliesOpts = Object.entries(APPLIES_LABELS).map(([v,l]) =>
+        `<option value="${v}"${v===applies?' selected':''}>${l}</option>`).join('');
 
-window.removeCustomField = async (id) => {
-    if (!confirm('Izbrišete polje? Obstoječe vrednosti se ohranijo.')) return;
+    const card = document.createElement('div');
+    card.className = 'cf-card';
+    card.id = `cfcard-${ck}`;
+    card.dataset.cfId = id || '';
+    card.draggable = true;
+    card.style.cssText = 'background:var(--color-bg);border:1px solid var(--color-border);border-radius:8px;padding:12px 14px';
+
+    card.innerHTML = `
+        <div style="display:flex;align-items:flex-start;gap:8px">
+            <div style="flex-shrink:0;padding:3px 2px;cursor:grab;color:var(--color-muted)" title="Povleci za premik">
+                <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/><circle cx="2" cy="6" r="1.5"/><circle cx="8" cy="6" r="1.5"/><circle cx="2" cy="10" r="1.5"/><circle cx="8" cy="10" r="1.5"/><circle cx="2" cy="14" r="1.5"/><circle cx="8" cy="14" r="1.5"/></svg>
+            </div>
+            <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+                <input type="text" id="cflabel-${ck}" placeholder="Oznaka polja (npr. Alergije) *" value="${h(label)}"
+                    style="border:1.5px solid var(--color-border);border-radius:7px;padding:8px 10px;font-size:.875rem;font-family:var(--font);color:var(--color-text);width:100%;outline:none;box-sizing:border-box">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+                    <select id="cftype-${ck}"
+                        style="border:1.5px solid var(--color-border);border-radius:7px;padding:7px 10px;font-size:.825rem;font-family:var(--font);background:var(--color-surface)">${typeOpts}</select>
+                    <select id="cfapplies-${ck}"
+                        style="border:1.5px solid var(--color-border);border-radius:7px;padding:7px 10px;font-size:.825rem;font-family:var(--font);background:var(--color-surface)">${appliesOpts}</select>
+                    <label style="font-size:.82rem;color:var(--color-muted);display:flex;align-items:center;gap:5px;cursor:pointer">
+                        <input type="checkbox" id="cfreq-${ck}"${req?' checked':''} style="cursor:pointer;accent-color:var(--color-accent)"> Obvezno
+                    </label>
+                </div>
+                <div id="cfopts-${ck}" style="display:none;flex-direction:column;gap:4px"></div>
+                <button id="cfaddopt-${ck}" style="display:none;border:1px dashed var(--color-border);border-radius:6px;padding:5px 10px;font-size:.8rem;color:var(--color-muted);background:none;cursor:pointer;text-align:left;font-family:var(--font)"
+                    onmouseenter="this.style.borderColor='var(--color-accent)';this.style.color='var(--color-accent)'"
+                    onmouseleave="this.style.borderColor='';this.style.color=''">+ Dodaj možnost</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-items:flex-end">
+                <button id="cfsave-${ck}"
+                    style="background:var(--color-accent);color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:.8rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap">Shrani</button>
+                <button id="cfdel-${ck}"
+                    style="background:none;border:none;cursor:pointer;color:#EF4444;font-size:.8rem;padding:4px 6px;border-radius:5px;display:flex;align-items:center;gap:3px;white-space:nowrap"
+                    onmouseenter="this.style.background='#FEF2F2'" onmouseleave="this.style.background='none'">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg> Briši
+                </button>
+            </div>
+        </div>`;
+
+    document.getElementById('cf-list').appendChild(card);
+
+    // Event listenerje dodamo PO tem ko je kartica v DOM-u, da se izognemo change event med innerHTML parsiranjem
+    document.getElementById(`cftype-${ck}`).addEventListener('change', () => cfTypeChange(ck));
+    document.getElementById(`cfaddopt-${ck}`).addEventListener('click', () => cfAddCardOpt(ck));
+    document.getElementById(`cfsave-${ck}`).addEventListener('click', () => cfSaveCard(ck));
+    document.getElementById(`cfdel-${ck}`).addEventListener('click', () => cfDeleteCard(ck));
+
+    opts.forEach(o => cfAddCardOpt(ck, typeof o === 'string' ? o : o.label));
+    cfTypeChange(ck);
+}
+
+function cfTypeChange(ck) {
+    const typeEl = document.getElementById(`cftype-${ck}`);
+    const wrap   = document.getElementById(`cfopts-${ck}`);
+    const btn    = document.getElementById(`cfaddopt-${ck}`);
+    if (!typeEl || !wrap || !btn) return;
+    const type = typeEl.value;
+    const needsOpts = type === 'select';
+    wrap.style.display = needsOpts ? 'flex' : 'none';
+    btn.style.display  = needsOpts ? '' : 'none';
+    if (!needsOpts) { wrap.innerHTML = ''; }
+    else if (needsOpts && wrap.children.length === 0) cfAddCardOpt(ck);
+}
+
+function cfAddCardOpt(ck, value = '') {
+    cfOptCounter++;
+    const ok = `cfo${cfOptCounter}`;
+    const row = document.createElement('div');
+    row.id = `cfoptrow-${ok}`;
+    row.style.cssText = 'display:flex;align-items:center;gap:6px';
+    row.innerHTML = `
+        <input type="text" id="${ok}" placeholder="Možnost..." value="${h(value)}"
+            style="flex:1;border:1.5px solid var(--color-border);border-radius:6px;padding:6px 9px;font-size:.83rem;font-family:var(--font);outline:none">
+        <button onclick="document.getElementById('cfoptrow-${ok}').remove()"
+            style="background:none;border:none;cursor:pointer;color:var(--color-muted);font-size:1.1rem;line-height:1;padding:2px 5px"
+            onmouseenter="this.style.color='#EF4444'" onmouseleave="this.style.color=''">×</button>`;
+    document.getElementById(`cfopts-${ck}`).appendChild(row);
+}
+
+async function cfSaveCard(ck) {
+    const card    = document.getElementById(`cfcard-${ck}`);
+    const id      = card.dataset.cfId ? parseInt(card.dataset.cfId) : null;
+    const label   = document.getElementById(`cflabel-${ck}`).value.trim();
+    const type    = document.getElementById(`cftype-${ck}`).value;
+    const applies = document.getElementById(`cfapplies-${ck}`).value;
+    const req     = document.getElementById(`cfreq-${ck}`).checked ? 1 : 0;
+    if (!label) { toast('Oznaka je obvezna.', 'error'); return; }
+    const options = type === 'select'
+        ? Array.from(card.querySelectorAll(`#cfopts-${ck} input[type=text]`))
+            .map(i => i.value.trim()).filter(Boolean)
+        : [];
+    if (type === 'select' && !options.length) { toast('Vnesite vsaj eno možnost.', 'error'); return; }
+    const sortOrder = Array.from(document.querySelectorAll('#cf-list .cf-card')).indexOf(card);
     try {
-        await apiCall('DELETE', `/api/customfields.php?id=${id}`);
-        document.getElementById(`cf-row-${id}`)?.remove();
-        const el = document.getElementById('cf-list');
-        if (!el.querySelector('.item-row')) el.innerHTML='<p style="font-size:.875rem;color:var(--color-muted)">Ni polj po meri.</p>';
-        toast('Polje odstranjeno.');
-    } catch(e) { toast(e.message,'error'); }
-};
+        if (id) {
+            await apiCall('PUT', `/api/customfields.php?id=${id}`, {
+                label, field_type:type, applies_to:applies, is_required:req, options, sort_order:sortOrder,
+            });
+        } else {
+            const result = await apiCall('POST', '/api/customfields.php', {
+                restaurant_id:REST_ID, label, field_type:type,
+                applies_to:applies, is_required:req, options, sort_order:sortOrder,
+            });
+            card.dataset.cfId = result.id;
+        }
+        toast('Shranjeno!');
+    } catch(e) { toast(e.message, 'error'); }
+}
+
+async function cfDeleteCard(ck) {
+    const card = document.getElementById(`cfcard-${ck}`);
+    const id   = card.dataset.cfId ? parseInt(card.dataset.cfId) : null;
+    if (id && !confirm('Izbrišete polje? Obstoječe vrednosti se ohranijo.')) return;
+    if (id) {
+        try {
+            await apiCall('DELETE', `/api/customfields.php?id=${id}`);
+            toast('Polje odstranjeno.');
+        } catch(e) { toast(e.message, 'error'); return; }
+    }
+    card.remove();
+}
+
+
+
+async function saveCfOrder() {
+    const cards = Array.from(document.querySelectorAll('#cf-list .cf-card'));
+    const updates = cards.filter(c => c.dataset.cfId).map((c, i) => ({ id: parseInt(c.dataset.cfId), sort_order: i }));
+    await Promise.all(updates.map(u =>
+        apiCall('PUT', `/api/customfields.php?id=${u.id}`, { sort_order: u.sort_order }).catch(() => {})
+    ));
+}
+
+function initCfDragDrop() {
+    const list = document.getElementById('cf-list');
+    if (list.dataset.dndInit) return;
+    list.dataset.dndInit = '1';
+    let dragSrc = null;
+
+    list.addEventListener('dragstart', e => {
+        const card = e.target.closest('.cf-card');
+        if (!card) return;
+        dragSrc = card;
+        setTimeout(() => { card.style.opacity = '0.4'; }, 0);
+        e.dataTransfer.effectAllowed = 'move';
+    });
+    list.addEventListener('dragend', e => {
+        const card = e.target.closest('.cf-card');
+        if (card) card.style.opacity = '';
+        list.querySelectorAll('.cf-card').forEach(c => c.style.outline = '');
+        saveCfOrder();
+    });
+    list.addEventListener('dragover', e => {
+        e.preventDefault();
+        const card = e.target.closest('.cf-card');
+        if (!card || card === dragSrc) return;
+        list.querySelectorAll('.cf-card').forEach(c => c.style.outline = '');
+        card.style.outline = '2px solid var(--color-accent)';
+    });
+    list.addEventListener('dragleave', e => {
+        const card = e.target.closest('.cf-card');
+        if (card) card.style.outline = '';
+    });
+    list.addEventListener('drop', e => {
+        e.preventDefault();
+        const card = e.target.closest('.cf-card');
+        if (!card || !dragSrc || card === dragSrc) return;
+        card.style.outline = '';
+        const rect = card.getBoundingClientRect();
+        if (e.clientY < rect.top + rect.height / 2) {
+            list.insertBefore(dragSrc, card);
+        } else {
+            list.insertBefore(dragSrc, card.nextSibling);
+        }
+    });
+}
 
 // ── Anketa ────────────────────────────────────────────────────
 let surveyLoaded = false;
@@ -1272,6 +1390,50 @@ async function loadSurveyForm() {
         if (data) fillSurveyForm(data);
         else resetSurveyForm();
     } catch(e) { toast(e.message,'error'); }
+    initSurveyDragDrop();
+}
+
+function initSurveyDragDrop() {
+    const list = document.getElementById('sf-question-list');
+    if (!list || list.dataset.dndInit) return;
+    list.dataset.dndInit = '1';
+    let dragSrc = null;
+
+    list.addEventListener('dragstart', e => {
+        const card = e.target.closest('[id^="sfcard-"]');
+        if (!card) return;
+        dragSrc = card;
+        setTimeout(() => { card.style.opacity = '0.4'; }, 0);
+        e.dataTransfer.effectAllowed = 'move';
+    });
+    list.addEventListener('dragend', e => {
+        const card = e.target.closest('[id^="sfcard-"]');
+        if (card) card.style.opacity = '';
+        list.querySelectorAll('[id^="sfcard-"]').forEach(c => c.style.outline = '');
+    });
+    list.addEventListener('dragover', e => {
+        e.preventDefault();
+        const card = e.target.closest('[id^="sfcard-"]');
+        if (!card || card === dragSrc) return;
+        list.querySelectorAll('[id^="sfcard-"]').forEach(c => c.style.outline = '');
+        card.style.outline = '2px solid var(--color-accent)';
+    });
+    list.addEventListener('dragleave', e => {
+        const card = e.target.closest('[id^="sfcard-"]');
+        if (card) card.style.outline = '';
+    });
+    list.addEventListener('drop', e => {
+        e.preventDefault();
+        const card = e.target.closest('[id^="sfcard-"]');
+        if (!card || !dragSrc || card === dragSrc) return;
+        card.style.outline = '';
+        const rect = card.getBoundingClientRect();
+        if (e.clientY < rect.top + rect.height / 2) {
+            list.insertBefore(dragSrc, card);
+        } else {
+            list.insertBefore(dragSrc, card.nextSibling);
+        }
+    });
 }
 
 function fillSurveyForm(d) {
@@ -1334,11 +1496,11 @@ function surveyAddQuestion(data = null) {
     const TYPE_READABLE = { rating:'Zvezdičasta ocena (1–5)', radio:'Izbirni gumb', checkbox:'Potrditvena polja', text:'Kratko besedilo', textarea:'Dolgo besedilo' };
 
     if (canEdit) {
+        card.draggable = true;
         card.innerHTML = `
         <div style="display:flex;align-items:flex-start;gap:8px">
-            <div style="display:flex;flex-direction:column;gap:2px;flex-shrink:0;padding-top:2px">
-                <button onclick="sfMoveQ('${qk}',-1)" style="background:none;border:1px solid var(--color-border);border-radius:4px;width:22px;height:22px;cursor:pointer;font-size:.7rem;color:var(--color-muted);display:flex;align-items:center;justify-content:center;padding:0" title="Gor">▲</button>
-                <button onclick="sfMoveQ('${qk}',1)"  style="background:none;border:1px solid var(--color-border);border-radius:4px;width:22px;height:22px;cursor:pointer;font-size:.7rem;color:var(--color-muted);display:flex;align-items:center;justify-content:center;padding:0" title="Dol">▼</button>
+            <div style="flex-shrink:0;padding:3px 2px;cursor:grab;color:var(--color-muted)" title="Povleci za premik">
+                <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/><circle cx="2" cy="6" r="1.5"/><circle cx="8" cy="6" r="1.5"/><circle cx="2" cy="10" r="1.5"/><circle cx="8" cy="10" r="1.5"/><circle cx="2" cy="14" r="1.5"/><circle cx="8" cy="14" r="1.5"/></svg>
             </div>
             <div style="flex:1;display:flex;flex-direction:column;gap:6px">
                 <input type="text" id="sfqt-${qk}" placeholder="Besedilo vprašanja..." value="${h(text)}"

@@ -83,7 +83,11 @@ function refresh_subscription_session(PDO $pdo): void {
     try {
         require_once __DIR__ . '/plans.php';
         $sub = get_active_subscription($pdo, (int)$_SESSION['user_id']);
-        $_SESSION['plan_slug']       = $sub['plan_slug'] ?? 'trial';
+        // plan_slug je zdaj vedno 'basic'/'advanced'/'premium' (ne več 'trial')
+        $planSlug = $sub['plan_slug'] ?? 'basic';
+        if ($planSlug === 'trial') $planSlug = 'basic'; // legacy fallback
+        $_SESSION['plan_slug']       = $planSlug;
+        $_SESSION['is_on_trial']     = is_on_trial($sub);
         $_SESSION['trial_days_left'] = get_trial_days_left($sub);
         $_SESSION['trial_expired']   = is_trial_expired($sub);
         $_SESSION['payment_failed']  = ($sub['status'] ?? '') === 'payment_failed';

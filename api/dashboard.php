@@ -31,6 +31,7 @@ try {
                        SUM(guest_count) AS total_guests
                 FROM reservations
                 WHERE reservation_date BETWEEN ? AND ? AND restaurant_id = ?
+                  AND status NOT IN ('rejected', 'cancelled')
                 GROUP BY reservation_date
             ");
             $stmt->execute([$from, $to, $rest_id]);
@@ -42,6 +43,7 @@ try {
                 FROM reservations r
                 JOIN restaurants res ON r.restaurant_id = res.id
                 WHERE r.reservation_date BETWEEN ? AND ? AND res.is_active = 1
+                  AND r.status NOT IN ('rejected', 'cancelled')
                 GROUP BY r.reservation_date
             ");
             $stmt->execute([$from, $to]);
@@ -57,6 +59,7 @@ try {
                        SUM(guest_count) AS total_guests
                 FROM reservations
                 WHERE reservation_date BETWEEN ? AND ? AND restaurant_id = ?
+                  AND status NOT IN ('rejected', 'cancelled')
                 GROUP BY reservation_date
             ");
             $stmt->execute([$from, $to, $rest_id]);
@@ -69,6 +72,7 @@ try {
                 FROM reservations r
                 JOIN restaurants res ON r.restaurant_id = res.id
                 WHERE r.reservation_date BETWEEN ? AND ? AND res.is_active = 1
+                  AND r.status NOT IN ('rejected', 'cancelled')
                   AND EXISTS (SELECT 1 FROM restaurant_admins ra
                               WHERE ra.restaurant_id = r.restaurant_id AND ra.user_id = ?)
                 GROUP BY r.reservation_date
@@ -83,6 +87,7 @@ try {
                    SUM(guest_count) AS total_guests
             FROM reservations
             WHERE reservation_date BETWEEN ? AND ? AND restaurant_id = ?
+              AND status NOT IN ('rejected', 'cancelled')
             GROUP BY reservation_date
         ");
         $stmt->execute([$from, $to, (int)$session['restaurant_id']]);

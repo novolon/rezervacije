@@ -31,10 +31,31 @@ const DEFAULT_PLANS = {
 };
 
 const PLAN_FEATURES: Record<string, string[]> = {
-  trial:    ['Reservation management', 'Multiple restaurants', 'Unlimited staff accounts', 'Real-time calendar'],
-  basic:    ['Everything in Trial', 'Email support'],
-  advanced: ['Everything in Basic', 'Guest email notifications', 'Public booking link', 'Approve/reject bookings'],
-  premium:  ['Everything in Advanced', 'Restaurant branding', 'Embed widget', 'SMS notifications'],
+  basic:    [
+    'Reservation management',
+    'Multiple restaurants',
+    'Unlimited staff accounts',
+    'Real-time calendar',
+    'Email support',
+  ],
+  advanced: [
+    'Everything in Basic',
+    'Guest email notifications',
+    '24h guest reminders',
+    'Public booking link',
+    'Approve / reject bookings',
+    'Guest database & history',
+    'Waitlist management',
+    'Table management',
+  ],
+  premium:  [
+    'Everything in Advanced',
+    'Embeddable booking widget',
+    'Restaurant branding',
+    'Auto-confirm with guest limits',
+    'SMS notifications',
+    'Satisfaction surveys + CSV export',
+  ],
 };
 
 function fmt(price: number): string {
@@ -54,19 +75,6 @@ export function PricingSection() {
 
   const cards = [
     {
-      slug: 'trial',
-      name: 'Trial',
-      price: 'Free',
-      origPrice: null,
-      period: 'for 30 days',
-      discount: null,
-      description: 'Full access to core features to test it out.',
-      features: PLAN_FEATURES.trial,
-      cta: 'Start Free Trial',
-      highlight: false,
-      href: `${APP_URL}/register.php`,
-    },
-    {
       slug: 'basic',
       name: plans.basic.name,
       price: fmt(isYearly
@@ -79,7 +87,7 @@ export function PricingSection() {
       discount: plans.basic.discount,
       description: 'Perfect for single locations moving off paper.',
       features: PLAN_FEATURES.basic,
-      cta: 'Get Started',
+      cta: 'Start Free Trial',
       highlight: false,
       href: `${APP_URL}/register.php?plan=basic`,
     },
@@ -94,9 +102,9 @@ export function PricingSection() {
         : (plans.advanced.discount?.discounted_monthly != null ? fmt(plans.advanced.monthly_price) : null),
       period: isYearly ? '/year' : '/month',
       discount: plans.advanced.discount,
-      description: 'For restaurants that want online bookings.',
+      description: 'For restaurants that want online bookings and guest tools.',
       features: PLAN_FEATURES.advanced,
-      cta: 'Get Started',
+      cta: 'Start Free Trial',
       highlight: true,
       href: `${APP_URL}/register.php?plan=advanced`,
     },
@@ -111,9 +119,9 @@ export function PricingSection() {
         : (plans.premium.discount?.discounted_monthly != null ? fmt(plans.premium.monthly_price) : null),
       period: isYearly ? '/year' : '/month',
       discount: plans.premium.discount,
-      description: 'Professional tools and full branding.',
+      description: 'Professional tools, full branding and automation.',
       features: PLAN_FEATURES.premium,
-      cta: 'Get Started',
+      cta: 'Start Free Trial',
       highlight: false,
       href: `${APP_URL}/register.php?plan=premium`,
     },
@@ -121,11 +129,15 @@ export function PricingSection() {
 
   return (
     <section id="pricing" className="py-24 bg-white">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-forest mb-6">
+          <h2 className="text-3xl md:text-4xl font-bold text-forest mb-4">
             Simple, transparent pricing
           </h2>
+          <p className="text-forest/60 text-lg mb-8">
+            Try any plan free for 30 days — no credit card required.
+            Switch between plans freely during your trial.
+          </p>
 
           {/* Toggle */}
           <div className="flex items-center justify-center gap-4">
@@ -149,7 +161,7 @@ export function PricingSection() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
           {cards.map((plan, index) =>
             <motion.div
               key={plan.slug}
@@ -165,9 +177,15 @@ export function PricingSection() {
                 </div>
               }
 
-              <div className="mb-8">
+              {/* 30-day trial badge */}
+              <div className="inline-flex items-center gap-1.5 bg-sage/15 text-sage-dark text-xs font-semibold px-3 py-1 rounded-full mb-4 self-start">
+                <Check size={12} className="text-sage" />
+                30-day free trial
+              </div>
+
+              <div className="mb-6">
                 <h3 className="text-xl font-bold text-forest mb-2">{plan.name}</h3>
-                <p className="text-forest/60 text-sm h-10">{plan.description}</p>
+                <p className="text-forest/60 text-sm">{plan.description}</p>
               </div>
 
               <div className="mb-1">
@@ -182,22 +200,22 @@ export function PricingSection() {
 
               {plan.discount && !isYearly && plan.discount.discounted_monthly != null &&
                 <div className="text-xs text-terracotta font-semibold mb-4">
-                  {plan.discount.label} – do {plan.discount.valid_until.slice(0, 7).replace('-', '/')}
+                  {plan.discount.label} – until {plan.discount.valid_until.slice(0, 7).replace('-', '/')}
                 </div>
               }
               {plan.discount && isYearly && plan.discount.discounted_yearly != null &&
                 <div className="text-xs text-terracotta font-semibold mb-4">
-                  {plan.discount.label} – do {plan.discount.valid_until.slice(0, 7).replace('-', '/')}
+                  {plan.discount.label} – until {plan.discount.valid_until.slice(0, 7).replace('-', '/')}
                 </div>
               }
               {(!plan.discount || (isYearly ? plan.discount.discounted_yearly == null : plan.discount.discounted_monthly == null)) &&
                 <div className="mb-4" />
               }
 
-              <ul className="space-y-4 mb-8 flex-1">
+              <ul className="space-y-3 mb-8 flex-1">
                 {plan.features.map((feature, i) =>
                   <li key={i} className="flex items-start gap-3">
-                    <Check size={20} className="text-sage shrink-0 mt-0.5" />
+                    <Check size={18} className="text-sage shrink-0 mt-0.5" />
                     <span className="text-forest/80 text-sm">{feature}</span>
                   </li>
                 )}
@@ -215,6 +233,10 @@ export function PricingSection() {
         <div className="text-center text-forest/60 text-sm space-y-2">
           <p className="font-medium text-forest/80">
             All plans include unlimited staff accounts and multi-restaurant support.
+          </p>
+          <p>
+            After the 30-day trial, choose and pay for the plan that suits you best.
+            Upgrade at any time — you only pay the prorated difference.
           </p>
           <p>
             Yearly billing also available by invoice —{' '}

@@ -418,38 +418,16 @@ function initialMonthly(array $d): string {
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-12">
-
-            <!-- Trial -->
-            <div class="relative flex flex-col p-8 rounded-3xl border border-sage-light bg-white">
-                <div class="mb-8">
-                    <h3 class="text-xl font-bold text-forest mb-2">Preizkus</h3>
-                    <p class="text-forest/60 text-sm h-10">Polni dostop do osnovnih funkcionalnosti za preizkus.</p>
-                </div>
-                <div class="mb-1 flex items-baseline gap-2">
-                    <span class="text-4xl font-bold text-forest">Brezplačno</span>
-                    <span class="text-forest/60 font-medium" id="trial-period">za 30 dni</span>
-                </div>
-                <div class="mb-4 h-4"></div>
-                <ul class="space-y-4 mb-8 flex-1">
-                    <?php foreach (['Upravljanje rezervacij','Več restavracij','Neomejeno računov osebja','Koledar v realnem času'] as $f): ?>
-                    <li class="flex items-start gap-3">
-                        <svg class="shrink-0 mt-0.5" width="20" height="20" fill="none" stroke="#A3B18A" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                        <span class="text-forest/80 text-sm"><?= htmlspecialchars($f) ?></span>
-                    </li>
-                    <?php endforeach; ?>
-                </ul>
-                <a href="<?= $appUrl ?>/register.php" class="w-full py-3 rounded-xl font-bold text-center transition-colors bg-forest/10 hover:bg-forest/20 text-forest">Začni brezplačno</a>
-            </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
 
             <?php
             $planCards = [
                 ['basic',    false, 'Idealno za posamezne lokacije, ki prehajajo s papirja.',
-                    ['Vse iz Preizkusa', 'E-poštna podpora']],
-                ['advanced', true,  'Za restavracije, ki želijo spletne rezervacije.',
-                    ['Vse iz Osnovnega', 'E-poštna obvestila gostom', 'Javna rezervacijska povezava', 'Potrjevanje/zavračanje rezervacij']],
+                    ['Upravljanje rezervacij', 'Več restavracij', 'Neomejeno računov osebja', 'Koledar v realnem času', 'E-poštna podpora']],
+                ['advanced', true,  'Za restavracije, ki želijo spletne rezervacije in orodja za goste.',
+                    ['Vse iz Osnovnega', 'E-poštna obvestila gostom', 'Opomniki 24h pred rezervacijo', 'Javna rezervacijska povezava', 'Potrjevanje/zavračanje rezervacij', 'Baza gostov', 'Čakalna lista', 'Upravljanje miz']],
                 ['premium',  false, 'Profesionalna orodja in polni branding.',
-                    ['Vse iz Naprednega', 'Branding restavracije', 'Vgradljivi widget', 'SMS obvestila']],
+                    ['Vse iz Naprednega', 'Branding restavracije', 'Vgradljivi widget', 'Samodejno potrjevanje', 'SMS obvestila', 'Ankete + CSV izvoz']],
             ];
             $planNames = ['basic' => 'Osnovni', 'advanced' => 'Napredni', 'premium' => 'Premium'];
             foreach ($planCards as [$slug, $highlighted, $desc, $features]):
@@ -463,9 +441,15 @@ function initialMonthly(array $d): string {
                 <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-terracotta text-white px-4 py-1 rounded-full text-sm font-bold shadow-sm">Priljubljen</div>
                 <?php endif; ?>
 
-                <div class="mb-8">
+                <!-- 30-day trial badge -->
+                <div class="inline-flex items-center gap-1.5 bg-sage/15 text-forest text-xs font-semibold px-3 py-1 rounded-full mb-4 self-start border border-sage/30">
+                    <svg width="11" height="11" fill="none" stroke="#A3B18A" stroke-width="2.5"><polyline points="10 3 4.5 8.5 2 6"/></svg>
+                    30 dni brezplačno
+                </div>
+
+                <div class="mb-6">
                     <h3 class="text-xl font-bold text-forest mb-2"><?= $planNames[$slug] ?></h3>
-                    <p class="text-forest/60 text-sm h-10"><?= htmlspecialchars($desc) ?></p>
+                    <p class="text-forest/60 text-sm"><?= htmlspecialchars($desc) ?></p>
                 </div>
 
                 <div class="mb-1 flex items-baseline gap-2 flex-wrap">
@@ -482,7 +466,7 @@ function initialMonthly(array $d): string {
                 </div>
                 <?php if (!$showDisc): ?><div class="mb-4 h-4"></div><?php endif; ?>
 
-                <ul class="space-y-4 mb-8 flex-1">
+                <ul class="space-y-3 mb-8 flex-1">
                     <?php foreach ($features as $f): ?>
                     <li class="flex items-start gap-3">
                         <svg class="shrink-0 mt-0.5" width="20" height="20" fill="none" stroke="#A3B18A" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
@@ -492,7 +476,7 @@ function initialMonthly(array $d): string {
                 </ul>
                 <a href="<?= $appUrl ?>/register.php?plan=<?= $slug ?>"
                    class="w-full py-3 rounded-xl font-bold text-center transition-colors <?= $highlighted ? 'bg-terracotta hover:bg-terracotta-hover text-white' : 'bg-forest/10 hover:bg-forest/20 text-forest' ?>">
-                    Začni zdaj
+                    Začni brezplačni preizkus
                 </a>
                 <a href="<?= $appUrl ?>/register.php?plan=<?= $slug ?>"
                    class="invoice-btn-<?= $slug ?> block w-full mt-3 py-2 border border-dashed border-sage text-center text-forest/60 hover:text-forest text-sm rounded-xl transition-colors"
@@ -506,6 +490,7 @@ function initialMonthly(array $d): string {
 
         <div class="text-center text-forest/60 text-sm space-y-2">
             <p class="font-medium text-forest/80">Vsi paketi vključujejo neomejeno računov osebja in podporo za več restavracij.</p>
+            <p>Po preteku 30-dnevnega triala izberite paket, ki vam ustreza. Nadgradnja kadarkoli – plačate samo sorazmerno razliko.</p>
             <p>Letno plačilo je možno tudi po predračunu — <a href="<?= $appUrl ?>/register.php" class="underline hover:text-terracotta">kontaktirajte nas</a>.</p>
         </div>
     </div>
@@ -529,7 +514,9 @@ function initialMonthly(array $d): string {
                 ['Koliko računov osebja lahko dodam?',
                  'Število računov osebja ni omejeno.'],
                 ['Ali obstaja brezplačni preizkus?',
-                 'Da – 30 dni, brez kreditne kartice. Dobite polni dostop do osnovnih funkcionalnosti.'],
+                 'Da – katerikoli paket (Osnovni, Napredni, Premium) lahko preizkušate 30 dni brezplačno. Kreditna kartica ni potrebna. Med trialom lahko prosto preklapljate med paketi.'],
+                ['Ali lahko med trialom zamenjam paket?',
+                 'Da, brez omejitev in brez plačila. V nastavitvah zaračunavanja izberite drug paket in sprememba začne veljati takoj.'],
                 ['Ali lahko kadarkoli prekličem naročnino?',
                  'Da. Prekličete kadarkoli v nastavitvah zaračunavanja.'],
                 ['Ali ponujate letno plačilo po predračunu?',

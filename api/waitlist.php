@@ -205,6 +205,9 @@ if ($method === 'POST') {
     if ($date < date('Y-m-d')) {
         json_response(false, null, 'Datum je v preteklosti.', 400);
     }
+    if (is_blackout($pdo, (int)$rest['id'], $date)) {
+        json_response(false, null, 'Za ta datum rezervacije niso na voljo.', 400);
+    }
     if (!$firstName) {
         json_response(false, null, 'Ime je obvezno.', 400);
     }

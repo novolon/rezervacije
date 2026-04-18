@@ -310,3 +310,120 @@ Na karticah rezervacij prikaži majhen badge z imenom mize (npr. `M3` ali `M3+M4
 4. **Merge:** zapolni vse enotne mize, pusti merge grupo prosto → sistem jo samodejno dodeli
 5. **Staff prestavi:** PUT na `api/table_assignment.php` → `assigned_by` ni NULL
 6. **Basic plan:** `api/tables.php` vrne 403 Forbidden
+
+
+---
+
+## Faza 2 — Nadgradnje
+
+### 1. Čakalna lista: podrobnosti rezervacije
+
+**Datoteka:** `pages/waitlist.php`
+
+Vsaka vrstica v tabeli čakalne liste postane klikljiva. Klik odpre modal s polnimi podrobnostmi vnosa:
+ime, email, telefon, datum, čas, gostje, stanje, kdaj vpisan, kdaj obveščen, kdaj potrjen.
+
+Obstoječe akcije (Obvesti / Odstrani) ostanejo, modal jih vsebuje poleg podatkov.
+
+---
+
+### 2. Blokirani datumi → brez čakalnega seznama
+
+**Datoteke:** `includes/functions.php`, `api/waitlist.php`
+
+`is_blackout()` se premakne iz `api/book.php` v `includes/functions.php`, ker jo sedaj potrebujeta dve datoteki.
+
+V `api/waitlist.php` POST (javni vpis na čakalno listo) se doda preverba takoj po nalaganju restavracije:
+```php
+if (is_blackout($pdo, (int)$rest['id'], $date)) {
+    json_response(false, null, 'Za ta datum rezervacije niso na voljo.', 400);
+}
+```
+
+---
+
+### 3. Admin UI: cone-first
+
+**Datoteka:** `pages/restaurant-edit.php`
+
+Mize se v admin panelu prikažejo grupirane po conah. Vsaka cona ima lasten razdelek z gumbom **"+ Miza"** znotraj nje. Mize brez cone so v razdelku "Brez cone".
+
+Enako za združene mize: forma za novo skupino se prikaže šele po izbiri vsaj ene cone ali pa je privzeto pripeta na obstoječe mize.
+
+Sprememba je le vizualna/UX — podatkovni model ostane nespremenjen.
+
+---
+
+### 4. "Vse mize so združljive"
+
+**Datoteke:** `sql/migrate_tables.sql`, `restaurants` tabela, `includes/table_helper.php`, `pages/restaurant-edit.php` (splošne nastavitve ali zavihek Mize)
+
+Nova nastavitev restavracije: `all_tables_mergeable TINYINT(1) NOT NULL DEFAULT 0`.
+
+Ko je vklopljena, algoritem `find_available_table` po koraku 5 (enotna miza) in koraku 6 (definirane merge grupe) doda korak 6b:
+```
+6b. all_tables_mergeable preverba:
+    freeTables sortiramo DESC po kapaciteti
+    greedily kopičimo, dokler sum(capacity) >= guestCount
+    → vrni ['mode' => 'merge', 'table_ids' => [...], 'merge_group_id' => null]
+    Če ni dovolj prostih miz → vrni false
+```
+
+Admin toggle: checkbox v razdelku "Združene mize" v zavihku Mize.
+
+---
+
+### 5. Izbira cone v booking flowu
+
+**Datoteke:** `api/book.php`, `book.php` (javna stran), `widget.js`
+
+Nova nastavitev restavracije: `allow_area_choice TINYINT(1) NOT NULL DEFAULT 0`.
+
+#### Backend (`api/book.php` GET)
+
+Ko je `allow_area_choice` aktiven, GET ?date=&time=&guests= vrne dodatno polje `areas`:
+```json
+"areas": [
+  { "id": 1, "name": "Terasa", "available": true },
+  { "id": 2, "name": "Notranjost", "available": false }
+]
+```
+Cone brez razpoložljive mize so `available: false`. Dodana je možnost `{ "id": null, "name": "Vseeno mi je" }` vedno na vrhu.
+
+#### Backend (`api/book.php` POST)
+
+Sprejme opcionalno `area_id`. Če je podana, `find_available_table` išče samo med mizami v tej coni.
+
+#### `find_available_table` razširitev
+
+Nov opcijski parameter `?int $areaId = null`. Če je podan, poizvedba za mize doda `AND rt.area_id = :areaId`.
+
+#### Frontend (`book.php` + `widget.js`)
+
+Nov korak **3b** med izbiro termina (korak 3) in obrazcem (korak 4):
+- Naslov: "Izberite prostor"
+- Seznam gumbov / kartic za vsako cono
+- Prva možnost: "Vseeno mi je" (vedno aktivna)
+- Disabled cone: vizualno zatemnjene z razlogom "ni prostih miz"
+- Če admin `allow_area_choice = 0` → korak 3b se preskoči
+
+#### Admin toggle
+
+Checkbox v splošnih nastavitvah restavracije (`pages/restaurant-edit.php`, razdelek Rezervacije).
+
+---
+
+### 6. Vizualizacija miz (Faza 3 — plan po zaključku Faze 2)
+
+Po zaključku vseh točk Faze 2 se naredi ločen plan za interaktivni tloris restavracije.
+
+---
+
+## Zaporedje implementacije Faze 2
+
+1. `is_blackout` → premakni v `includes/functions.php`
+2. Čakalna lista: podrobnosti (modal klik)
+3. Blokirani datumi: preverba v `api/waitlist.php`
+4. Admin UI: cone-first prikaz
+5. `all_tables_mergeable`: migracija + algoritem + toggle
+6. `allow_area_choice`: migracija + API + book.php + widget.js

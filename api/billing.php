@@ -135,6 +135,97 @@ if ($method === 'POST' && $action === 'customer_portal') {
     json_response(true, ['url' => $portal['url']]);
 }
 
+// ─── POST: preklop paketa med trialom (brez plačila) ─────────
+if ($method === 'POST' && $action === 'switch_trial_plan') {
+    $newPlanSlug = $body['plan_slug'] ?? '';
+    $validPlans  = ['basic', 'advanced', 'premium'];
+
+    if (!in_array($newPlanSlug, $validPlans)) {
+        json_response(false, null, 'Neveljaven paket.', 400);
+    }
+
+    $userId = (int)$session['user_id'];
+    $sub    = get_active_subscription($pdo, $userId);
+
+    if (!$sub || $sub['status'] !== 'trial') {
+        json_response(false, null, 'Preklop je možen samo med brezplačnim trialom.', 400);
+    }
+    if ($sub['plan_slug'] === $newPlanSlug) {
+        json_response(true, ['plan_slug' => $newPlanSlug], 'Paket je že aktiven.');
+    }
+
+    $pdo->prepare("UPDATE subscriptions SET plan_slug = ? WHERE id = ?")
+        ->execute([$newPlanSlug, $sub['id']]);
+
+    // Razveljavi session cache za takojšen efekt
+    unset($_SESSION['_sub_cached_at']);
+
+    json_response(true, ['plan_slug' => $newPlanSlug], 'Paket uspešno preklopljen na ' . PLANS[$newPlanSlug]['name'] . '.');
+}
+
+// ─── POST: nadgradnja plačljive naročnine s proracijo ─────────
+if ($method === 'POST' && $action === 'upgrade_plan') {
+    $newPlanSlug = $body['plan_slug'] ?? '';
+    $validPlans  = ['basic', 'advanced', 'premium'];
+
+    if (!in_array($newPlanSlug, $validPlans)) {
+        json_response(false, null, 'Neveljaven paket.', 400);
+    }
+
+    $userId = (int)$session['user_id'];
+    $sub    = get_active_subscription($pdo, $userId);
+
+    if (!$sub || $sub['status'] !== 'active') {
+        json_response(false, null, 'Nadgradnja je možna samo za aktivne plačljive naročnine.', 400);
+    }
+    if (get_plan_rank($newPlanSlug) <= get_plan_rank($sub['plan_slug'])) {
+        json_response(false, null, 'Izberite višji paket za nadgradnjo.', 400);
+    }
+    if (!$sub['stripe_subscription_id']) {
+        json_response(false, null, 'Naročnina ni Stripe naročnina. Kontaktirajte podporo.', 400);
+    }
+
+    // Pridobi subscription item ID iz Stripe
+    $stripeSub = stripe_request('GET', '/subscriptions/' . $sub['stripe_subscription_id']);
+    $itemId    = $stripeSub['items']['data'][0]['id'] ?? null;
+    if (!$itemId) {
+        error_log('upgrade_plan: cannot find subscription item for ' . $sub['stripe_subscription_id']);
+        json_response(false, null, 'Napaka pri pridobivanju podatkov naročnine.', 500);
+    }
+
+    $billingCycle = $sub['billing_cycle'] ?? 'monthly';
+    $priceId      = STRIPE_PRICES[$newPlanSlug][$billingCycle] ?? null;
+    if (!$priceId) {
+        json_response(false, null, 'Cena za ta paket ni konfigurirana.', 500);
+    }
+
+    // Posodobi Stripe naročnino – proration se ustvari samodejno
+    $updated = stripe_request('POST', '/subscriptions/' . $sub['stripe_subscription_id'], [
+        'items' => [[
+            'id'    => $itemId,
+            'price' => $priceId,
+        ]],
+        'proration_behavior'    => 'create_prorations',
+        'metadata' => [
+            'plan_slug'     => $newPlanSlug,
+            'billing_cycle' => $billingCycle,
+        ],
+    ]);
+
+    if (isset($updated['error'])) {
+        error_log('Stripe upgrade error: ' . json_encode($updated));
+        json_response(false, null, 'Napaka pri nadgradnji pri Stripe: ' . ($updated['error']['message'] ?? 'Neznana napaka.'), 500);
+    }
+
+    // Posodobi plan_slug v naši bazi
+    $pdo->prepare("UPDATE subscriptions SET plan_slug = ? WHERE id = ?")
+        ->execute([$newPlanSlug, $sub['id']]);
+
+    unset($_SESSION['_sub_cached_at']);
+
+    json_response(true, ['plan_slug' => $newPlanSlug], 'Paket uspešno nadgrajen na ' . PLANS[$newPlanSlug]['name'] . '. Sorazmerni znesek bo zaračunan na vaš plačilni način.');
+}
+
 // ─── POST: zahtevek za predračun (letno plačilo) ─────────────
 if ($method === 'POST' && $action === 'request_invoice') {
     require_once '../includes/mailer.php';
@@ -142,7 +233,7 @@ if ($method === 'POST' && $action === 'request_invoice') {
     $planSlug     = $body['plan_slug'] ?? '';
     $billingCycle = $body['billing_cycle'] ?? '';
 
-    if (!isset(PLANS[$planSlug]) || $planSlug === 'trial') {
+    if (!in_array($planSlug, ['basic', 'advanced', 'premium'])) {
         json_response(false, null, 'Neveljaven paket.', 400);
     }
     if ($billingCycle !== 'yearly') {
@@ -154,8 +245,8 @@ if ($method === 'POST' && $action === 'request_invoice') {
     $name   = $session['full_name'] ?? '';
 
     $sub = get_active_subscription($pdo, $userId);
-    if ($sub && $sub['status'] === 'active') {
-        json_response(false, null, 'Že imate aktivno naročnino.', 400);
+    if ($sub && $sub['status'] === 'active' && $sub['plan_slug'] === $planSlug) {
+        json_response(false, null, 'Že imate aktivno naročnino tega paketa.', 400);
     }
     if ($sub && $sub['status'] === 'pending_invoice' && $sub['plan_slug'] === $planSlug) {
         json_response(false, null, 'Zahtevek za ta paket je že bil poslan. Kmalu vas bomo kontaktirali.', 400);

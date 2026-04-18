@@ -96,9 +96,58 @@ if ($method === 'GET') {
 
     // Dodaj rest_count (da UI ve ali prikazati ime restavracije)
     $restCount = count(array_unique(array_column($rows, 'restaurant_id')));
+
+    // Poiščemo rezervacijo + custom polja za vsak vnos (ne samo potrjene)
+    $resStmt = $pdo->prepare("
+        SELECT res.id, res.guest_name, res.guest_count, res.reservation_time,
+               res.duration, res.email AS res_email, res.phone AS res_phone,
+               res.notes, res.status AS res_status
+        FROM reservations res
+        WHERE res.restaurant_id = ?
+          AND res.email = ?
+          AND res.reservation_date = ?
+          AND res.status NOT IN ('cancelled')
+        ORDER BY res.created_at DESC
+        LIMIT 1
+    ");
+    $cfStmt = $pdo->prepare("
+        SELECT rcf.label, rfv.value
+        FROM reservation_field_values rfv
+        JOIN restaurant_custom_fields rcf ON rfv.field_id = rcf.id
+        WHERE rfv.reservation_id = ?
+        ORDER BY rcf.sort_order, rcf.id
+    ");
+    $gpStmt = $pdo->prepare("
+        SELECT total_visits, last_visit, tags
+        FROM guests
+        WHERE restaurant_id = ? AND email = ?
+        LIMIT 1
+    ");
+
     foreach ($rows as &$row) {
-        $row['rest_count'] = $restCount;
+        $row['rest_count']    = $restCount;
+        $row['reservation']   = null;
+        $row['field_values']  = [];
+        $row['guest_profile'] = null;
+
+        $resStmt->execute([$row['restaurant_id'], $row['email'], $row['date']]);
+        $res = $resStmt->fetch();
+        if ($res) {
+            $row['reservation'] = $res;
+            try {
+                $cfStmt->execute([$res['id']]);
+                $row['field_values'] = $cfStmt->fetchAll(PDO::FETCH_ASSOC);
+            } catch (PDOException $e) { /* tabela morda ne obstaja */ }
+        }
+
+        // Profil gosta iz baze gostov
+        try {
+            $gpStmt->execute([$row['restaurant_id'], $row['email']]);
+            $gp = $gpStmt->fetch();
+            if ($gp) $row['guest_profile'] = $gp;
+        } catch (\Throwable $e) { /* tabela morda ne obstaja */ }
     }
+    unset($row);
 
     json_response(true, $rows);
 }

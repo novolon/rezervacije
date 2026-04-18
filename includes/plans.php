@@ -5,8 +5,9 @@
 
 // ─── Definicije paketov ────────────────────────────────────────
 const PLANS = [
+    // 'trial' je ohranjen samo za legacy zapise v bazi – ne prikazuj v UI
     'trial' => [
-        'name'            => 'Trial',
+        'name'            => 'Basic',   // legacy: stari trial zapisi → enako kot Basic
         'monthly_price'   => 0,
         'yearly_price'    => 0,
         'features'        => ['reservations', 'restaurants', 'staff'],
@@ -41,6 +42,9 @@ const PLANS = [
                               'table_management'],
     ],
 ];
+
+// Vrstni red paketov (za zaznavo nadgradnje)
+const PLAN_RANK = ['trial' => 1, 'basic' => 1, 'advanced' => 2, 'premium' => 3];
 
 // ─── Opisi funkcionalnosti (za UI) ────────────────────────────
 const FEATURE_LABELS = [
@@ -96,26 +100,96 @@ function require_feature(PDO $pdo, array $session, string $feature): void {
     }
 }
 
+// ─── Je naročnina v trial obdobju? ───────────────────────────
+// Trial se določa po STATUS, ne po plan_slug.
+function is_on_trial(?array $sub): bool {
+    return $sub !== null && $sub['status'] === 'trial';
+}
+
 // ─── Koliko dni do konca triala ───────────────────────────────
 function get_trial_days_left(?array $sub): int {
-    if (!$sub || $sub['plan_slug'] !== 'trial' || !$sub['ends_at']) return 0;
+    if (!$sub || $sub['status'] !== 'trial' || !$sub['ends_at']) return 0;
     $diff = (new DateTime($sub['ends_at']))->diff(new DateTime());
-    // invert=1 pomeni ends_at je v prihodnosti (še ni potekel)
     return $diff->invert === 0 ? 0 : max(0, (int)$diff->days);
 }
 
 // ─── Je trial potekel? ────────────────────────────────────────
 function is_trial_expired(?array $sub): bool {
     if (!$sub) return true;
-    if ($sub['plan_slug'] !== 'trial') return false;
+    if ($sub['status'] !== 'trial') return false; // aktivni plačljivi paket ni potekel
     if (!$sub['ends_at']) return false;
     return strtotime($sub['ends_at']) < time();
 }
 
+// ─── Rang paketa (za zaznavo nadgradnje) ──────────────────────
+function get_plan_rank(string $planSlug): int {
+    return PLAN_RANK[$planSlug] ?? 0;
+}
+
+// ─── Izračun sorazmerne razlike za nadgradnjo ─────────────────
+// Vrne array z informacijami o prorated znesku ali [], če izračun ni možen.
+function calculate_upgrade_proration(array $sub, string $newPlanSlug, PDO $pdo): array {
+    if ($sub['status'] !== 'active' || !$sub['ends_at'] || !$sub['billing_cycle']) {
+        return [];
+    }
+    $cycle   = $sub['billing_cycle'];
+    $oldSlug = $sub['plan_slug'];
+
+    if (get_plan_rank($newPlanSlug) <= get_plan_rank($oldSlug)) {
+        return []; // ni nadgradnja
+    }
+
+    $now = new DateTime('now', new DateTimeZone('UTC'));
+    $end = new DateTime($sub['ends_at'], new DateTimeZone('UTC'));
+
+    if ($now >= $end) return [];
+
+    $remainingDays = (int)$now->diff($end)->days;
+
+    // Dolžina obdobja (mesečno / letno)
+    $periodStart = (clone $end);
+    if ($cycle === 'monthly') {
+        $periodStart->modify('-1 month');
+    } else {
+        $periodStart->modify('-1 year');
+    }
+    $periodDays = max(1, (int)$periodStart->diff($end)->days);
+
+    $oldPrice = (float)PLANS[$oldSlug][$cycle . '_price'];
+
+    $discount = get_active_discount($pdo, $newPlanSlug);
+    if ($discount) {
+        $newPrice = $cycle === 'yearly'
+            ? (isset($discount['discounted_yearly'])  ? (float)$discount['discounted_yearly']  : (float)PLANS[$newPlanSlug]['yearly_price'])
+            : (isset($discount['discounted_monthly']) ? (float)$discount['discounted_monthly'] : (float)PLANS[$newPlanSlug]['monthly_price']);
+    } else {
+        $newPrice = (float)PLANS[$newPlanSlug][$cycle . '_price'];
+    }
+
+    $ratio      = $remainingDays / $periodDays;
+    $credit     = round($ratio * $oldPrice, 2);
+    $chargeNow  = max(0.00, round($ratio * $newPrice - $credit, 2));
+
+    return [
+        'remaining_days'     => $remainingDays,
+        'period_days'        => $periodDays,
+        'old_plan'           => $oldSlug,
+        'new_plan'           => $newPlanSlug,
+        'cycle'              => $cycle,
+        'old_price'          => $oldPrice,
+        'new_price'          => $newPrice,
+        'credit'             => $credit,
+        'charge_now'         => $chargeNow,
+        'next_period_price'  => $newPrice,
+    ];
+}
+
 // ─── HTML badge za paket ──────────────────────────────────────
 function plan_badge(string $planSlug): string {
-    $label = PLANS[$planSlug]['name'] ?? ucfirst($planSlug);
-    return '<span class="plan-badge plan-badge-' . htmlspecialchars($planSlug, ENT_QUOTES) . '">' . htmlspecialchars($label, ENT_QUOTES) . '</span>';
+    // Za legacy 'trial' zapise prikaži ime Basic
+    $displaySlug = $planSlug === 'trial' ? 'basic' : $planSlug;
+    $label = PLANS[$displaySlug]['name'] ?? ucfirst($displaySlug);
+    return '<span class="plan-badge plan-badge-' . htmlspecialchars($displaySlug, ENT_QUOTES) . '">' . htmlspecialchars($label, ENT_QUOTES) . '</span>';
 }
 
 // ─── Aktivni popust za paket (če obstaja) ─────────────────────

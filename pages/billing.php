@@ -15,13 +15,28 @@ if ($_SESSION['role'] !== 'admin') {
 $pdo  = getDB();
 refresh_subscription_session($pdo);
 $sub  = get_active_subscription($pdo, (int)$_SESSION['user_id']);
-$currentPlan = $sub['plan_slug'] ?? 'trial';
-$fullName    = $_SESSION['full_name'];
+
+$currentPlan  = $sub['plan_slug'] ?? 'basic';
+if ($currentPlan === 'trial') $currentPlan = 'basic'; // legacy fallback
+$isOnTrial    = is_on_trial($sub);
+$isActive     = ($sub['status'] ?? '') === 'active';
+$trialDaysLeft= get_trial_days_left($sub);
+$fullName     = $_SESSION['full_name'];
 
 // Popusti za vsak paket
 $discounts = [];
 foreach (['basic', 'advanced', 'premium'] as $slug) {
     $discounts[$slug] = get_active_discount($pdo, $slug);
+}
+
+// Proration izračun za plačljive upgrade opcije
+$prorations = [];
+if ($isActive) {
+    foreach (['basic', 'advanced', 'premium'] as $slug) {
+        if (get_plan_rank($slug) > get_plan_rank($currentPlan)) {
+            $prorations[$slug] = calculate_upgrade_proration($sub, $slug, $pdo);
+        }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -45,6 +60,9 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
         </svg>
         <?= h(APP_NAME) ?>
         <?= plan_badge($currentPlan) ?>
+        <?php if ($isOnTrial): ?>
+            <span style="font-size:.7rem;background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;border-radius:20px;padding:2px 8px;font-weight:600;margin-left:4px">TRIAL</span>
+        <?php endif; ?>
     </a>
     <div class="header-restaurant">
         <span style="color:rgba(255,255,255,.5);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;font-weight:600">Paketi</span>
@@ -62,37 +80,49 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
 <?php require_once '../includes/trial_banner.php'; ?>
 
 <div class="admin-layout">
-<div class="admin-content" style="max-width:900px">
+<div class="admin-content" style="max-width:920px">
 
     <!-- Trenutni paket -->
-    <div style="margin-bottom:32px;padding:20px 24px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
+    <div style="margin-bottom:28px;padding:20px 24px;background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap">
         <div>
-            <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--color-muted);font-weight:600;margin-bottom:4px">Vaš trenutni paket</div>
+            <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;color:var(--color-muted);font-weight:600;margin-bottom:4px">
+                <?= $isOnTrial ? 'Preizkušate paket' : 'Vaš aktivni paket' ?>
+            </div>
             <div style="font-size:1.4rem;font-weight:700;color:#111827"><?= h(PLANS[$currentPlan]['name']) ?></div>
             <?php if ($sub): ?>
-                <?php if ($sub['status'] === 'trial' && $sub['ends_at']): ?>
+                <?php if ($isOnTrial && $sub['ends_at']): ?>
                     <div style="font-size:.85rem;color:var(--color-muted);margin-top:3px">
                         Trial poteče: <?= date('d. m. Y', strtotime($sub['ends_at'])) ?>
+                        <?php if ($trialDaysLeft > 0): ?>
+                            <span style="color:#92400E;font-weight:600">(še <?= $trialDaysLeft ?> dni)</span>
+                        <?php endif; ?>
                     </div>
-                <?php elseif ($sub['status'] === 'active' && $sub['ends_at']): ?>
+                <?php elseif ($isActive && $sub['ends_at']): ?>
                     <div style="font-size:.85rem;color:var(--color-muted);margin-top:3px">
                         Naročnina do: <?= date('d. m. Y', strtotime($sub['ends_at'])) ?>
+                        <span style="margin-left:6px;color:#6B7280">(<?= $sub['billing_cycle'] === 'yearly' ? 'letno' : 'mesečno' ?>)</span>
                     </div>
-                <?php elseif ($sub['status'] === 'active' && !$sub['ends_at']): ?>
+                <?php elseif ($isActive && !$sub['ends_at']): ?>
                     <div style="font-size:.85rem;color:#065F46;margin-top:3px">Aktivna naročnina (trajno)</div>
                 <?php endif; ?>
             <?php endif; ?>
         </div>
-        <?php if ($currentPlan !== 'trial' && ($sub['payment_method'] ?? '') === 'stripe'): ?>
+        <?php if ($isActive && ($sub['payment_method'] ?? '') === 'stripe'): ?>
             <button onclick="openCustomerPortal()" class="btn btn-ghost" style="font-size:.85rem">
                 Upravljaj naročnino →
             </button>
         <?php endif; ?>
     </div>
 
-    <?php $isSubscribed = $currentPlan !== 'trial' && ($sub['status'] ?? '') === 'active'; ?>
+    <?php if ($isOnTrial): ?>
+    <!-- ═══════════════════════════════════════════════════════
+         TRIAL POGLED – preklop paketov + zakup
+         ═══════════════════════════════════════════════════════ -->
 
-    <?php if (!$isSubscribed): ?>
+    <div style="margin-bottom:20px;padding:14px 18px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:var(--radius);font-size:.85rem;color:#1E40AF">
+        <strong>Med trialom</strong> prosto preizkusite kateri koli paket – brez plačila. Ko ste pripravljeni, zakupite paket po vaši izbiri.
+    </div>
+
     <!-- Billing cycle toggle -->
     <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:28px">
         <span style="font-size:.9rem;font-weight:500;color:#374151">Mesečno</span>
@@ -105,21 +135,20 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
         </span>
     </div>
 
-    <!-- Pricing kartice -->
-    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:18px;margin-bottom:36px">
+    <!-- Pricing kartice za trial -->
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-bottom:28px">
         <?php foreach (['basic','advanced','premium'] as $slug):
-            $plan     = PLANS[$slug];
-            $discount = $discounts[$slug];
-            $isCurrent= $slug === $currentPlan;
+            $plan        = PLANS[$slug];
+            $discount    = $discounts[$slug];
+            $isCurrent   = $slug === $currentPlan;
             $isHighlighted = $slug === 'advanced';
         ?>
         <div class="pricing-card <?= $isHighlighted ? 'pricing-card-featured' : '' ?> <?= $isCurrent ? 'pricing-card-current' : '' ?>">
-            <?php if ($isHighlighted): ?><div class="pricing-badge">Priporočeno</div><?php endif; ?>
-            <?php if ($isCurrent): ?><div class="pricing-badge pricing-badge-current">Vaš paket</div><?php endif; ?>
+            <?php if ($isHighlighted && !$isCurrent): ?><div class="pricing-badge">Priporočeno</div><?php endif; ?>
+            <?php if ($isCurrent): ?><div class="pricing-badge pricing-badge-current">Preizkušate</div><?php endif; ?>
 
             <div class="pricing-name"><?= h($plan['name']) ?></div>
 
-            <!-- Cena (mesečno) -->
             <div class="pricing-price" data-monthly="<?= $plan['monthly_price'] ?>" data-yearly="<?= $plan['yearly_price'] ?>"
                  data-disc-monthly="<?= $discount ? $discount['discounted_monthly'] : '' ?>"
                  data-disc-yearly="<?= $discount ? $discount['discounted_yearly'] : '' ?>">
@@ -135,7 +164,6 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
                 <div style="font-size:.72rem;color:#065F46;margin:-8px 0 10px;font-weight:600"><?= h($discount['label']) ?> – do <?= date('d. m.', strtotime($discount['valid_until'])) ?></div>
             <?php endif; ?>
 
-            <!-- Funkcionalnosti -->
             <ul class="pricing-features">
                 <?php foreach (FEATURE_LABELS as $fSlug => $fLabel):
                     $included = in_array($fSlug, $plan['features']);
@@ -151,31 +179,41 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
                 <?php endforeach; ?>
             </ul>
 
+            <!-- Preklop trial paketa (brezplačno) -->
             <?php if ($isCurrent): ?>
-                <button class="btn btn-ghost" disabled style="width:100%;margin-top:auto">Trenutni paket</button>
+                <button class="btn btn-ghost" disabled style="width:100%;margin-top:auto;margin-bottom:8px">Trenutno preizkušate</button>
             <?php else: ?>
-                <button class="btn <?= $isHighlighted ? 'btn-primary' : 'btn-outline' ?>" style="width:100%;margin-top:auto"
-                        onclick="selectPlan('<?= $slug ?>')">
-                    Izberi <?= h($plan['name']) ?>
-                </button>
-                <button class="btn-invoice" data-invoice-plan="<?= $slug ?>"
-                        onclick="requestInvoice('<?= $slug ?>')" style="display:none">
-                    ali po predračunu →
+                <button class="btn <?= $isHighlighted ? 'btn-primary' : 'btn-outline' ?>"
+                        style="width:100%;margin-top:auto;margin-bottom:8px"
+                        onclick="switchTrialPlan('<?= $slug ?>', this)">
+                    Preizkusi <?= h($plan['name']) ?>
                 </button>
             <?php endif; ?>
+
+            <!-- Zakup (Stripe checkout) -->
+            <button class="btn-checkout-main" data-plan="<?= $slug ?>"
+                    onclick="selectPlan('<?= $slug ?>')">
+                Zakupi <?= h($plan['name']) ?>
+            </button>
+            <button class="btn-invoice" data-invoice-plan="<?= $slug ?>"
+                    onclick="requestInvoice('<?= $slug ?>')" style="display:none">
+                ali po predračunu →
+            </button>
         </div>
         <?php endforeach; ?>
     </div>
 
-    <!-- Opomba -->
     <div style="text-align:center;font-size:.8rem;color:var(--color-muted);margin-bottom:40px">
-        Plačilo je varno in šifrirano.
-        Vsak paket vključuje 30-dnevni trial za testiranje.
+        Plačilo je varno in šifrirano. Zakup je mogoč kadar koli med trialom.
     </div>
 
-    <?php else: ?>
-    <!-- Naročnik – prikaz funkcionalnosti trenutnega paketa -->
-    <div style="max-width:480px;margin:0 auto 40px">
+    <?php elseif ($isActive): ?>
+    <!-- ═══════════════════════════════════════════════════════
+         PLAČLJIV NAROČNIK – funkcionalnosti + morebitna nadgradnja
+         ═══════════════════════════════════════════════════════ -->
+
+    <!-- Vključene funkcionalnosti -->
+    <div style="max-width:520px;margin:0 auto 32px">
         <h3 style="font-size:.85rem;text-transform:uppercase;letter-spacing:.06em;color:var(--color-muted);font-weight:600;margin-bottom:14px">Vključeno v vašem paketu</h3>
         <ul class="pricing-features" style="background:var(--color-surface);border:1px solid var(--color-border);border-radius:var(--radius);padding:18px 20px;gap:10px">
             <?php foreach (FEATURE_LABELS as $fSlug => $fLabel):
@@ -191,9 +229,162 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
             </li>
             <?php endforeach; ?>
         </ul>
-        <p style="font-size:.8rem;color:var(--color-muted);text-align:center;margin-top:16px">
-            Za spremembo paketa uporabite gumb "Upravljaj naročnino" zgoraj ali nas kontaktirajte.
-        </p>
+    </div>
+
+    <!-- Nadgradnja (samo če obstaja višji paket) -->
+    <?php
+    $upgradeSlugs = array_filter(['basic','advanced','premium'], fn($s) => get_plan_rank($s) > get_plan_rank($currentPlan));
+    ?>
+    <?php if (!empty($upgradeSlugs)): ?>
+    <div style="margin-bottom:40px">
+        <h3 style="font-size:.85rem;text-transform:uppercase;letter-spacing:.06em;color:var(--color-muted);font-weight:600;margin-bottom:16px">Razpoložljive nadgradnje</h3>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px">
+            <?php foreach ($upgradeSlugs as $slug):
+                $plan      = PLANS[$slug];
+                $proration = $prorations[$slug] ?? [];
+                $discount  = $discounts[$slug];
+                $isHighlighted = $slug === 'advanced';
+            ?>
+            <div class="pricing-card <?= $isHighlighted ? 'pricing-card-featured' : '' ?>">
+                <?php if ($isHighlighted): ?><div class="pricing-badge">Priporočeno</div><?php endif; ?>
+
+                <div class="pricing-name"><?= h($plan['name']) ?></div>
+
+                <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:6px;flex-wrap:wrap">
+                    <?php if ($discount && $discount['discounted_monthly']): ?>
+                        <span style="font-size:1rem;color:#9CA3AF;text-decoration:line-through"><?= number_format($plan['monthly_price'], 2) ?> €</span>
+                        <span style="font-size:1.6rem;font-weight:700;color:#111827"><?= number_format($discount['discounted_monthly'], 2) ?> €</span>
+                    <?php else: ?>
+                        <span style="font-size:1.6rem;font-weight:700;color:#111827"><?= number_format($plan['monthly_price'], 2) ?> €</span>
+                    <?php endif; ?>
+                    <span style="font-size:.8rem;color:var(--color-muted)">/mesec</span>
+                </div>
+
+                <?php if (!empty($proration)): ?>
+                <div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:.78rem;color:#166534">
+                    <div style="font-weight:600;margin-bottom:3px">Sorazmerni obračun za prehod:</div>
+                    <div>Preostalo obdobje: <?= $proration['remaining_days'] ?> / <?= $proration['period_days'] ?> dni</div>
+                    <div>Kredit <?= h(PLANS[$proration['old_plan']]['name']) ?>: −<?= number_format($proration['credit'], 2) ?> €</div>
+                    <div>Zaračunano zdaj: <strong><?= number_format($proration['charge_now'], 2) ?> €</strong></div>
+                    <div style="margin-top:3px;color:#065F46">Naslednje obdobje: <?= number_format($proration['next_period_price'], 2) ?> € / <?= $proration['cycle'] === 'yearly' ? 'leto' : 'mesec' ?></div>
+                </div>
+                <?php endif; ?>
+
+                <ul class="pricing-features" style="margin-bottom:16px">
+                    <?php foreach (FEATURE_LABELS as $fSlug => $fLabel):
+                        $included = in_array($fSlug, $plan['features']);
+                        $wasIncluded = in_array($fSlug, PLANS[$currentPlan]['features']);
+                        if (!$included) continue; // prikaži samo kar paket ima
+                    ?>
+                    <li class="feat-yes" <?= !$wasIncluded ? 'style="font-weight:600"' : '' ?>>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="<?= !$wasIncluded ? '#F59E0B' : '#10B981' ?>" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                        <?= h($fLabel) ?>
+                        <?php if (!$wasIncluded): ?>
+                            <span style="font-size:.68rem;background:#FEF3C7;color:#92400E;border-radius:10px;padding:1px 5px;margin-left:4px">NOVO</span>
+                        <?php endif; ?>
+                    </li>
+                    <?php endforeach; ?>
+                </ul>
+
+                <?php if (!empty($proration)): ?>
+                <button class="btn <?= $isHighlighted ? 'btn-primary' : 'btn-outline' ?>"
+                        style="width:100%"
+                        onclick="upgradePlan('<?= $slug ?>', this, <?= json_encode($proration['charge_now']) ?>)">
+                    Nadgradi na <?= h($plan['name']) ?>
+                    <?php if ($proration['charge_now'] > 0): ?>
+                        (<?= number_format($proration['charge_now'], 2) ?> €)
+                    <?php endif; ?>
+                </button>
+                <?php else: ?>
+                <button class="btn <?= $isHighlighted ? 'btn-primary' : 'btn-outline' ?>"
+                        style="width:100%"
+                        onclick="upgradePlan('<?= $slug ?>', this, 0)">
+                    Nadgradi na <?= h($plan['name']) ?>
+                </button>
+                <?php endif; ?>
+            </div>
+            <?php endforeach; ?>
+        </div>
+    </div>
+    <?php else: ?>
+    <p style="font-size:.85rem;color:var(--color-muted);text-align:center;margin-bottom:40px">
+        Imate najvišji dostopni paket. Za spremembe uporabite gumb "Upravljaj naročnino" zgoraj.
+    </p>
+    <?php endif; ?>
+
+    <?php else: ?>
+    <!-- ═══════════════════════════════════════════════════════
+         POTEKEL TRIAL / BREZ NAROČNINE
+         ═══════════════════════════════════════════════════════ -->
+
+    <div style="margin-bottom:20px;padding:14px 18px;background:#FEF2F2;border:1px solid #FECACA;border-radius:var(--radius);font-size:.85rem;color:#991B1B">
+        Vaš trial je potekel. Izberite paket za nadaljevanje dela.
+    </div>
+
+    <!-- Billing cycle toggle -->
+    <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:28px">
+        <span style="font-size:.9rem;font-weight:500;color:#374151">Mesečno</span>
+        <label class="billing-toggle">
+            <input type="checkbox" id="billing-yearly">
+            <span class="billing-toggle-track"></span>
+        </label>
+        <span style="font-size:.9rem;font-weight:500;color:#374151">Letno
+            <span style="background:#D1FAE5;color:#065F46;font-size:.7rem;font-weight:700;padding:2px 7px;border-radius:20px;margin-left:5px">prihrani ~17%</span>
+        </span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;margin-bottom:28px">
+        <?php foreach (['basic','advanced','premium'] as $slug):
+            $plan        = PLANS[$slug];
+            $discount    = $discounts[$slug];
+            $isHighlighted = $slug === 'advanced';
+        ?>
+        <div class="pricing-card <?= $isHighlighted ? 'pricing-card-featured' : '' ?>">
+            <?php if ($isHighlighted): ?><div class="pricing-badge">Priporočeno</div><?php endif; ?>
+
+            <div class="pricing-name"><?= h($plan['name']) ?></div>
+
+            <div class="pricing-price" data-monthly="<?= $plan['monthly_price'] ?>" data-yearly="<?= $plan['yearly_price'] ?>"
+                 data-disc-monthly="<?= $discount ? $discount['discounted_monthly'] : '' ?>"
+                 data-disc-yearly="<?= $discount ? $discount['discounted_yearly'] : '' ?>">
+                <?php if ($discount && $discount['discounted_monthly']): ?>
+                    <span class="pricing-orig"><?= number_format($plan['monthly_price'], 2) ?> €</span>
+                    <span class="pricing-amount"><?= number_format($discount['discounted_monthly'], 2) ?> €</span>
+                <?php else: ?>
+                    <span class="pricing-amount"><?= number_format($plan['monthly_price'], 2) ?> €</span>
+                <?php endif; ?>
+                <span class="pricing-period">/mesec</span>
+            </div>
+
+            <ul class="pricing-features">
+                <?php foreach (FEATURE_LABELS as $fSlug => $fLabel):
+                    $included = in_array($fSlug, $plan['features']);
+                ?>
+                <li class="<?= $included ? 'feat-yes' : 'feat-no' ?>">
+                    <?php if ($included): ?>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                    <?php else: ?>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    <?php endif; ?>
+                    <?= h($fLabel) ?>
+                </li>
+                <?php endforeach; ?>
+            </ul>
+
+            <button class="btn <?= $isHighlighted ? 'btn-primary' : 'btn-outline' ?>" style="width:100%;margin-top:auto;margin-bottom:8px"
+                    onclick="selectPlan('<?= $slug ?>')">
+                Zakupi <?= h($plan['name']) ?>
+            </button>
+            <button class="btn-invoice" data-invoice-plan="<?= $slug ?>"
+                    onclick="requestInvoice('<?= $slug ?>')" style="display:none">
+                ali po predračunu →
+            </button>
+        </div>
+        <?php endforeach; ?>
+    </div>
+
+    <div style="text-align:center;font-size:.8rem;color:var(--color-muted);margin-bottom:40px">
+        Plačilo je varno in šifrirano. Brez skritih stroškov.
     </div>
     <?php endif; ?>
 
@@ -243,19 +434,18 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
     font-size:.875rem; font-weight:600; cursor:pointer;
 }
 .btn-outline:hover { background:rgba(245,158,11,.08); }
+.btn-checkout-main {
+    display:block; width:100%; margin-top:0;
+    padding:.48rem 1rem; border:1.5px solid #10B981; border-radius:var(--radius);
+    background:#F0FDF4; color:#065F46; font-size:.82rem; font-weight:600;
+    cursor:pointer; text-align:center; transition:background .15s, border-color .15s;
+}
+.btn-checkout-main:hover { background:#D1FAE5; border-color:#059669; }
 .btn-invoice {
-    display: block;
-    width: 100%;
-    margin-top: 8px;
-    padding: .42rem 1rem;
-    border: 1.5px dashed #D1D5DB;
-    border-radius: var(--radius);
-    background: transparent;
-    color: var(--color-muted);
-    font-size: .78rem;
-    font-weight: 500;
-    cursor: pointer;
-    text-align: center;
+    display: block; width: 100%; margin-top: 8px;
+    padding: .42rem 1rem; border: 1.5px dashed #D1D5DB; border-radius: var(--radius);
+    background: transparent; color: var(--color-muted); font-size: .78rem;
+    font-weight: 500; cursor: pointer; text-align: center;
     transition: border-color .15s, color .15s;
 }
 .btn-invoice:hover { border-color: #9CA3AF; color: #374151; }
@@ -264,19 +454,21 @@ foreach (['basic', 'advanced', 'premium'] as $slug) {
 <script>
 window.APP_STATE = { base: '<?= BASE_PATH ?>' };
 
-const yearly = document.getElementById('billing-yearly');
+// ─── Billing cycle toggle ──────────────────────────────────────
+const yearly  = document.getElementById('billing-yearly');
 const prices  = document.querySelectorAll('.pricing-price');
 const periods = document.querySelectorAll('.pricing-period');
 
 function updatePricing() {
+    if (!yearly) return;
     const isYearly = yearly.checked;
     prices.forEach(el => {
-        const mPrice  = parseFloat(el.dataset.monthly);
-        const yPrice  = parseFloat(el.dataset.yearly);
-        const mDisc   = el.dataset.discMonthly ? parseFloat(el.dataset.discMonthly) : null;
-        const yDisc   = el.dataset.discYearly  ? parseFloat(el.dataset.discYearly)  : null;
-        const amount  = el.querySelector('.pricing-amount');
-        const orig    = el.querySelector('.pricing-orig');
+        const mPrice = parseFloat(el.dataset.monthly);
+        const yPrice = parseFloat(el.dataset.yearly);
+        const mDisc  = el.dataset.discMonthly ? parseFloat(el.dataset.discMonthly) : null;
+        const yDisc  = el.dataset.discYearly  ? parseFloat(el.dataset.discYearly)  : null;
+        const amount = el.querySelector('.pricing-amount');
+        const orig   = el.querySelector('.pricing-orig');
         if (isYearly) {
             amount.textContent = (yDisc ?? yPrice).toFixed(2).replace('.', ',') + ' €';
             if (orig) orig.textContent = yPrice.toFixed(2).replace('.', ',') + ' €';
@@ -290,8 +482,9 @@ function updatePricing() {
         el.style.display = isYearly ? 'block' : 'none';
     });
 }
-yearly.addEventListener('change', updatePricing);
+if (yearly) yearly.addEventListener('change', updatePricing);
 
+// ─── Toast helper ──────────────────────────────────────────────
 function toast(msg, type = 'success') {
     const c = document.getElementById('toast-container');
     const t = document.createElement('div');
@@ -301,6 +494,89 @@ function toast(msg, type = 'success') {
     setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; setTimeout(() => t.remove(), 300); }, 3200);
 }
 
+// ─── Preklop paketa med trialom (brezplačno) ──────────────────
+async function switchTrialPlan(slug, btn) {
+    const origText = btn?.textContent;
+    if (btn) { btn.disabled = true; btn.textContent = 'Preklapljam…'; }
+
+    try {
+        const res  = await fetch(APP_STATE.base + '/api/billing.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ action: 'switch_trial_plan', plan_slug: slug }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            toast(data.message || 'Paket preklopljen!');
+            setTimeout(() => location.reload(), 800);
+        } else {
+            toast(data.error || 'Napaka.', 'error');
+            if (btn) { btn.disabled = false; btn.textContent = origText; }
+        }
+    } catch(e) {
+        toast('Napaka pri povezavi.', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = origText; }
+    }
+}
+
+// ─── Zakup paketa (Stripe Checkout) ───────────────────────────
+async function selectPlan(slug) {
+    const cycle = document.getElementById('billing-yearly')?.checked ? 'yearly' : 'monthly';
+    const btn   = event?.currentTarget;
+    if (btn) { btn.disabled = true; btn.textContent = 'Preusmerjam…'; }
+
+    try {
+        const res = await fetch(APP_STATE.base + '/api/billing.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ action: 'create_checkout_session', plan_slug: slug, billing_cycle: cycle }),
+        });
+        const data = await res.json();
+        if (data.success && data.data?.url) {
+            window.location.href = data.data.url;
+        } else {
+            toast(data.error || 'Napaka pri plačilu.', 'error');
+            if (btn) { btn.disabled = false; btn.textContent = 'Zakupi ' + slug.charAt(0).toUpperCase() + slug.slice(1); }
+        }
+    } catch(e) {
+        toast('Napaka pri povezavi.', 'error');
+        if (btn) { btn.disabled = false; }
+    }
+}
+
+// ─── Nadgradnja plačljive naročnine s proracijo ───────────────
+async function upgradePlan(slug, btn, chargeNow) {
+    const planName = { basic: 'Basic', advanced: 'Advanced', premium: 'Premium' }[slug] || slug;
+    let confirm_msg = `Nadgradite na paket ${planName}?`;
+    if (chargeNow > 0) {
+        confirm_msg += `\n\nZdaj bo zaračunano: ${chargeNow.toFixed(2).replace('.', ',')} € (sorazmerni del tekočega obdobja).`;
+    }
+    if (!confirm(confirm_msg)) return;
+
+    const origText = btn?.textContent;
+    if (btn) { btn.disabled = true; btn.textContent = 'Nadgrajujem…'; }
+
+    try {
+        const res  = await fetch(APP_STATE.base + '/api/billing.php', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({ action: 'upgrade_plan', plan_slug: slug }),
+        });
+        const data = await res.json();
+        if (data.success) {
+            toast(data.message || 'Paket nadgrajen!');
+            setTimeout(() => location.reload(), 1000);
+        } else {
+            toast(data.error || 'Napaka pri nadgradnji.', 'error');
+            if (btn) { btn.disabled = false; btn.textContent = origText; }
+        }
+    } catch(e) {
+        toast('Napaka pri povezavi.', 'error');
+        if (btn) { btn.disabled = false; btn.textContent = origText; }
+    }
+}
+
+// ─── Zahtevek za predračun (letno) ────────────────────────────
 async function requestInvoice(slug) {
     const btn  = document.querySelector(`[data-invoice-plan="${slug}"]`);
     const orig = btn?.textContent;
@@ -326,39 +602,7 @@ async function requestInvoice(slug) {
     }
 }
 
-async function selectPlan(slug) {
-    const cycle = document.getElementById('billing-yearly').checked ? 'yearly' : 'monthly';
-    const btn   = document.querySelector(`[onclick="selectPlan('${slug}')"]`);
-    if (btn) { btn.disabled = true; btn.textContent = 'Preusmerjam…'; }
-
-    try {
-        const res = await fetch(APP_STATE.base + '/api/billing.php', {
-            method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ action: 'create_checkout_session', plan_slug: slug, billing_cycle: cycle }),
-        });
-        const data = await res.json();
-        if (data.success && data.data?.url) {
-            window.location.href = data.data.url;
-        } else {
-            alert(data.error || 'Napaka pri plačilu.');
-            if (btn) { btn.disabled = false; btn.textContent = 'Izberi ' + slug.charAt(0).toUpperCase() + slug.slice(1); }
-        }
-    } catch(e) {
-        alert('Napaka pri povezavi.');
-        if (btn) { btn.disabled = false; }
-    }
-}
-
-// Auto-select paket ob prihodu z landing page
-(function () {
-    const autoselect = <?= json_encode($_GET['autoselect'] ?? '') ?>;
-    const valid = ['basic', 'advanced', 'premium'];
-    if (autoselect && valid.includes(autoselect)) {
-        selectPlan(autoselect);
-    }
-})();
-
+// ─── Stripe Customer Portal ────────────────────────────────────
 async function openCustomerPortal() {
     try {
         const res  = await fetch(APP_STATE.base + '/api/billing.php', {
@@ -370,10 +614,19 @@ async function openCustomerPortal() {
         if (data.success && data.data?.url) {
             window.location.href = data.data.url;
         } else {
-            alert(data.error || 'Portal ni na voljo.');
+            toast(data.error || 'Portal ni na voljo.', 'error');
         }
-    } catch(e) { alert('Napaka pri povezavi.'); }
+    } catch(e) { toast('Napaka pri povezavi.', 'error'); }
 }
+
+// ─── Auto-select ob prihodu z landing page ─────────────────────
+(function () {
+    const autoselect = <?= json_encode($_GET['autoselect'] ?? '') ?>;
+    const valid = ['basic', 'advanced', 'premium'];
+    if (autoselect && valid.includes(autoselect)) {
+        selectPlan(autoselect);
+    }
+})();
 </script>
 </body>
 </html>

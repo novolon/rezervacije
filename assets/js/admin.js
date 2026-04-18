@@ -631,13 +631,18 @@
     function renderUsersTable() {
         const tbody = document.getElementById('users-tbody');
         if (!tbody) return;
-        if (users.length === 0) { tbody.innerHTML = `<tr><td colspan="5" class="table-empty">Ni uporabnikov.</td></tr>`; return; }
+        if (users.length === 0) { tbody.innerHTML = `<tr><td colspan="6" class="table-empty">Ni uporabnikov.</td></tr>`; return; }
 
-        tbody.innerHTML = users.map(u => `
+        tbody.innerHTML = users.map(u => {
+            const roleBadge = u.role === 'admin'
+                ? `<span style="background:#DBEAFE;color:#1D4ED8;border-radius:4px;padding:2px 8px;font-size:.75rem;font-weight:600">Admin</span>`
+                : `<span style="background:#F3F4F6;color:#6B7280;border-radius:4px;padding:2px 8px;font-size:.75rem;font-weight:600">Uporabnik</span>`;
+            return `
             <tr>
                 <td><strong>${h(u.full_name)}</strong></td>
                 <td>${u.email ? h(u.email) : `<span style="color:var(--color-muted);font-size:.8rem">👤 ${h(u.username)}</span>`}</td>
                 <td>${u.restaurant_name ? h(u.restaurant_name) : '<span style="color:var(--color-muted)">—</span>'}</td>
+                <td>${roleBadge}</td>
                 <td><span class="badge ${u.is_active == 1 ? 'badge-active' : 'badge-inactive'}">${u.is_active == 1 ? 'Aktiven' : 'Neaktiven'}</span></td>
                 <td>
                     <div class="table-actions">
@@ -652,7 +657,8 @@
                         </button>
                     </div>
                 </td>
-            </tr>`).join('');
+            </tr>`;
+        }).join('');
     }
 
     function buildRestOptions(selectedId) {
@@ -663,10 +669,16 @@
         const user  = userId ? users.find(u => u.id === userId) : null;
         const title = mode === 'edit' ? 'Uredi uporabnika' : 'Nov uporabnik';
         const initLoginType = user ? (user.email ? 'email' : 'username') : 'email';
+        const initRole = user?.role === 'admin' ? 'admin' : 'user';
+        // Za sub-admine uporabi linked_restaurant_id če restaurant_id ni nastavljen
+        const initRestId = user?.restaurant_id || user?.linked_restaurant_id || null;
 
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
         overlay.id = 'admin-modal';
+
+        // Obstoječi uporabnik, ki ga povežemo (za create mode)
+        let linkedExistingUser = null;
 
         overlay.innerHTML = `
         <div class="modal-box">
@@ -677,6 +689,7 @@
                 </button>
             </div>
             <div class="modal-body">
+                <div id="admin-user-info" style="display:none;padding:10px 12px;background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;font-size:.825rem;color:#1D4ED8;margin-bottom:12px"></div>
                 <div id="admin-user-error" class="admin-error"></div>
                 <div class="admin-form">
                     <div class="admin-field">
@@ -703,7 +716,7 @@
                             <label>Uporabniško ime</label>
                             <input id="u-username" type="text" value="${h(user?.username || '')}" autocomplete="off">
                         </div>
-                        <div class="admin-field">
+                        <div class="admin-field" id="u-password-field">
                             <label>${mode === 'edit' ? 'Novo geslo (prazno = brez menjave)' : 'Geslo *'}</label>
                             <input id="u-password" type="password" autocomplete="new-password">
                         </div>
@@ -712,8 +725,23 @@
                         <label>Restavracija *</label>
                         <select id="u-restaurant">
                             <option value="">— Izberi —</option>
-                            ${buildRestOptions(user?.restaurant_id)}
+                            ${buildRestOptions(initRestId)}
                         </select>
+                    </div>
+                    <div class="admin-field">
+                        <label>Vloga *</label>
+                        <div style="display:flex;gap:16px;margin-top:4px">
+                            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer">
+                                <input type="radio" name="u-role" value="user" ${initRole === 'user' ? 'checked' : ''}> Uporabnik
+                            </label>
+                            <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer">
+                                <input type="radio" name="u-role" value="admin" ${initRole === 'admin' ? 'checked' : ''}> Admin
+                            </label>
+                        </div>
+                        <div style="margin-top:6px;font-size:.775rem;color:#6B7280">
+                            <strong>Uporabnik</strong> – vidi in ureja rezervacije za svojo restavracijo.<br>
+                            <strong>Admin</strong> – upravlja restavracijo (urnik, nastavitve, zaposleni).
+                        </div>
                     </div>
                     ${user ? `<div class="admin-field">
                         <label>Status</label>
@@ -733,27 +761,121 @@
         overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
         document.body.appendChild(overlay);
 
+        // ── Preverjanje obstoječega emaila/username (samo create) ──
+        if (mode === 'create') {
+            async function checkExistingUser() {
+                const loginType = document.querySelector('input[name="u-login-type"]:checked')?.value || 'email';
+                const val = loginType === 'email'
+                    ? document.getElementById('u-email')?.value.trim()
+                    : document.getElementById('u-username')?.value.trim();
+                if (!val) { linkedExistingUser = null; _resetLinkedState(); return; }
+
+                try {
+                    const param = loginType === 'email' ? `email=${encodeURIComponent(val)}` : `username=${encodeURIComponent(val)}`;
+                    const res = await API.get(`/api/users.php?action=check_email&${param}`);
+                    if (res?.found) {
+                        linkedExistingUser = res.user;
+                        _setLinkedState(res.user);
+                    } else {
+                        linkedExistingUser = null;
+                        _resetLinkedState();
+                    }
+                } catch (e) { /* tiho */ }
+            }
+
+            function _setLinkedState(found) {
+                const infoEl = document.getElementById('admin-user-info');
+                if (infoEl) {
+                    infoEl.style.display = '';
+                    const roleNote = found.role === 'admin'
+                        ? ' Ker je obstoječi admin, bo dodan z admin dostopom.'
+                        : '';
+                    infoEl.innerHTML = `<strong>Obstoječi račun:</strong> ${h(found.full_name)} – bo dodan k izbrani restavraciji.${roleNote}`;
+                }
+                const fn = document.getElementById('u-fullname');
+                if (fn) { fn.value = found.full_name; fn.disabled = true; }
+                const pw = document.getElementById('u-password');
+                const pwField = document.getElementById('u-password-field');
+                if (pw) pw.disabled = true;
+                if (pwField) pwField.style.opacity = '.4';
+                // Za obstoječe admine zakleni vlogo na admin (ne more biti user)
+                if (found.role === 'admin') {
+                    const roleAdmin = document.querySelector('input[name="u-role"][value="admin"]');
+                    const roleUser  = document.querySelector('input[name="u-role"][value="user"]');
+                    if (roleAdmin) { roleAdmin.checked = true; roleAdmin.disabled = true; }
+                    if (roleUser)  { roleUser.disabled  = true; }
+                } else {
+                    // Obstoječi user – vloga se can still be set
+                    const roleR = document.querySelector('input[name="u-role"][value="user"]');
+                    if (roleR) roleR.checked = true;
+                }
+            }
+
+            function _resetLinkedState() {
+                const infoEl = document.getElementById('admin-user-info');
+                if (infoEl) infoEl.style.display = 'none';
+                const fn = document.getElementById('u-fullname');
+                if (fn) { fn.disabled = false; fn.value = ''; }
+                const pw = document.getElementById('u-password');
+                const pwField = document.getElementById('u-password-field');
+                if (pw) pw.disabled = false;
+                if (pwField) pwField.style.opacity = '';
+                // Odkleni role radios
+                document.querySelectorAll('input[name="u-role"]').forEach(r => r.disabled = false);
+                const roleUser = document.querySelector('input[name="u-role"][value="user"]');
+                if (roleUser) roleUser.checked = true;
+            }
+
+            document.getElementById('u-email')?.addEventListener('blur', checkExistingUser);
+            document.getElementById('u-username')?.addEventListener('blur', checkExistingUser);
+            // Ko se zamenja tip prijave, počisti stanje
+            document.querySelectorAll('input[name="u-login-type"]').forEach(r => r.addEventListener('change', () => {
+                linkedExistingUser = null; _resetLinkedState();
+            }));
+        }
+
         document.getElementById('admin-user-save').addEventListener('click', async () => {
-            const fullname  = document.getElementById('u-fullname').value.trim();
             const loginType = document.querySelector('input[name="u-login-type"]:checked')?.value || 'email';
             const email     = loginType === 'email'    ? (document.getElementById('u-email')?.value.trim()    || '') : '';
             const username  = loginType === 'username' ? (document.getElementById('u-username')?.value.trim() || '') : '';
-            const password  = document.getElementById('u-password').value;
             const restId    = document.getElementById('u-restaurant')?.value || null;
             const active    = user ? parseInt(document.getElementById('u-active').value) : undefined;
+            const roleVal   = document.querySelector('input[name="u-role"]:checked')?.value || 'user';
             const errEl     = document.getElementById('admin-user-error');
 
-            if (!fullname) { errEl.textContent = 'Ime je obvezno.'; errEl.style.display = 'block'; return; }
-            if (loginType === 'email' && !email) { errEl.textContent = 'Email je obvezen.'; errEl.style.display = 'block'; return; }
-            if (loginType === 'username' && !username) { errEl.textContent = 'Uporabniško ime je obvezno.'; errEl.style.display = 'block'; return; }
-            if (mode === 'create' && !password) { errEl.textContent = 'Geslo je obvezno.'; errEl.style.display = 'block'; return; }
+            // Preveri restavracijo takoj
             if (!restId) { errEl.textContent = 'Izberite restavracijo.'; errEl.style.display = 'block'; return; }
+
+            // Async race fix: če blur ni utegnil preveriti, preveri zdaj
+            if (mode === 'create' && !linkedExistingUser) {
+                const val = loginType === 'email' ? email : username;
+                if (val) {
+                    try {
+                        const param = loginType === 'email' ? `email=${encodeURIComponent(val)}` : `username=${encodeURIComponent(val)}`;
+                        const res = await API.get(`/api/users.php?action=check_email&${param}`);
+                        if (res?.found) { linkedExistingUser = res.user; _setLinkedState(res.user); }
+                    } catch (e) { /* tiho */ }
+                }
+            }
+
             errEl.style.display = 'none';
 
-            const body = { full_name: fullname, role: 'user', restaurant_id: restId };
-            if (loginType === 'email')    { body.email = email; body.username = null; }
-            if (loginType === 'username') { body.username = username; body.email = null; }
-            if (password) body.password = password;
+            let body;
+            if (mode === 'create' && linkedExistingUser) {
+                // Poveži obstoječega – vloga se pošlje, API jo upošteva
+                body = { link_existing_id: linkedExistingUser.id, restaurant_id: restId, role: roleVal };
+            } else {
+                const fullname = document.getElementById('u-fullname').value.trim();
+                const password = document.getElementById('u-password').value;
+                if (!fullname) { errEl.textContent = 'Ime je obvezno.'; errEl.style.display = 'block'; return; }
+                if (loginType === 'email' && !email) { errEl.textContent = 'Email je obvezen.'; errEl.style.display = 'block'; return; }
+                if (loginType === 'username' && !username) { errEl.textContent = 'Uporabniško ime je obvezno.'; errEl.style.display = 'block'; return; }
+                if (mode === 'create' && !password) { errEl.textContent = 'Geslo je obvezno.'; errEl.style.display = 'block'; return; }
+                body = { full_name: fullname, restaurant_id: restId, role: roleVal };
+                if (loginType === 'email')    { body.email = email; body.username = null; }
+                if (loginType === 'username') { body.username = username; body.email = null; }
+                if (password) body.password = password;
+            }
             if (active !== undefined) body.is_active = active;
 
             try {
