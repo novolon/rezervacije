@@ -97,14 +97,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             $newUserId = (int) $pdo->lastInsertId();
 
-            // Affiliate atribucija: cookie ima prednost, URL ?ref= / ?code= kot fallback
-            $affCookieRaw  = $_COOKIE['rez_aff'] ?? null;
-            $affCookieData = $affCookieRaw ? json_decode($affCookieRaw, true) : null;
-            $affRefCode    = $affCookieData['code'] ?? ($_GET['ref'] ?? null);
-            $affDiscCode   = $_GET['code'] ?? null;
-            if ($affRefCode || $affDiscCode) {
-                attach_affiliate_on_signup($pdo, $newUserId, $post['email'], $affRefCode, $affDiscCode);
-            }
+            // Affiliate atribucija: cookie ima prednost, ?code= kot fallback
+            // Funkcija sama bere rez_aff cookie; $taxNumber za anti-self-referral check
+            $affDiscCode = strtoupper(trim($_GET['code'] ?? '')) ?: null;
+            $taxNumber   = $post['is_vat_registered'] ? null : ($post['tax_number'] ?? null);
+            attach_affiliate_on_signup($pdo, $newUserId, $post['email'], $taxNumber, $affDiscCode);
 
             // Ustvari trial subscription z izbranim paketom.
             // status='trial' označuje brezplačno obdobje; po preteku mora zakupiti.

@@ -109,13 +109,18 @@ if ($method === 'POST' && $action === 'approve') {
 
     $aff = affiliate_get($pdo, $id);
     if (!$aff) json_response(false, null, 'Affiliate ne obstaja.', 404);
-    if ($aff['status'] !== 'pending') json_response(false, null, 'Affiliate ni v statusu pending.', 400);
+    if (!in_array($aff['status'], ['pending','suspended','rejected'])) {
+        json_response(false, null, 'Affiliate je že aktiven.', 400);
+    }
 
     $pdo->prepare("UPDATE affiliates SET status = 'active', approved_by = ?, approved_at = NOW() WHERE id = ?")
         ->execute([(int)$session['user_id'], $id]);
 
-    send_affiliate_approved_email($aff['email'], $aff['full_name'], $aff['ref_code']);
-    json_response(true, null, 'Affiliate odobren.');
+    // Email samo ob prvem odobravanju (ne ob reaktivaciji)
+    if ($aff['status'] === 'pending') {
+        send_affiliate_approved_email($aff['email'], $aff['full_name'], $aff['ref_code']);
+    }
+    json_response(true, null, 'Affiliate aktiviran.');
 }
 
 // ─── POST: reject ─────────────────────────────────────────────────

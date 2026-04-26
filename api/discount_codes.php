@@ -77,7 +77,7 @@ if ($action === 'create') {
     $maxRed      = isset($body['max_redemptions']) ? (int)$body['max_redemptions'] : null;
     $validFrom   = $body['valid_from']  ?? null;
     $validUntil  = $body['valid_until'] ?? null;
-    $desc        = substr($body['description'] ?? '', 0, 180);
+    $desc        = substr($body['description'] ?? $body['name'] ?? '', 0, 180);
     $plans       = $body['applies_to_plans']  ?? null;
     $cycles      = $body['applies_to_cycles'] ?? null;
 

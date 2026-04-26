@@ -61,39 +61,96 @@ if ($method === 'GET' && $action === 'stats') {
     ]);
 }
 
-// ─── GET: referrali (maskirani) ──────────────────────────────────
+// ─── GET: referrali (maskirani, paginirani) ──────────────────────
 if ($method === 'GET' && $action === 'referrals') {
+    $page    = max(1, (int)($_GET['page']    ?? 1));
+    $perPage = min(100, max(10, (int)($_GET['per_page'] ?? 20)));
+    $status  = $_GET['status'] ?? '';
+    $offset  = ($page - 1) * $perPage;
+
+    $where   = $status ? "AND r.status = " . $pdo->quote($status) : '';
+
+    $total = $pdo->prepare("SELECT COUNT(*) FROM affiliate_referrals r WHERE r.affiliate_id = ? {$where}");
+    $total->execute([$affId]);
+
     $stmt = $pdo->prepare("
-        SELECT r.id, r.status, r.created_at, r.first_paid_at, r.commission_until,
-               -- Maskiranje: samo mesec in leto registracije, brez osebnih podatkov
-               DATE_FORMAT(u.created_at, '%Y-%m') AS registered_ym
+        SELECT DATE_FORMAT(u.created_at, '%Y-%m') AS registered_ym,
+               r.status,
+               r.attribution,
+               (SELECT COUNT(*) FROM affiliate_commissions c WHERE c.affiliate_id = r.affiliate_id AND c.user_id = r.user_id AND c.status != 'voided') AS paid_invoices,
+               (SELECT COALESCE(SUM(c.amount_eur),0) FROM affiliate_commissions c WHERE c.affiliate_id = r.affiliate_id AND c.user_id = r.user_id AND c.status != 'voided') AS earned_eur
         FROM affiliate_referrals r
         JOIN users u ON u.id = r.user_id
-        WHERE r.affiliate_id = ?
+        WHERE r.affiliate_id = ? {$where}
         ORDER BY r.created_at DESC
-        LIMIT 200
+        LIMIT {$perPage} OFFSET {$offset}
     ");
     $stmt->execute([$affId]);
-    json_response(true, $stmt->fetchAll());
+    json_response(true, [
+        'items'    => $stmt->fetchAll(),
+        'total'    => (int)$total->fetchColumn(),
+        'per_page' => $perPage,
+        'page'     => $page,
+    ]);
 }
 
-// ─── GET: provizije ─────────────────────────────────────────────
+// ─── GET: provizije (summary + paginirane) ───────────────────────
 if ($method === 'GET' && $action === 'earnings') {
+    // Summary mode
+    if (!empty($_GET['summary'])) {
+        $s = $pdo->prepare("
+            SELECT
+                COALESCE(SUM(CASE WHEN status IN ('pending','payable','paid') THEN amount_eur END), 0) AS total_earned,
+                COALESCE(SUM(CASE WHEN status = 'pending'  THEN amount_eur END), 0) AS pending,
+                COALESCE(SUM(CASE WHEN status = 'payable'  THEN amount_eur END), 0) AS payable,
+                COALESCE(SUM(CASE WHEN status = 'paid'     THEN amount_eur END), 0) AS paid
+            FROM affiliate_commissions WHERE affiliate_id = ?
+        ");
+        $s->execute([$affId]);
+        $row = $s->fetch(PDO::FETCH_ASSOC);
+        json_response(true, array_map('floatval', $row));
+    }
+
+    $page    = max(1, (int)($_GET['page']    ?? 1));
+    $perPage = min(100, max(10, (int)($_GET['per_page'] ?? 20)));
+    $status  = $_GET['status'] ?? '';
+    $offset  = ($page - 1) * $perPage;
+    $where   = $status ? "AND status = " . $pdo->quote($status) : '';
+
+    $total = $pdo->prepare("SELECT COUNT(*) FROM affiliate_commissions WHERE affiliate_id = ? {$where}");
+    $total->execute([$affId]);
+
     $stmt = $pdo->prepare("
-        SELECT id, amount_eur, percent, status, available_at, created_at, payout_id
+        SELECT id,
+               DATE_FORMAT(created_at, '%Y-%m-%d') AS date,
+               invoice_amount_eur,
+               amount_eur AS commission_eur,
+               percent,
+               status,
+               available_at,
+               payout_id
         FROM affiliate_commissions
-        WHERE affiliate_id = ?
+        WHERE affiliate_id = ? {$where}
         ORDER BY created_at DESC
-        LIMIT 200
+        LIMIT {$perPage} OFFSET {$offset}
     ");
     $stmt->execute([$affId]);
-    json_response(true, $stmt->fetchAll());
+    json_response(true, [
+        'items'    => $stmt->fetchAll(),
+        'total'    => (int)$total->fetchColumn(),
+        'per_page' => $perPage,
+        'page'     => $page,
+    ]);
 }
 
 // ─── GET: izplačila ──────────────────────────────────────────────
 if ($method === 'GET' && $action === 'payouts') {
     $stmt = $pdo->prepare("
-        SELECT id, amount_eur, status, reference, iban_snapshot, created_at, paid_at
+        SELECT id, amount_eur, status,
+               reference AS batch_reference,
+               iban_snapshot,
+               created_at AS requested_at,
+               paid_at
         FROM affiliate_payouts
         WHERE affiliate_id = ?
         ORDER BY created_at DESC
@@ -111,7 +168,7 @@ if ($method === 'GET' && $action === 'discount_stats') {
     }
     $codeId = (int)$aff['discount_code_id'];
 
-    $stmt = $pdo->prepare("SELECT code, percent_off, duration, is_active FROM discount_codes WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT code, percent_off, duration, duration_months, is_active FROM discount_codes WHERE id = ?");
     $stmt->execute([$codeId]);
     $dc = $stmt->fetch();
 
@@ -120,13 +177,14 @@ if ($method === 'GET' && $action === 'discount_stats') {
     [$count, $totalOff] = $reds->fetch(PDO::FETCH_NUM);
 
     json_response(true, [
-        'enabled'        => (bool)$aff['discount_enabled'],
-        'code'           => $dc['code']        ?? null,
-        'percent_off'    => $dc['percent_off'] ?? null,
-        'duration'       => $dc['duration']    ?? null,
-        'is_active'      => (bool)($dc['is_active'] ?? 0),
-        'redemptions'    => (int)$count,
-        'total_off_eur'  => round((float)$totalOff, 2),
+        'enabled'         => (bool)$aff['discount_enabled'],
+        'code'            => $dc['code']             ?? null,
+        'percent_off'     => $dc['percent_off']      ?? null,
+        'duration'        => $dc['duration']         ?? null,
+        'duration_months' => $dc['duration_months']  ? (int)$dc['duration_months'] : null,
+        'is_active'       => (bool)($dc['is_active'] ?? 0),
+        'redemptions'     => (int)$count,
+        'total_off_eur'   => round((float)$totalOff, 2),
     ]);
 }
 
@@ -154,8 +212,8 @@ if ($method === 'POST' && $action === 'update_profile') {
 
 // ─── POST: change_password ───────────────────────────────────────
 if ($method === 'POST' && $action === 'change_password') {
-    $old = $body['old'] ?? '';
-    $new = $body['new'] ?? '';
+    $old = $body['current_password'] ?? $body['old'] ?? '';
+    $new = $body['new_password']     ?? $body['new'] ?? '';
     if (strlen($new) < 8) json_response(false, null, 'Novo geslo mora imeti vsaj 8 znakov.', 400);
 
     $stmt = $pdo->prepare("SELECT password_hash FROM affiliates WHERE id = ?");

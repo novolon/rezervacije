@@ -3,11 +3,26 @@ require_once '../config.php';
 require_once '../includes/db.php';
 require_once '../includes/plans.php';
 require_once '../includes/lang.php';
+require_once '../includes/affiliate_helper.php';
 
 $appUrl = APP_URL . BASE_PATH;
 
 // Pridobi cene + popuste iz baze
 $pdo         = getDB();
+
+// Affiliate tracking: nastavi cookie ob ?ref= (before any output)
+$refParam = strtoupper(trim($_GET['ref'] ?? ''));
+if ($refParam && preg_match('/^[A-Z2-9]{8}$/', $refParam)) {
+    $trackAff = affiliate_get_by_code($pdo, $refParam);
+    if ($trackAff) {
+        affiliate_set_cookie($refParam, [
+            'utm_source'   => $_GET['utm_source']   ?? '',
+            'utm_medium'   => $_GET['utm_medium']   ?? '',
+            'utm_campaign' => $_GET['utm_campaign'] ?? '',
+        ]);
+        affiliate_log_click($pdo, (int)$trackAff['id'], $refParam);
+    }
+}
 $pricingData = [];
 foreach (['basic', 'advanced', 'premium'] as $slug) {
     $plan = PLANS[$slug];
