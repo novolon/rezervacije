@@ -41,7 +41,7 @@ $sess = require_affiliate();
                 <option value="pending">V čakanju</option>
                 <option value="payable">Izplačljivo</option>
                 <option value="paid">Izplačano</option>
-                <option value="voided">Razveljavljeno</option>
+                <option value="void">Razveljavljeno</option>
                 <option value="clawback">Clawback</option>
             </select>
         </div>
@@ -95,7 +95,7 @@ const COMM_STATUS = {
     pending:  '<span class="aff-badge aff-badge--warning">V čakanju</span>',
     payable:  '<span class="aff-badge aff-badge--success">Izplačljivo</span>',
     paid:     '<span class="aff-badge aff-badge--muted">Izplačano</span>',
-    voided:   '<span class="aff-badge aff-badge--muted">Razveljavljeno</span>',
+    void:     '<span class="aff-badge aff-badge--muted">Razveljavljeno</span>',
     clawback: '<span class="aff-badge aff-badge--danger">Clawback</span>',
 };
 const PAYOUT_STATUS = {

@@ -103,11 +103,14 @@ function attach_affiliate_on_signup(
         $aff     = null;
         $payload = [];
 
+        $attribution = 'url';
+
         // 1) Primarno: cookie
         if (!empty($_COOKIE['rez_aff'])) {
             $payload = json_decode($_COOKIE['rez_aff'], true) ?: [];
             if (!empty($payload['code'])) {
                 $aff = affiliate_get_by_code($pdo, $payload['code']);
+                if ($aff) $attribution = 'cookie';
             }
         }
 
@@ -121,6 +124,7 @@ function attach_affiliate_on_signup(
             ");
             $stmt->execute([strtoupper($codeFromUrl)]);
             $aff = $stmt->fetch() ?: null;
+            if ($aff) $attribution = 'code';
         }
 
         if (!$aff) return;
@@ -132,12 +136,13 @@ function attach_affiliate_on_signup(
         // Preveri, ali referral že obstaja (ON DUPLICATE KEY IGNORE)
         $pdo->prepare("
             INSERT IGNORE INTO affiliate_referrals
-            (affiliate_id, user_id, ref_code, cookie_set_at, landing_url, utm_source, utm_medium, utm_campaign)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            (affiliate_id, user_id, ref_code, attribution, cookie_set_at, landing_url, utm_source, utm_medium, utm_campaign)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ")->execute([
             $aff['id'],
             $newUserId,
             $aff['ref_code'],
+            $attribution,
             $payload['ts']           ?? null,
             substr($payload['landing']      ?? '', 0, 512),
             substr($payload['utm_source']   ?? '', 0, 80),

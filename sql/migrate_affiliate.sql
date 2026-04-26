@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS affiliate_referrals (
   utm_campaign     VARCHAR(120)  NULL,
   first_paid_at    DATETIME      NULL,
   commission_until DATETIME      NULL,
+  attribution      ENUM('cookie','code','url') NOT NULL DEFAULT 'cookie',
   status           ENUM('signed_up','converted','churned','rejected') NOT NULL DEFAULT 'signed_up',
   rejected_reason  VARCHAR(255)  NULL,
   created_at       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,

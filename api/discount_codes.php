@@ -150,7 +150,7 @@ if ($action === 'redemptions') {
         FROM discount_code_redemptions r
         JOIN users u ON u.id = r.user_id
         WHERE r.code_id = ?
-        ORDER BY r.created_at DESC
+        ORDER BY r.redeemed_at DESC
         LIMIT 200
     ");
     $stmt->execute([$id]);

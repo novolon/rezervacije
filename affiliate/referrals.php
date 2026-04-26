@@ -30,10 +30,10 @@ $sess = require_affiliate();
             <div style="display:flex;gap:8px;align-items:center">
                 <select id="filter-status" class="aff-select" onchange="load()">
                     <option value="">Vsi statusi</option>
-                    <option value="registered">Registriran</option>
-                    <option value="trial">Trial</option>
+                    <option value="signed_up">Registriran</option>
                     <option value="converted">Plačnik</option>
                     <option value="churned">Odšel</option>
+                    <option value="rejected">Zavrnjen</option>
                 </select>
             </div>
         </div>
@@ -68,10 +68,10 @@ const BASE = <?= json_encode(BASE_PATH) ?>;
 let currentPage = 1;
 
 const STATUS_LABELS = {
-    registered: '<span class="aff-badge aff-badge--info">Registriran</span>',
-    trial:      '<span class="aff-badge aff-badge--warning">Trial</span>',
+    signed_up:  '<span class="aff-badge aff-badge--info">Registriran</span>',
     converted:  '<span class="aff-badge aff-badge--success">Plačnik</span>',
     churned:    '<span class="aff-badge aff-badge--muted">Odšel</span>',
+    rejected:   '<span class="aff-badge aff-badge--danger">Zavrnjen</span>',
 };
 const ATTR_LABELS = {
     cookie: 'Cookie',

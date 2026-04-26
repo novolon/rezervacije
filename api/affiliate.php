@@ -123,7 +123,7 @@ if ($method === 'GET' && $action === 'earnings') {
     $stmt = $pdo->prepare("
         SELECT id,
                DATE_FORMAT(created_at, '%Y-%m-%d') AS date,
-               invoice_amount_eur,
+               base_amount_eur AS invoice_amount_eur,
                amount_eur AS commission_eur,
                percent,
                status,

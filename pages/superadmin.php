@@ -996,7 +996,7 @@ window.APP_STATE = <?= json_encode([
                         <thead><tr><th>Datum</th><th>Email</th><th>Popust (€)</th></tr></thead>
                         <tbody>${rows.items.map(r => `
                             <tr>
-                                <td>${fmtDate(r.created_at)}</td>
+                                <td>${fmtDate(r.redeemed_at)}</td>
                                 <td>${h(r.user_email)}</td>
                                 <td>${(+r.amount_off_eur).toFixed(2)}</td>
                             </tr>
