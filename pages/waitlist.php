@@ -8,6 +8,7 @@ require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/plans.php';
 require_once '../includes/waitlist_notifier.php';
+require_once '../includes/lang.php';
 
 if (!is_logged_in()) {
     redirect_to_login();
@@ -29,23 +30,41 @@ $isAdmin    = $_SESSION['role'] === 'admin';
 $fullName   = $_SESSION['full_name'];
 $hasFeature = user_has_feature($pdo, (int)$_SESSION['user_id'], 'waitlist');
 
-// Naloži restavracije admina
 $restaurants = [];
 if ($isAdmin) {
     $stmt = $pdo->prepare("
-        SELECT r.id, r.name FROM restaurants r
+        SELECT r.id, r.name, r.color FROM restaurants r
         JOIN restaurant_admins ra ON r.id = ra.restaurant_id
         WHERE ra.user_id = ? AND r.is_active = 1 ORDER BY r.name
     ");
     $stmt->execute([$_SESSION['user_id']]);
     $restaurants = $stmt->fetchAll();
 } elseif (!empty($_SESSION['restaurant_id'])) {
-    $stmt = $pdo->prepare("SELECT id, name FROM restaurants WHERE id = ? AND is_active = 1");
+    $stmt = $pdo->prepare("SELECT id, name, color FROM restaurants WHERE id = ? AND is_active = 1");
     $stmt->execute([$_SESSION['restaurant_id']]);
     $restaurants = $stmt->fetchAll();
 }
 
-$defaultRestId = count($restaurants) === 1 ? (int)$restaurants[0]['id'] : 0;
+$stmt = $pdo->prepare("
+    SELECT COUNT(*) FROM reservations r
+    JOIN restaurant_admins ra ON r.restaurant_id = ra.restaurant_id
+    WHERE ra.user_id = ? AND r.status = 'pending'
+");
+$stmt->execute([$_SESSION['user_id']]);
+$pendingCount = (int) $stmt->fetchColumn();
+
+$activeRestId = 0;
+if (!empty($_SESSION['restaurant_id'])) {
+    foreach ($restaurants as $r) {
+        if ((int)$r['id'] === (int)$_SESSION['restaurant_id']) {
+            $activeRestId = (int)$r['id'];
+            break;
+        }
+    }
+}
+if (!$activeRestId && !empty($restaurants)) {
+    $activeRestId = (int)$restaurants[0]['id'];
+}
 
 // ── POST: ročne akcije admina ──────────────────────────────────
 $actionMsg = '';
@@ -68,7 +87,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasFeature) {
             if ($act === 'remove') {
                 $pdo->prepare("UPDATE waitlist SET status = 'removed' WHERE id = ?")
                     ->execute([$wlId]);
-                $actionMsg = 'Vnos odstranjen.';
+                $actionMsg = t('waitlist.action_removed');
             } elseif ($act === 'notify' && $entry['status'] === 'waiting') {
                 // Ročno sproži obvestilo za tega gosta (preskoči FIFO)
                 $expiresAt = date('Y-m-d H:i:s', time() + 2 * 3600);
@@ -87,23 +106,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasFeature) {
                     $fe = $fullEntry->fetch();
                     if ($fe) _send_waitlist_notify_email($fe);
                 } catch (Throwable $e) { error_log('Admin manual notify error: ' . $e->getMessage()); }
-                $actionMsg = 'Obvestilo poslano gostu.';
+                $actionMsg = t('waitlist.action_notified');
             }
         }
     }
 }
 ?>
 <!DOCTYPE html>
-<html lang="sl">
+<html lang="<?= get_lang() ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Čakalna lista – <?= h(APP_NAME) ?></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title><?= t('waitlist.title') ?> – <?= h(APP_NAME) ?></title>
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css?v=4">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/rezble.css?v=4">
     <style>
-        .wl-wrap  { max-width: 1000px; margin: 0 auto; padding: 28px 20px 60px; }
         .wl-title { font-size: 1.4rem; font-weight: 700; color: #111827; margin: 0 0 20px; }
         .wl-toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
         .wl-select  { padding: 8px 12px; border: 1px solid #D1D5DB; border-radius: 8px; font-size: .9rem; outline: none; background: #fff; }
@@ -145,41 +162,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasFeature) {
         .wl-detail-value { color:#111827; }
         .wl-modal-actions { display:flex; gap:8px; margin-top:18px; padding-top:16px; border-top:1px solid #F3F4F6; }
     </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/design.css?v=1">
+    <script>
+    window.__T__ = <?= json_encode(get_lang_strings(), JSON_UNESCAPED_UNICODE) ?>;
+    window.t = function(k, p) { var s = window.__T__[k] || k; if (p) { for (var x in p) s = s.split('{'+x+'}').join(p[x]); } return s; };
+    </script>
 </head>
 <body>
+
+<div id="rz-app" class="rz-app">
+<?php require_once '../includes/sidebar.php'; ?>
+<main class="rz-main">
 <?php require_once '../includes/trial_banner.php'; ?>
 
-<header class="app-header">
-    <div class="header-logo">
-        <div class="logo-icon">R</div>
-        <span class="logo-text"><?= h(APP_NAME) ?></span>
-    </div>
-    <div class="header-nav">
-        <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin">Rezervacije</a>
-        <a href="<?= BASE_PATH ?>/pages/stats.php" class="btn-header btn-header-admin">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-            Statistika
-        </a>
-        <?php if (user_has_feature($pdo, (int)$_SESSION['user_id'], 'guest_database')): ?>
-        <a href="<?= BASE_PATH ?>/pages/guests.php" class="btn-header btn-header-admin">Gostje</a>
-        <?php endif; ?>
-        <a href="<?= BASE_PATH ?>/pages/waitlist.php" class="btn-header btn-header-admin" style="background:#FEF3C7;color:#92400E">Čakalna lista</a>
-        <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">Admin</a>
-        <a href="<?= BASE_PATH ?>/pages/billing.php" class="btn-header btn-header-admin">Paketi</a>
-        <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header">Profil</a>
-        <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
-    </div>
-</header>
-
 <div class="wl-wrap">
-    <h1 class="wl-title">Čakalna lista</h1>
+    <h1 class="wl-title"><?= t('waitlist.title') ?></h1>
 
     <?php if (!$hasFeature): ?>
     <div class="upsell-box">
-        <h3>Čakalna lista – Advanced/Premium</h3>
-        <p>Z nadgradnjo paketa gostje ne bodo več izgubili mesta, ko se sprosti termin. Sistem jih samodejno obvesti.</p>
+        <h3><?= t('waitlist.upsell_title') ?></h3>
+        <p><?= t('waitlist.upsell_desc') ?></p>
         <a href="<?= BASE_PATH ?>/pages/billing.php" style="display:inline-block;background:#F59E0B;color:#fff;padding:10px 24px;border-radius:8px;font-weight:600;text-decoration:none">
-            Nadgradi paket
+            <?= t('waitlist.upsell_btn') ?>
         </a>
     </div>
     <?php else: ?>
@@ -189,26 +196,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasFeature) {
     <?php endif; ?>
 
     <div class="wl-toolbar">
-        <?php if (count($restaurants) > 1): ?>
-        <select id="filter-rest" class="wl-select" onchange="loadWaitlist()">
-            <option value="0">Vse restavracije</option>
-            <?php foreach ($restaurants as $r): ?>
-            <option value="<?= $r['id'] ?>"><?= h($r['name']) ?></option>
-            <?php endforeach; ?>
-        </select>
-        <?php endif; ?>
         <select id="filter-status" class="wl-select" onchange="loadWaitlist()">
-            <option value="">Vse stanje</option>
-            <option value="waiting">Čakajoči</option>
-            <option value="notified">Obveščeni</option>
-            <option value="confirmed">Potrjeni</option>
-            <option value="expired">Potekli</option>
-            <option value="removed">Odstranjeni</option>
+            <option value=""><?= t('waitlist.filter_all') ?></option>
+            <option value="waiting"><?= t('waitlist.filter_waiting') ?></option>
+            <option value="notified"><?= t('waitlist.filter_notified') ?></option>
+            <option value="confirmed"><?= t('waitlist.filter_confirmed') ?></option>
+            <option value="expired"><?= t('waitlist.filter_expired') ?></option>
+            <option value="removed"><?= t('waitlist.filter_removed') ?></option>
         </select>
         <input type="date" id="filter-date" class="wl-date" onchange="loadWaitlist()"
                value="<?= date('Y-m-d') ?>" title="Filtriraj po datumu">
         <button onclick="clearDateFilter()" class="action-btn" style="border-color:#D1D5DB;color:#6B7280">
-            Vse datume
+            <?= t('waitlist.filter_all_dates') ?>
         </button>
     </div>
 
@@ -216,18 +215,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasFeature) {
         <table class="wl-table">
             <thead>
                 <tr>
-                    <th>Ime</th>
-                    <th>Email / Tel</th>
-                    <th>Datum</th>
-                    <th>Čas</th>
-                    <th>Gostje</th>
-                    <th>Stanje</th>
-                    <th>Vpisan</th>
+                    <th><?= t('waitlist.col_name') ?></th>
+                    <th><?= t('waitlist.col_email_phone') ?></th>
+                    <th><?= t('waitlist.col_date') ?></th>
+                    <th><?= t('waitlist.col_time') ?></th>
+                    <th><?= t('waitlist.col_guests') ?></th>
+                    <th><?= t('waitlist.col_status') ?></th>
+                    <th><?= t('waitlist.col_registered') ?></th>
                     <th></th>
                 </tr>
             </thead>
             <tbody id="wl-tbody">
-                <tr><td colspan="8" class="empty-state">Nalagam...</td></tr>
+                <tr><td colspan="8" class="empty-state"><?= t('waitlist.loading') ?></td></tr>
             </tbody>
         </table>
     </div>
@@ -238,7 +237,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasFeature) {
 <div id="wl-detail-overlay" class="wl-modal-overlay" onclick="if(event.target===this)closeDetailModal()">
     <div class="wl-modal">
         <button class="wl-modal-close" onclick="closeDetailModal()">×</button>
-        <h3>Podrobnosti čakalne liste</h3>
+        <h3><?= t('waitlist.modal_title') ?></h3>
         <div id="wl-detail-body" class="wl-detail-grid"></div>
         <div id="wl-detail-actions" class="wl-modal-actions"></div>
     </div>
@@ -246,7 +245,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasFeature) {
 
 <script>
 const BASE_PATH  = <?= json_encode(BASE_PATH) ?>;
-const DEFAULT_REST = <?= $defaultRestId ?>;
+const DEFAULT_REST = <?= $activeRestId ?>;
 
 function clearDateFilter() {
     document.getElementById('filter-date').value = '';
@@ -264,7 +263,7 @@ async function loadWaitlist() {
     if (date)    params.set('date', date);
 
     const tbody = document.getElementById('wl-tbody');
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#9CA3AF">Nalagam...</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:#9CA3AF">${window.t('waitlist.loading')}</td></tr>`;
 
     try {
         const res  = await fetch(`${BASE_PATH}/api/waitlist_admin.php?${params}`);
@@ -273,7 +272,7 @@ async function loadWaitlist() {
 
         const rows = json.data;
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:#9CA3AF">Ni vnosov za izbrane filtre.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:#9CA3AF">${window.t('waitlist.no_results')}</td></tr>`;
             return;
         }
 
@@ -291,11 +290,11 @@ async function loadWaitlist() {
             let actions = '';
             if (r.status === 'waiting') {
                 actions = `
-                    <button class="action-btn btn-notify" onclick="event.stopPropagation();doAction(${r.id},'notify')" title="Ročno pošlji obvestilo">Obvesti</button>
-                    <button class="action-btn btn-remove" onclick="event.stopPropagation();doAction(${r.id},'remove')" title="Odstrani z liste">Odstrani</button>
+                    <button class="action-btn btn-notify" onclick="event.stopPropagation();doAction(${r.id},'notify')" title="Ročno pošlji obvestilo">${window.t('waitlist.btn_notify')}</button>
+                    <button class="action-btn btn-remove" onclick="event.stopPropagation();doAction(${r.id},'remove')" title="Odstrani z liste">${window.t('waitlist.btn_remove')}</button>
                 `;
             } else if (r.status === 'notified') {
-                actions = `<button class="action-btn btn-remove" onclick="event.stopPropagation();doAction(${r.id},'remove')">Odstrani</button>`;
+                actions = `<button class="action-btn btn-remove" onclick="event.stopPropagation();doAction(${r.id},'remove')">${window.t('waitlist.btn_remove')}</button>`;
             }
 
             const phone = r.phone ? `<br><span style="color:#9CA3AF;font-size:.8rem">${escHtml(r.phone)}</span>` : '';
@@ -313,12 +312,12 @@ async function loadWaitlist() {
         }).join('');
 
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:#EF4444">Napaka: ${e.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:#EF4444">${window.t('waitlist.err_prefix')} ${e.message}</td></tr>`;
     }
 }
 
 async function doAction(wlId, act) {
-    if (act === 'remove' && !confirm('Odstraniti vnos s čakalne liste?')) return;
+    if (act === 'remove' && !confirm(window.t('waitlist.confirm_remove'))) return;
 
     const form = new FormData();
     form.append('wl_id', wlId);
@@ -330,7 +329,7 @@ async function doAction(wlId, act) {
         if (!json.success) throw new Error(json.error);
         loadWaitlist();
     } catch (e) {
-        alert('Napaka: ' + e.message);
+        alert(window.t('waitlist.err_prefix') + ' ' + e.message);
     }
 }
 
@@ -349,8 +348,11 @@ function fmtDateTime(str) {
 }
 
 const statusLabel = {
-    waiting: 'Čaka', notified: 'Obveščen', confirmed: 'Potrjen',
-    expired: 'Potekel', removed: 'Odstranjen',
+    waiting:   window.t('waitlist.badge_waiting'),
+    notified:  window.t('waitlist.badge_notified'),
+    confirmed: window.t('waitlist.badge_confirmed'),
+    expired:   window.t('waitlist.badge_expired'),
+    removed:   window.t('waitlist.badge_removed'),
 };
 const badgeClass = {
     waiting: 'badge-waiting', notified: 'badge-notified',
@@ -382,32 +384,37 @@ function openDetailModal(id) {
     let html = '';
 
     // ── Vpis na čakalno listo ──────────────────────────────────
-    html += sectionHeader('Čakalna lista');
-    if (r.rest_count > 1) html += row('Restavracija', escHtml(r.rest_name));
-    html += row('Datum', fmtDate(r.date + 'T12:00:00'));
-    html += row('Želen čas', escHtml(r.time_preference || '—'));
-    html += row('Gostje', r.guests);
-    html += row('Stanje', `<span class="badge ${badgeClass[r.status] || ''}">${statusLabel[r.status] || r.status}</span>`);
-    html += row('Vpisan', fmtDateTime(r.created_at));
-    if (r.notified_at) html += row('Obveščen', fmtDateTime(r.notified_at));
-    if (r.status === 'notified' && r.expires_at) html += row('Rok za potrditev', fmtDateTime(r.expires_at));
-    if (r.confirmed_at) html += row('Potrjen', fmtDateTime(r.confirmed_at));
+    html += sectionHeader(window.t('waitlist.detail_waitlist'));
+    if (r.rest_count > 1) html += row(window.t('waitlist.detail_restaurant'), escHtml(r.rest_name));
+    html += row(window.t('waitlist.detail_date'), fmtDate(r.date + 'T12:00:00'));
+    html += row(window.t('waitlist.detail_preferred_time'), escHtml(r.time_preference || '—'));
+    html += row(window.t('waitlist.detail_guests'), r.guests);
+    html += row(window.t('waitlist.detail_status'), `<span class="badge ${badgeClass[r.status] || ''}">${statusLabel[r.status] || r.status}</span>`);
+    html += row(window.t('waitlist.detail_registered'), fmtDateTime(r.created_at));
+    if (r.notified_at) html += row(window.t('waitlist.detail_notified'), fmtDateTime(r.notified_at));
+    if (r.status === 'notified' && r.expires_at) html += row(window.t('waitlist.detail_confirm_deadline'), fmtDateTime(r.expires_at));
+    if (r.confirmed_at) html += row(window.t('waitlist.detail_confirmed_at'), fmtDateTime(r.confirmed_at));
 
     // ── Kontaktni podatki ─────────────────────────────────────
-    html += sectionHeader('Kontakt');
-    html += row('Ime', escHtml(displayName));
-    html += row('Email', escHtml(r.email));
-    html += row('Telefon', escHtml((res && res.res_phone) ? res.res_phone : (r.phone || '—')));
+    html += sectionHeader(window.t('waitlist.detail_contact'));
+    html += row(window.t('waitlist.detail_name'), escHtml(displayName));
+    html += row(window.t('waitlist.detail_email'), escHtml(r.email));
+    html += row(window.t('waitlist.detail_phone'), escHtml((res && res.res_phone) ? res.res_phone : (r.phone || '—')));
 
     // ── Rezervacija ───────────────────────────────────────────
     if (res) {
-        const resStatusLabel = { confirmed: 'Potrjena', pending: 'V čakanju', cancelled: 'Preklicana', arrived: 'Prispel' };
-        html += sectionHeader('Rezervacija');
-        if (res.reservation_time) html += row('Čas', escHtml(res.reservation_time.substring(0, 5)));
-        if (res.guest_count)      html += row('Število oseb', res.guest_count);
-        if (res.duration)         html += row('Trajanje', res.duration + ' min');
-        if (res.res_status)       html += row('Status', escHtml(resStatusLabel[res.res_status] || res.res_status));
-        if (res.notes)            html += row('Opomba', escHtml(res.notes));
+        const resStatusLabel = {
+            confirmed: window.t('waitlist.res_status_confirmed'),
+            pending:   window.t('waitlist.res_status_pending'),
+            cancelled: window.t('waitlist.res_status_cancelled'),
+            arrived:   window.t('waitlist.res_status_arrived'),
+        };
+        html += sectionHeader(window.t('waitlist.detail_reservation'));
+        if (res.reservation_time) html += row(window.t('waitlist.detail_time'), escHtml(res.reservation_time.substring(0, 5)));
+        if (res.guest_count)      html += row(window.t('waitlist.detail_count'), res.guest_count);
+        if (res.duration)         html += row(window.t('waitlist.detail_duration'), res.duration + ' min');
+        if (res.res_status)       html += row(window.t('waitlist.detail_res_status'), escHtml(resStatusLabel[res.res_status] || res.res_status));
+        if (res.notes)            html += row(window.t('waitlist.detail_notes'), escHtml(res.notes));
 
         // Custom polja
         const fvs = r.field_values || [];
@@ -419,9 +426,9 @@ function openDetailModal(id) {
     // ── Profil gosta ──────────────────────────────────────────
     const gp = r.guest_profile;
     if (gp) {
-        html += sectionHeader('Profil gosta');
-        html += row('Obiski', gp.total_visits || 0);
-        if (gp.last_visit) html += row('Zadnji obisk', fmtDate(gp.last_visit));
+        html += sectionHeader(window.t('waitlist.detail_guest_profile'));
+        html += row(window.t('waitlist.detail_visits'), gp.total_visits || 0);
+        if (gp.last_visit) html += row(window.t('waitlist.detail_last_visit'), fmtDate(gp.last_visit));
         // VIP iz JSON tags
         try {
             const tags = JSON.parse(gp.tags || '[]');
@@ -436,10 +443,10 @@ function openDetailModal(id) {
     let actionsHtml = '';
     if (r.status === 'waiting') {
         actionsHtml = `
-            <button class="action-btn btn-notify" onclick="doAction(${r.id},'notify');closeDetailModal()">Pošlji obvestilo</button>
-            <button class="action-btn btn-remove" onclick="doAction(${r.id},'remove');closeDetailModal()">Odstrani</button>`;
+            <button class="action-btn btn-notify" onclick="doAction(${r.id},'notify');closeDetailModal()">${window.t('waitlist.detail_btn_notify')}</button>
+            <button class="action-btn btn-remove" onclick="doAction(${r.id},'remove');closeDetailModal()">${window.t('waitlist.detail_btn_remove')}</button>`;
     } else if (r.status === 'notified') {
-        actionsHtml = `<button class="action-btn btn-remove" onclick="doAction(${r.id},'remove');closeDetailModal()">Odstrani</button>`;
+        actionsHtml = `<button class="action-btn btn-remove" onclick="doAction(${r.id},'remove');closeDetailModal()">${window.t('waitlist.detail_btn_remove')}</button>`;
     }
     document.getElementById('wl-detail-actions').innerHTML = actionsHtml;
 
@@ -456,5 +463,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDetailM
 // Ob nalaganju strani
 loadWaitlist();
 </script>
+</main>
+</div><!-- /rz-app -->
 </body>
 </html>

@@ -2,6 +2,7 @@
 require_once '../includes/auth_check.php';
 require_once '../includes/functions.php';
 require_once '../includes/db.php';
+require_once '../includes/lang.php';
 
 if (!is_logged_in() || $_SESSION['role'] !== 'superadmin') {
     header('Location: ' . BASE_PATH . '/pages/main.php');
@@ -20,16 +21,16 @@ $requests = $pdo->query("
 ")->fetchAll();
 
 $statusLabels = [
-    'pending'    => 'V čakanju',
-    'processing' => 'V obdelavi',
-    'completed'  => 'Zaključeno',
-    'rejected'   => 'Zavrnjeno',
+    'pending'    => t('gdpr.status_pending'),
+    'processing' => t('gdpr.status_processing'),
+    'completed'  => t('gdpr.status_completed'),
+    'rejected'   => t('gdpr.status_rejected'),
 ];
 $typeLabels = [
-    'access'        => 'Dostop',
-    'rectification' => 'Popravek',
-    'erasure'       => 'Izbris',
-    'portability'   => 'Prenosljivost',
+    'access'        => t('gdpr.type_access'),
+    'rectification' => t('gdpr.type_rectification'),
+    'erasure'       => t('gdpr.type_erasure'),
+    'portability'   => t('gdpr.type_portability'),
 ];
 $statusColors = [
     'pending'    => '#FEF3C7;color:#92400E',
@@ -39,16 +40,20 @@ $statusColors = [
 ];
 ?>
 <!DOCTYPE html>
-<html lang="sl">
+<html lang="<?= get_lang() ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GDPR zahtevki – <?= h(APP_NAME) ?></title>
+    <title><?= t('gdpr.page_title') ?> – <?= h(APP_NAME) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/admin.css">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/modal.css">
+    <script>
+    window.__T__ = <?= json_encode(get_lang_strings(), JSON_UNESCAPED_UNICODE) ?>;
+    window.t = function(k, p) { var s = window.__T__[k] || k; if (p) { for (var x in p) s = s.split('{'+x+'}').join(p[x]); } return s; };
+    </script>
     <style>
         .gdpr-table { width:100%;border-collapse:collapse }
         .gdpr-table th { text-align:left;font-size:.78rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:#6B7280;padding:8px 12px;border-bottom:2px solid #E5E7EB }
@@ -80,53 +85,53 @@ $statusColors = [
         <?= h(APP_NAME) ?>
     </a>
     <div class="header-restaurant">
-        <span style="color:rgba(255,255,255,.5);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;font-weight:600">GDPR zahtevki</span>
+        <span style="color:rgba(255,255,255,.5);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;font-weight:600"><?= t('gdpr.header_label') ?></span>
     </div>
     <div class="header-actions">
         <span class="header-user">👤 <?= h($fullName) ?></span>
-        <a href="<?= BASE_PATH ?>/pages/superadmin.php" class="btn-header">← Superadmin</a>
-        <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
+        <a href="<?= BASE_PATH ?>/pages/superadmin.php" class="btn-header"><?= t('gdpr.back_superadmin') ?></a>
+        <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout"><?= t('gdpr.logout') ?></a>
     </div>
 </header>
 
 <div class="admin-layout">
 <div class="admin-content">
-    <h1 class="admin-page-title">GDPR zahtevki</h1>
+    <h1 class="admin-page-title"><?= t('gdpr.page_heading') ?></h1>
 
     <div id="msg-box" style="display:none;margin-bottom:16px;padding:12px 16px;border-radius:10px;font-size:.875rem"></div>
 
     <!-- Orodna vrstica: erase_user / erase_guest / export -->
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px;align-items:center">
         <button class="btn-sm" style="background:#F3F4F6;color:#374151;padding:8px 16px"
-            onclick="openEraseUser()">Zbriši/Anonimiziraj admina</button>
+            onclick="openEraseUser()"><?= t('gdpr.btn_erase_user') ?></button>
         <button class="btn-sm" style="background:#F3F4F6;color:#374151;padding:8px 16px"
-            onclick="openEraseGuest()">Zbriši gosta</button>
+            onclick="openEraseGuest()"><?= t('gdpr.btn_erase_guest') ?></button>
         <button class="btn-sm" style="background:#F3F4F6;color:#374151;padding:8px 16px"
-            onclick="openExportUser()">Izvozi podatke admina</button>
+            onclick="openExportUser()"><?= t('gdpr.btn_export_user') ?></button>
         <button class="btn-sm" style="background:#F3F4F6;color:#374151;padding:8px 16px"
-            onclick="openExportGuest()">Izvozi podatke gosta</button>
+            onclick="openExportGuest()"><?= t('gdpr.btn_export_guest') ?></button>
         <a href="<?= BASE_PATH ?>/pages/gdpr_request.php" target="_blank"
            class="btn-sm" style="background:#FEF3C7;color:#92400E;padding:8px 16px;text-decoration:none">
-            Javna stran zahtevkov ↗</a>
+            <?= t('gdpr.public_page') ?></a>
     </div>
 
     <?php if (empty($requests)): ?>
     <div style="text-align:center;padding:60px 20px;color:#9CA3AF">
         <div style="font-size:2.5rem;margin-bottom:12px">📋</div>
-        <p>Ni GDPR zahtevkov.</p>
+        <p><?= t('gdpr.no_requests') ?></p>
     </div>
     <?php else: ?>
     <div style="overflow-x:auto;background:#fff;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.06)">
         <table class="gdpr-table">
             <thead>
                 <tr>
-                    <th>#</th>
-                    <th>Email</th>
-                    <th>Vrsta</th>
-                    <th>Restavracija</th>
-                    <th>Status</th>
-                    <th>Datum zahtevka</th>
-                    <th>Akcije</th>
+                    <th><?= t('gdpr.col_id') ?></th>
+                    <th><?= t('gdpr.col_email') ?></th>
+                    <th><?= t('gdpr.col_type') ?></th>
+                    <th><?= t('gdpr.col_restaurant') ?></th>
+                    <th><?= t('gdpr.col_status') ?></th>
+                    <th><?= t('gdpr.col_date') ?></th>
+                    <th><?= t('gdpr.col_actions') ?></th>
                 </tr>
             </thead>
             <tbody>
@@ -147,7 +152,7 @@ $statusColors = [
                     <div class="actions-row">
                         <button class="btn-sm" style="background:#F3F4F6;color:#374151"
                             onclick="openStatusModal(<?= (int)$req['id'] ?>, '<?= h($req['status']) ?>', <?= $req['notes'] ? "'" . addslashes(h($req['notes'])) . "'" : "''" ?>)">
-                            Uredi status
+                            <?= t('gdpr.edit_status') ?>
                         </button>
                     </div>
                 </td>
@@ -163,22 +168,22 @@ $statusColors = [
 <!-- Modal: Uredi status -->
 <div class="modal-overlay" id="modal-status">
     <div class="modal-box">
-        <h3>Uredi status zahtevka</h3>
+        <h3><?= t('gdpr.modal_edit_title') ?></h3>
         <input type="hidden" id="modal-req-id">
-        <label class="modal-label">Status</label>
+        <label class="modal-label"><?= t('gdpr.modal_status_label') ?></label>
         <select id="modal-status-sel">
-            <option value="pending">V čakanju</option>
-            <option value="processing">V obdelavi</option>
-            <option value="completed">Zaključeno</option>
-            <option value="rejected">Zavrnjeno</option>
+            <option value="pending"><?= t('gdpr.status_pending') ?></option>
+            <option value="processing"><?= t('gdpr.status_processing') ?></option>
+            <option value="completed"><?= t('gdpr.status_completed') ?></option>
+            <option value="rejected"><?= t('gdpr.status_rejected') ?></option>
         </select>
-        <label class="modal-label">Notranje opombe</label>
-        <textarea id="modal-notes" placeholder="Opombe (vidne samo superadminu)..."></textarea>
+        <label class="modal-label"><?= t('gdpr.modal_notes_label') ?></label>
+        <textarea id="modal-notes" placeholder="<?= t('gdpr.modal_notes_placeholder') ?>"></textarea>
         <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end">
             <button class="btn-sm" style="background:#F3F4F6;color:#374151;padding:8px 16px"
-                onclick="closeModals()">Prekliči</button>
+                onclick="closeModals()"><?= t('gdpr.modal_cancel') ?></button>
             <button class="btn-sm" style="background:#F59E0B;color:#fff;padding:8px 16px"
-                onclick="saveStatus()">Shrani</button>
+                onclick="saveStatus()"><?= t('gdpr.modal_save') ?></button>
         </div>
     </div>
 </div>
@@ -186,19 +191,16 @@ $statusColors = [
 <!-- Modal: Erase user -->
 <div class="modal-overlay" id="modal-erase-user">
     <div class="modal-box">
-        <h3>Zbriši/Anonimiziraj admina</h3>
-        <p style="font-size:.85rem;color:#6B7280;margin:0 0 14px;line-height:1.5">
-            Vnesite user ID admina (vidite ga v Superadmin → Admini).
-            Akcija je <strong>nepopravljiva</strong>: ime, email in kontaktni podatki se anonimizirajo.
-        </p>
-        <label class="modal-label">User ID</label>
-        <input type="number" id="erase-user-id" placeholder="npr. 42"
+        <h3><?= t('gdpr.modal_erase_user_title') ?></h3>
+        <p style="font-size:.85rem;color:#6B7280;margin:0 0 14px;line-height:1.5"><?= t('gdpr.modal_erase_user_desc') ?></p>
+        <label class="modal-label"><?= t('gdpr.modal_user_id_label') ?></label>
+        <input type="number" id="erase-user-id" placeholder="<?= t('gdpr.modal_user_id_placeholder') ?>"
             style="width:100%;padding:9px 12px;border:1px solid #E5E7EB;border-radius:8px;font-size:.875rem;box-sizing:border-box">
         <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end">
             <button class="btn-sm" style="background:#F3F4F6;color:#374151;padding:8px 16px"
-                onclick="closeModals()">Prekliči</button>
+                onclick="closeModals()"><?= t('gdpr.modal_cancel') ?></button>
             <button class="btn-sm btn-erase" style="padding:8px 16px"
-                onclick="eraseUser()">Anonimiziraj</button>
+                onclick="eraseUser()"><?= t('gdpr.modal_anonymize') ?></button>
         </div>
     </div>
 </div>
@@ -206,21 +208,19 @@ $statusColors = [
 <!-- Modal: Erase guest -->
 <div class="modal-overlay" id="modal-erase-guest">
     <div class="modal-box">
-        <h3>Zbriši gosta</h3>
-        <p style="font-size:.85rem;color:#6B7280;margin:0 0 14px;line-height:1.5">
-            Anonimiziraj vse rezervacije gosta (po emailu) v izbrani restavraciji.
-        </p>
-        <label class="modal-label">Email gosta</label>
-        <input type="email" id="erase-guest-email" placeholder="gost@email.com"
+        <h3><?= t('gdpr.modal_erase_guest_title') ?></h3>
+        <p style="font-size:.85rem;color:#6B7280;margin:0 0 14px;line-height:1.5"><?= t('gdpr.modal_erase_guest_desc') ?></p>
+        <label class="modal-label"><?= t('gdpr.modal_guest_email_label') ?></label>
+        <input type="email" id="erase-guest-email" placeholder="<?= t('gdpr.modal_guest_email_placeholder') ?>"
             style="width:100%;padding:9px 12px;border:1px solid #E5E7EB;border-radius:8px;font-size:.875rem;box-sizing:border-box">
-        <label class="modal-label">Restaurant ID</label>
-        <input type="number" id="erase-guest-rid" placeholder="npr. 3"
+        <label class="modal-label"><?= t('gdpr.modal_rest_id_label') ?></label>
+        <input type="number" id="erase-guest-rid" placeholder="<?= t('gdpr.modal_rest_id_placeholder') ?>"
             style="width:100%;padding:9px 12px;border:1px solid #E5E7EB;border-radius:8px;font-size:.875rem;box-sizing:border-box;margin-top:6px">
         <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end">
             <button class="btn-sm" style="background:#F3F4F6;color:#374151;padding:8px 16px"
-                onclick="closeModals()">Prekliči</button>
+                onclick="closeModals()"><?= t('gdpr.modal_cancel') ?></button>
             <button class="btn-sm btn-erase" style="padding:8px 16px"
-                onclick="eraseGuest()">Anonimiziraj</button>
+                onclick="eraseGuest()"><?= t('gdpr.modal_anonymize') ?></button>
         </div>
     </div>
 </div>
@@ -228,15 +228,15 @@ $statusColors = [
 <!-- Modal: Export user -->
 <div class="modal-overlay" id="modal-export-user">
     <div class="modal-box">
-        <h3>Izvozi podatke admina</h3>
-        <label class="modal-label">User ID</label>
-        <input type="number" id="export-user-id" placeholder="npr. 42"
+        <h3><?= t('gdpr.modal_export_user_title') ?></h3>
+        <label class="modal-label"><?= t('gdpr.modal_user_id_label') ?></label>
+        <input type="number" id="export-user-id" placeholder="<?= t('gdpr.modal_user_id_placeholder') ?>"
             style="width:100%;padding:9px 12px;border:1px solid #E5E7EB;border-radius:8px;font-size:.875rem;box-sizing:border-box">
         <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end">
             <button class="btn-sm" style="background:#F3F4F6;color:#374151;padding:8px 16px"
-                onclick="closeModals()">Prekliči</button>
+                onclick="closeModals()"><?= t('gdpr.modal_cancel') ?></button>
             <button class="btn-sm btn-export" style="padding:8px 16px"
-                onclick="exportUser()">Izvozi JSON</button>
+                onclick="exportUser()"><?= t('gdpr.modal_export_json') ?></button>
         </div>
     </div>
 </div>
@@ -244,18 +244,18 @@ $statusColors = [
 <!-- Modal: Export guest -->
 <div class="modal-overlay" id="modal-export-guest">
     <div class="modal-box">
-        <h3>Izvozi podatke gosta</h3>
-        <label class="modal-label">Email gosta</label>
-        <input type="email" id="export-guest-email" placeholder="gost@email.com"
+        <h3><?= t('gdpr.modal_export_guest_title') ?></h3>
+        <label class="modal-label"><?= t('gdpr.modal_guest_email_label') ?></label>
+        <input type="email" id="export-guest-email" placeholder="<?= t('gdpr.modal_guest_email_placeholder') ?>"
             style="width:100%;padding:9px 12px;border:1px solid #E5E7EB;border-radius:8px;font-size:.875rem;box-sizing:border-box">
-        <label class="modal-label">Restaurant ID</label>
-        <input type="number" id="export-guest-rid" placeholder="npr. 3"
+        <label class="modal-label"><?= t('gdpr.modal_rest_id_label') ?></label>
+        <input type="number" id="export-guest-rid" placeholder="<?= t('gdpr.modal_rest_id_placeholder') ?>"
             style="width:100%;padding:9px 12px;border:1px solid #E5E7EB;border-radius:8px;font-size:.875rem;box-sizing:border-box;margin-top:6px">
         <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end">
             <button class="btn-sm" style="background:#F3F4F6;color:#374151;padding:8px 16px"
-                onclick="closeModals()">Prekliči</button>
+                onclick="closeModals()"><?= t('gdpr.modal_cancel') ?></button>
             <button class="btn-sm btn-export" style="padding:8px 16px"
-                onclick="exportGuest()">Izvozi JSON</button>
+                onclick="exportGuest()"><?= t('gdpr.modal_export_json') ?></button>
         </div>
     </div>
 </div>
@@ -303,26 +303,26 @@ async function saveStatus() {
     const notes  = document.getElementById('modal-notes').value.trim();
     const json   = await apiPost('update_status', { id, status, notes });
     closeModals();
-    if (json.success) { showMsg('Status posodobljen.', true); setTimeout(() => location.reload(), 1200); }
-    else              { showMsg(json.error || 'Napaka.', false); }
+    if (json.success) { showMsg(window.t('gdpr.status_updated'), true); setTimeout(() => location.reload(), 1200); }
+    else              { showMsg(json.error || window.t('gdpr.err_generic'), false); }
 }
 
 async function eraseUser() {
     const userId = parseInt(document.getElementById('erase-user-id').value);
-    if (!userId || !confirm('Anonimizacija je NEPOPRAVLJIVA. Nadaljujem?')) return;
+    if (!userId || !confirm(window.t('gdpr.confirm_anonymize'))) return;
     const json = await apiPost('erase_user', { user_id: userId });
     closeModals();
-    json.success ? showMsg('Admin anonimiziran.', true) : showMsg(json.error || 'Napaka.', false);
+    json.success ? showMsg(window.t('gdpr.user_anonymized'), true) : showMsg(json.error || window.t('gdpr.err_generic'), false);
 }
 
 async function eraseGuest() {
     const email = document.getElementById('erase-guest-email').value.trim();
     const rid   = parseInt(document.getElementById('erase-guest-rid').value);
-    if (!email || !rid || !confirm('Anonimizacija je NEPOPRAVLJIVA. Nadaljujem?')) return;
+    if (!email || !rid || !confirm(window.t('gdpr.confirm_anonymize'))) return;
     const json = await apiPost('erase_guest', { email, restaurant_id: rid });
     closeModals();
-    json.success ? showMsg('Gost anonimiziran (' + json.data.anonymized_reservations + ' rezervacij).', true)
-                 : showMsg(json.error || 'Napaka.', false);
+    json.success ? showMsg(window.t('gdpr.guest_anonymized', {count: json.data.anonymized_reservations}), true)
+                 : showMsg(json.error || window.t('gdpr.err_generic'), false);
 }
 
 function exportUser() {
@@ -340,7 +340,7 @@ function exportUser() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: uid }),
     }).then(r => {
-        if (!r.ok) return r.json().then(j => { throw new Error(j.error || 'Napaka'); });
+        if (!r.ok) return r.json().then(j => { throw new Error(j.error || window.t('gdpr.err_generic')); });
         return r.blob();
     }).then(blob => {
         const url = URL.createObjectURL(blob);
@@ -360,7 +360,7 @@ function exportGuest() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, restaurant_id: rid }),
     }).then(r => {
-        if (!r.ok) return r.json().then(j => { throw new Error(j.error || 'Napaka'); });
+        if (!r.ok) return r.json().then(j => { throw new Error(j.error || window.t('gdpr.err_generic')); });
         return r.blob();
     }).then(blob => {
         const url = URL.createObjectURL(blob);

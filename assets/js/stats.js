@@ -257,13 +257,15 @@ async function loadTopCustomers() {
             return;
         }
         tbody.innerHTML = data.slice(0, 20).map((r, i) => {
-            const loyal = parseInt(r.visits) >= 5 ? '<span class="loyal-badge">Zvest gost</span>' : '';
-            const name  = h(r.guest_name || '—');
-            const email = r.email ? `<a href="mailto:${h(r.email)}" style="color:var(--color-accent)">${h(r.email)}</a>` : '—';
+            const loyal   = parseInt(r.visits) >= 5 ? '<span class="loyal-badge">Zvest gost</span>' : '';
+            const name    = h(r.guest_name || '—');
+            const contact = r.email
+                ? `<a href="mailto:${h(r.email)}" style="color:var(--color-accent)">${h(r.email)}</a>`
+                : (r.phone ? `<a href="tel:${h(r.phone)}" style="color:var(--color-accent)">${h(r.phone)}</a>` : '—');
             return `<tr>
                 <td>${i + 1}</td>
                 <td>${name}${loyal}</td>
-                <td>${email}</td>
+                <td>${contact}</td>
                 <td><strong>${r.visits}</strong></td>
                 <td>${r.total_guests}</td>
                 <td>${fmtDate(r.first_visit)}</td>

@@ -27,8 +27,9 @@ const Schedule = (() => {
     "Sobota",
   ];
 
-  const ROW_HEIGHT = 48; // px
   let nowTimer = null;
+  let currentView = "timeline";
+  let lastRenderArgs = null;
 
   // ── Pomožne funkcije ─────────────────────────────────────────
   function minToTime(m) {
@@ -42,6 +43,24 @@ const Schedule = (() => {
 
   function formatDateLabel(date) {
     return `${DAYS_SL[date.getDay()]}, ${date.getDate()}. ${MONTHS_SL[date.getMonth()]} ${date.getFullYear()}`;
+  }
+
+  const MONTHS_SL_NOM = [
+    "januar",
+    "februar",
+    "marec",
+    "april",
+    "maj",
+    "junij",
+    "julij",
+    "avgust",
+    "september",
+    "oktober",
+    "november",
+    "december",
+  ];
+  function formatTopbarTitle(date) {
+    return `${DAYS_SL[date.getDay()]}, ${date.getDate()}. ${MONTHS_SL_NOM[date.getMonth()]}`;
   }
 
   function dateToStr(d) {
@@ -121,438 +140,353 @@ const Schedule = (() => {
     return result;
   }
 
-  // ── Off-hours segment helper ─────────────────────────────────
-  function addOffHoursOv(content, fromMin, toMin, SCHEDULE_START, totalMin) {
-    if (toMin <= fromMin) return;
-    const lPct = (a) =>
-      Math.max(0, Math.min(((a - SCHEDULE_START) / totalMin) * 100, 100));
-    const wPct = (d) => Math.max(0, Math.min((d / totalMin) * 100, 100));
-    const ov = document.createElement("div");
-    ov.className = "tl-block-overlay tl-off-hours";
-    ov.style.left = lPct(fromMin).toFixed(3) + "%";
-    ov.style.width = wPct(toMin - fromMin).toFixed(3) + "%";
-    ov.appendChild(mkLabel("Zaprt", "rgba(107,114,128,.55)"));
-    content.appendChild(ov);
+  const PX_PER_HOUR = 110;
+
+  function mk(tag, cls) {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    return el;
   }
 
-  // ── Overlays (off-hours + blocked) ──────────────────────────
-  function addOverlays(
-    content,
+  // ── Overlay v rz-tl-row (px-based) ──────────────────────────
+  function addOverlaysPx(
+    row,
     dayPeriods,
     overlays,
     SCHEDULE_START,
     SCHEDULE_END,
-    totalMin,
   ) {
-    const lPct = (a) =>
-      Math.max(0, Math.min(((a - SCHEDULE_START) / totalMin) * 100, 100));
-    const wPct = (d) => Math.max(0, Math.min((d / totalMin) * 100, 100));
+    const toPx = (m) => Math.max(0, ((m - SCHEDULE_START) / 60) * PX_PER_HOUR);
+    const durPx = (d) => Math.max(0, (d / 60) * PX_PER_HOUR);
 
-    // Čas izven terminov – indigo (podpora za multi-period)
+    function addOv(cls, leftPx, widthPx, label) {
+      if (widthPx <= 0) return;
+      const ov = mk("div", `tl-block-overlay ${cls}`);
+      ov.style.cssText = `position:absolute;top:0;bottom:0;left:${leftPx}px;width:${widthPx}px;z-index:1;pointer-events:none;border-radius:0;`;
+      if (label) {
+        const lbl = mk("span", "tl-block-label");
+        lbl.textContent = label;
+        ov.appendChild(lbl);
+      }
+      row.appendChild(ov);
+    }
+
     if (dayPeriods && dayPeriods.length > 0) {
       let cursor = SCHEDULE_START;
       dayPeriods.forEach((p) => {
         if (p.start_time > cursor)
-          addOffHoursOv(
-            content,
-            cursor,
-            p.start_time,
-            SCHEDULE_START,
-            totalMin,
-          );
+          addOv("tl-off-hours", toPx(cursor), durPx(p.start_time - cursor));
         cursor = Math.max(cursor, p.end_time);
       });
       if (cursor < SCHEDULE_END)
-        addOffHoursOv(content, cursor, SCHEDULE_END, SCHEDULE_START, totalMin);
+        addOv("tl-off-hours", toPx(cursor), durPx(SCHEDULE_END - cursor));
     }
 
     if (!overlays) return;
-
     if (overlays.isClosed) {
-      const ov = document.createElement("div");
-      ov.className = "tl-block-overlay closed";
-      ov.appendChild(mkLabel("Zaprt", "rgba(107,114,128,.55)"));
-      content.appendChild(ov);
+      addOv("closed", 0, durPx(SCHEDULE_END - SCHEDULE_START), "Zaprt");
       return;
     }
     if (overlays.fullBlackout) {
-      const ov = document.createElement("div");
-      ov.className = "tl-block-overlay full";
-      const txt = overlays.fullBlackoutReason
-        ? `Blokirano – ${overlays.fullBlackoutReason}`
-        : "Blokirano";
-      ov.appendChild(mkLabel(txt, "rgba(220,38,38,.6)"));
-      content.appendChild(ov);
+      addOv(
+        "full",
+        0,
+        durPx(SCHEDULE_END - SCHEDULE_START),
+        overlays.fullBlackoutReason
+          ? `Blokirano – ${overlays.fullBlackoutReason}`
+          : "Blokirano",
+      );
       return;
     }
     (overlays.partialBlackouts || []).forEach((pb) => {
-      const w = wPct(pb.end - pb.start);
-      if (w <= 0) return;
-      const ov = document.createElement("div");
-      ov.className = "tl-block-overlay partial";
-      ov.style.left = lPct(pb.start).toFixed(3) + "%";
-      ov.style.width = w.toFixed(3) + "%";
-      if (pb.reason)
-        ov.appendChild(
-          mkLabel(`Blokirano – ${pb.reason}`, "rgba(180,90,0,.6)"),
-        );
-      content.appendChild(ov);
-    });
-  }
-
-  function mkLabel(text, color) {
-    const lbl = document.createElement("span");
-    lbl.className = "tl-block-label";
-    lbl.textContent = text;
-    if (color) lbl.style.color = color;
-    return lbl;
-  }
-
-  // ── Content area (skupna logika za oba načina) ───────────────
-  function buildRowContent(
-    rowResv,
-    SCHEDULE_START,
-    SCHEDULE_END,
-    totalMin,
-    overlays,
-    dayPeriods,
-    isPast,
-    isToday,
-    ds,
-    duration,
-    table,
-  ) {
-    const lPct = (absMin) =>
-      Math.max(0, Math.min(((absMin - SCHEDULE_START) / totalMin) * 100, 100));
-    const wPct = (dur) => Math.max(0, Math.min((dur / totalMin) * 100, 100));
-
-    const content = document.createElement("div");
-    content.className = "tl-row-content";
-
-    // Vertikalne mrežne črte za vsako uro
-    const fh = Math.ceil(SCHEDULE_START / 60);
-    const lh = Math.floor(SCHEDULE_END / 60);
-    for (let h = fh; h <= lh; h++) {
-      const gl = document.createElement("div");
-      gl.className = "tl-grid-line";
-      gl.style.left = lPct(h * 60).toFixed(3) + "%";
-      content.appendChild(gl);
-    }
-
-    addOverlays(
-      content,
-      dayPeriods,
-      overlays,
-      SCHEDULE_START,
-      SCHEDULE_END,
-      totalMin,
-    );
-
-    // Izračun prekrivanj (za stacking znotraj ene vrstice)
-    const layout = computeOverlapLayout(rowResv);
-    const maxRows = Math.max(
-      1,
-      layout.reduce((m, l) => Math.max(m, l.subCols), 1),
-    );
-    if (maxRows > 1) content.style.height = ROW_HEIGHT * maxRows + "px";
-
-    layout.forEach(({ reservation, subCol }) => {
-      if (table) {
-        const assignments = reservation.table_assignments || [];
-        const thisA = assignments.find((a) => a.table_id === table.id);
-        if (thisA && thisA.merge_group_id) {
-          const mergeGroup = assignments.filter(
-            (a) => a.merge_group_id === thisA.merge_group_id,
-          );
-          mergeGroup.sort((a, b) => a.table_id - b.table_id);
-          if (mergeGroup[0].table_id !== table.id) {
-            content.appendChild(
-              buildMergedPlaceholder(
-                reservation,
-                mergeGroup[0].table_name,
-                SCHEDULE_START,
-                totalMin,
-                lPct,
-                wPct,
-                isPast,
-                subCol,
-              ),
-            );
-            return;
-          }
-        }
-      }
-      content.appendChild(
-        buildCard(
-          reservation,
-          SCHEDULE_START,
-          totalMin,
-          lPct,
-          wPct,
-          isPast,
-          isToday,
-          subCol,
-        ),
+      addOv(
+        "partial",
+        toPx(pb.start),
+        durPx(pb.end - pb.start),
+        pb.reason ? `Blokirano – ${pb.reason}` : null,
       );
     });
-
-    // Klik za novo rezervacijo
-    if (!isPast) {
-      content.addEventListener("click", (e) => {
-        if (e.target !== content) return;
-        const rect = content.getBoundingClientRect();
-        const rawMin = ((e.clientX - rect.left) / rect.width) * totalMin;
-        const snapped = Math.floor(rawMin / duration) * duration;
-        const absMin =
-          SCHEDULE_START + Math.max(0, Math.min(snapped, totalMin - duration));
-        ReservationModal.open("create", {
-          date: ds,
-          time: minToTime(absMin),
-          restaurantId: window.App ? App.getState().restaurantId : null,
-        });
-      });
-    }
-
-    // Now line
-    if (isToday) {
-      const nl = document.createElement("div");
-      nl.className = "tl-now-line";
-      content.appendChild(nl);
-    }
-
-    return content;
   }
 
-  // ── Vrstica za mizo ──────────────────────────────────────────
-  function buildTableRow(
-    table,
-    tableResv,
-    SCHEDULE_START,
-    SCHEDULE_END,
-    totalMin,
-    overlays,
-    dayPeriods,
-    isPast,
-    isToday,
-    ds,
-    duration,
-  ) {
-    const row = document.createElement("div");
-    row.className = "tl-row";
-
-    const label = document.createElement("div");
-    label.className = "tl-row-label";
-    label.innerHTML = `<span class="tl-row-label-name">${table.name}</span>${
-      table.area_name
-        ? `<span class="tl-row-label-area">${table.area_name}</span>`
-        : ""
-    }`;
-    row.appendChild(label);
-
-    row.appendChild(
-      buildRowContent(
-        tableResv,
-        SCHEDULE_START,
-        SCHEDULE_END,
-        totalMin,
-        overlays,
-        dayPeriods,
-        isPast,
-        isToday,
-        ds,
-        duration,
-        table,
-      ),
-    );
-    return row;
-  }
-
-  // ── Enojni row (brez miz) ────────────────────────────────────
-  function buildSingleRow(
-    allForLayout,
-    SCHEDULE_START,
-    SCHEDULE_END,
-    totalMin,
-    overlays,
-    dayPeriods,
-    isPast,
-    isToday,
-    ds,
-    duration,
-  ) {
-    const row = document.createElement("div");
-    row.className = "tl-row tl-row-single";
-    row.appendChild(
-      buildRowContent(
-        allForLayout,
-        SCHEDULE_START,
-        SCHEDULE_END,
-        totalMin,
-        overlays,
-        dayPeriods,
-        isPast,
-        isToday,
-        ds,
-        duration,
-        null,
-      ),
-    );
-    return row;
-  }
-
-  // ── Barva kartice glede na status/čas ───────────────────────
-  function cardColor(reservation, isPast, isToday) {
-    if (reservation.status === "pending" || reservation._pendingGroup)
-      return "#EF4444";
-    if (isPast) return "#9CA3AF";
-    if (isToday) {
-      const now = new Date();
-      const nowMin = now.getHours() * 60 + now.getMinutes();
-      const start = timeToMin(reservation.reservation_time);
-      const end = start + (parseInt(reservation.reservation_duration) || 60);
-      if (nowMin >= end) return "#9CA3AF"; // pretekla (danes)
-      if (nowMin >= start) return "#F59E0B"; // trenutna
-    }
-    return "#1B4332"; // prihodnja
-  }
-
-  // ── Rezervacijska kartica (horizontalna) ─────────────────────
-  function buildCard(
+  // ── Rezervacijska kartica (rz-res) ───────────────────────────
+  function buildResCard(
     reservation,
     SCHEDULE_START,
-    totalMin,
-    lPct,
-    wPct,
     isPast,
     isToday,
-    subRow = 0,
+    duration,
   ) {
     const startMin = timeToMin(reservation.reservation_time);
-    const dur = parseInt(reservation.reservation_duration) || 60;
-    const topPx = subRow * ROW_HEIGHT + 3;
-    const heightPx = ROW_HEIGHT - 8;
-
+    const dur = parseInt(reservation.reservation_duration) || duration;
     const isPending =
       reservation.status === "pending" || !!reservation._pendingGroup;
     const groupCount = reservation._groupCount || 0;
-    const color = cardColor(reservation, isPast, isToday);
 
-    const card = document.createElement("div");
-    card.className = "reservation-card" + (isPending ? " res-pending" : "");
-    card.style.cssText = `
-      position:absolute;
-      top:${topPx}px;
-      height:${heightPx}px;
-      left:calc(${lPct(startMin).toFixed(3)}% + 2px);
-      width:calc(${Math.max(0.3, wPct(dur)).toFixed(3)}% - 4px);
-      border-left-color:${color};
-      overflow:hidden;
-      z-index:2;
-      ${isPending ? "background:#FEF2F2;" : ""}
-      ${isPast ? "opacity:.7;" : ""}
-    `;
-
-    const nameEl = document.createElement("div");
-    nameEl.className = "card-name";
-    nameEl.textContent =
-      isPending && groupCount > 1
-        ? `⏳ ${groupCount} čakajočih`
-        : (isPending ? "⏳ " : "") + reservation.guest_name;
-    card.appendChild(nameEl);
-
-    const meta = document.createElement("div");
-    meta.className = "card-meta";
-
-    const timeEl = document.createElement("span");
-    timeEl.className = "card-time";
-    timeEl.textContent = minToTime(startMin);
-    meta.appendChild(timeEl);
-
-    if (!isPending || groupCount <= 1) {
-      const guestEl = document.createElement("span");
-      guestEl.className = "card-guests";
-      guestEl.innerHTML = `<svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>${reservation.guest_count}`;
-      meta.appendChild(guestEl);
+    let stateCls = "rz-res-confirmed";
+    if (isPending) {
+      stateCls = "rz-res-pending";
+    } else if (reservation.status === "arrived") {
+      stateCls = "rz-res-arrived";
+    } else if (isPast) {
+      stateCls = "rz-res-past";
+    } else if (isToday) {
+      const now = new Date();
+      const nowMin = now.getHours() * 60 + now.getMinutes();
+      const endMin = startMin + dur;
+      if (nowMin >= endMin) stateCls = "rz-res-past";
+      else if (nowMin >= startMin) stateCls = "rz-res-arrived";
     }
 
-    card.appendChild(meta);
+    const left =
+      Math.max(0, ((startMin - SCHEDULE_START) / 60) * PX_PER_HOUR) + 2;
+    const width = Math.max(20, (dur / 60) * PX_PER_HOUR - 4);
 
-    card.addEventListener("click", (e) => {
+    const btn = mk("button", `rz-res ${stateCls}`);
+    btn.style.left = left + "px";
+    btn.style.width = width + "px";
+
+    const head = mk("div", "rz-res-head");
+    const timeSpan = mk("span", "rz-res-time mono");
+    timeSpan.textContent = reservation.reservation_time
+      ? reservation.reservation_time.slice(0, 5)
+      : "—";
+    head.appendChild(timeSpan);
+    const guestsSpan = mk("span", "rz-res-guests");
+    guestsSpan.textContent = `· ${reservation.guest_count || 1}g`;
+    head.appendChild(guestsSpan);
+    if (isPending) {
+      const pill = mk("span", "rz-res-pill rz-res-pill-warn");
+      pill.textContent = "ČAKA";
+      head.appendChild(pill);
+    } else if (reservation.status === "arrived") {
+      const pill = mk("span", "rz-res-pill");
+      pill.textContent = "PRIŠLI";
+      head.appendChild(pill);
+    }
+    btn.appendChild(head);
+
+    const nameEl = mk("div", "rz-res-name");
+    nameEl.textContent =
+      isPending && groupCount > 1
+        ? `${groupCount} čakajočih`
+        : reservation.guest_name || "—";
+    btn.appendChild(nameEl);
+
+    if (reservation.notes && width > 140) {
+      const noteEl = mk("div", "rz-res-note");
+      noteEl.textContent = reservation.notes;
+      btn.appendChild(noteEl);
+    }
+
+    btn.addEventListener("click", (e) => {
       e.stopPropagation();
       if (isPending && reservation._pendingGroup)
         PendingModal.open(reservation._pendingGroup);
       else ReservationModal.open("view", reservation);
     });
 
-    return card;
+    return btn;
   }
 
-  // ── Merged miza placeholder ──────────────────────────────────
-  function buildMergedPlaceholder(
-    reservation,
-    firstTableName,
+  // ── Zgradi rz-tl-row ─────────────────────────────────────────
+  function buildTlRow(
+    rowResv,
+    table,
     SCHEDULE_START,
-    totalMin,
-    lPct,
-    wPct,
+    SCHEDULE_END,
+    overlays,
+    dayPeriods,
     isPast,
-    subRow = 0,
+    isToday,
+    ds,
+    duration,
   ) {
-    const startMin = timeToMin(reservation.reservation_time);
-    const dur = parseInt(reservation.reservation_duration) || 60;
+    const row = mk("div", "rz-tl-row");
+    row.style.cursor = isPast ? "default" : "cell";
 
-    const ph = document.createElement("div");
-    ph.className = "tl-merged-placeholder";
-    ph.style.cssText = `
-      top:${subRow * ROW_HEIGHT + 3}px;
-      height:${ROW_HEIGHT - 8}px;
-      left:calc(${lPct(startMin).toFixed(3)}% + 2px);
-      width:calc(${Math.max(0.3, wPct(dur)).toFixed(3)}% - 4px);
-      ${isPast ? "opacity:.75;" : ""}
-    `;
-    ph.textContent = `Združena miza: ${firstTableName}`;
+    addOverlaysPx(row, dayPeriods, overlays, SCHEDULE_START, SCHEDULE_END);
 
-    ph.addEventListener("click", (e) => {
-      e.stopPropagation();
-      ReservationModal.open("view", reservation);
+    const layout = computeOverlapLayout(rowResv);
+    const maxCols = Math.max(
+      1,
+      layout.reduce((m, l) => Math.max(m, l.subCols), 1),
+    );
+    if (maxCols > 1) row.style.height = 56 * maxCols + "px";
+
+    layout.forEach(({ reservation, subCol }) => {
+      if (table) {
+        const assignments = reservation.table_assignments || [];
+        const thisA = assignments.find((a) => a.table_id === table.id);
+        if (thisA && assignments.length > 1) {
+          // Določi skupino: po merge_group_id če obstaja, sicer vse dodelitve (auto-merge)
+          const mergeGroup = thisA.merge_group_id
+            ? assignments.filter(
+                (a) => a.merge_group_id === thisA.merge_group_id,
+              )
+            : assignments.slice();
+          mergeGroup.sort((a, b) => a.table_id - b.table_id);
+          if (mergeGroup[0].table_id !== table.id) {
+            const startMin = timeToMin(reservation.reservation_time);
+            const dur = parseInt(reservation.reservation_duration) || duration;
+            const left =
+              Math.max(0, ((startMin - SCHEDULE_START) / 60) * PX_PER_HOUR) + 2;
+            const width = Math.max(20, (dur / 60) * PX_PER_HOUR - 4);
+            const ph = mk("div", "tl-merged-placeholder");
+            ph.style.cssText = `position:absolute;top:${subCol * 56 + 3}px;height:${48}px;left:${left}px;width:${width}px;${isPast ? "opacity:.75;" : ""}`;
+            ph.innerHTML = `Združena miza:<strong>${mergeGroup[0].table_name || ""}</strong>`;
+            ph.addEventListener("click", (e) => {
+              e.stopPropagation();
+              ReservationModal.open("view", reservation);
+            });
+            row.appendChild(ph);
+            return;
+          }
+        }
+      }
+      const card = buildResCard(
+        reservation,
+        SCHEDULE_START,
+        isPast,
+        isToday,
+        duration,
+      );
+      if (subCol > 0) {
+        card.style.top = subCol * 56 + 6 + "px";
+        card.style.bottom = "auto";
+        card.style.height = "44px";
+      }
+      row.appendChild(card);
     });
 
-    return ph;
+    if (!isPast) {
+      row.addEventListener("click", (e) => {
+        if (e.target !== row) return;
+        const rect = row.getBoundingClientRect();
+        const rawPx = e.clientX - rect.left;
+        const rawMin = (rawPx / PX_PER_HOUR) * 60;
+        const snapped = Math.floor(rawMin / duration) * duration;
+        const absMin =
+          SCHEDULE_START +
+          Math.max(
+            0,
+            Math.min(snapped, SCHEDULE_END - SCHEDULE_START - duration),
+          );
+        ReservationModal.open("create", {
+          date: ds,
+          time: minToTime(absMin),
+          restaurantId: window.App ? App.getState().restaurantId : null,
+          tableId: table ? table.id : null,
+        });
+      });
+    }
+
+    return row;
   }
 
-  // ── Now line posodabljanje ───────────────────────────────────
-  function updateNowLine(wrap, SCHEDULE_START, totalMin) {
+  // ── Now line + pill posodabljanje ────────────────────────────
+  function updateNowLine(tlBodyEl, SCHEDULE_START, totalMin) {
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
     const SCHEDULE_END = SCHEDULE_START + totalMin;
     const visible = nowMin >= SCHEDULE_START && nowMin <= SCHEDULE_END;
-    const pct = visible
-      ? (((nowMin - SCHEDULE_START) / totalMin) * 100).toFixed(3) + "%"
-      : "0%";
+    const nowX = visible ? ((nowMin - SCHEDULE_START) / 60) * PX_PER_HOUR : 0;
 
-    wrap.querySelectorAll(".tl-now-line").forEach((el) => {
-      el.style.left = pct;
-      el.style.display = visible ? "" : "none";
-    });
-
-    const badge = wrap.querySelector("#tl-now-badge");
-    if (badge) {
-      badge.style.left = pct;
-      badge.textContent = minToTime(nowMin);
-      badge.style.display = visible ? "" : "none";
+    const nl = document.getElementById("rz-tl-now-line");
+    if (nl) {
+      nl.style.left = nowX + "px";
+      nl.style.display = visible ? "" : "none";
     }
+
+    const pill = document.getElementById("rz-now-pill");
+    if (pill) {
+      pill.style.left = nowX + "px";
+      pill.textContent = `ZDAJ · ${minToTime(nowMin)}`;
+      pill.style.display = visible ? "" : "none";
+    }
+
+    const legendNow = document.getElementById("tl-legend-now");
+    if (legendNow)
+      legendNow.textContent = visible ? `ZDAJ ${minToTime(nowMin)}` : "";
   }
 
-  function scrollToNow(wrap, SCHEDULE_START, totalMin) {
+  function scrollToNow(tlBodyEl, SCHEDULE_START, totalMin) {
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
     const SCHEDULE_END = SCHEDULE_START + totalMin;
     if (nowMin < SCHEDULE_START || nowMin > SCHEDULE_END) return;
-    const pct = (nowMin - SCHEDULE_START) / totalMin;
-    wrap.scrollLeft = Math.max(
-      0,
-      wrap.scrollWidth * pct - wrap.clientWidth / 2,
-    );
+    const nowX = ((nowMin - SCHEDULE_START) / 60) * PX_PER_HOUR;
+    tlBodyEl.scrollLeft = Math.max(0, nowX - tlBodyEl.clientWidth / 2);
+  }
+
+  // ── ListView ─────────────────────────────────────────────────
+  function renderList(reservations, body) {
+    body.innerHTML = "";
+    const sorted = [...reservations]
+      .filter((r) => r.status !== "cancelled")
+      .sort((a, b) => a.reservation_time.localeCompare(b.reservation_time));
+
+    const wrap = document.createElement("div");
+    wrap.style.cssText = "padding:0 24px 12px";
+    const table = document.createElement("table");
+    table.className = "rz-table";
+
+    table.innerHTML = `<thead><tr>
+      <th style="width:70px">URA</th>
+      <th>GOST</th>
+      <th>MIZA</th>
+      <th style="width:60px" class="rz-th-num">OSEB</th>
+      <th>OPOMBA</th>
+      <th style="width:130px">STATUS</th>
+    </tr></thead>`;
+
+    const tbody = document.createElement("tbody");
+    if (sorted.length === 0) {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `<td colspan="6" style="text-align:center;color:var(--ink-mute);padding:32px">Ni rezervacij za ta dan</td>`;
+      tbody.appendChild(tr);
+    } else {
+      sorted.forEach((r) => {
+        const stateCls =
+          r.status === "arrived"
+            ? "rz-chip-arrived"
+            : r.status === "confirmed"
+              ? "rz-chip-confirmed"
+              : r.status === "pending"
+                ? "rz-chip-pending"
+                : "rz-chip-past";
+        const stateLabel =
+          r.status === "arrived"
+            ? "PRIŠLI"
+            : r.status === "confirmed"
+              ? "POTRJENO"
+              : r.status === "pending"
+                ? "ČAKA"
+                : "KONČANO";
+        const tables =
+          Array.isArray(r.table_assignments) && r.table_assignments.length
+            ? r.table_assignments
+                .map((a) => a.table_name || `Miza ${a.table_id}`)
+                .join(", ")
+            : "—";
+        const tr = document.createElement("tr");
+        tr.style.cursor = "pointer";
+        tr.innerHTML = `
+          <td class="mono" style="font-weight:700">${r.reservation_time ? r.reservation_time.slice(0, 5) : "—"}</td>
+          <td style="font-weight:600">${r.guest_name || "—"}</td>
+          <td>${tables}</td>
+          <td class="rz-td-num mono">${r.guest_count || "—"}</td>
+          <td style="color:var(--ink-mute);font-size:12px">${r.notes || "—"}</td>
+          <td><span class="rz-chip ${stateCls}">${stateLabel}</span></td>`;
+        tr.addEventListener("click", () => {
+          if (typeof ReservationModal !== "undefined")
+            ReservationModal.open("view", r);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+    table.appendChild(tbody);
+    wrap.appendChild(table);
+    body.appendChild(wrap);
   }
 
   // ── Glavni render ────────────────────────────────────────────
@@ -564,19 +498,53 @@ const Schedule = (() => {
     bounds,
     overlays,
   ) {
+    lastRenderArgs = {
+      date,
+      reservations,
+      duration,
+      allRestaurants,
+      bounds,
+      overlays,
+    };
     duration = Math.max(15, duration || 60);
     const SCHEDULE_START = bounds ? bounds.start : 480;
     const SCHEDULE_END = bounds ? bounds.end : 1380;
     const totalMin = SCHEDULE_END - SCHEDULE_START;
 
-    // Glava panela
+    // Eyebrow datum
+    const eyebrowDate = document.getElementById("sched-eyebrow-date");
+    if (eyebrowDate) {
+      const d = date;
+      const short = ["ned", "pon", "tor", "sre", "čet", "pet", "sob"][
+        d.getDay()
+      ];
+      eyebrowDate.textContent = `${short.toUpperCase()} ${d.getDate()}. ${d.getMonth() + 1}.`;
+    }
+
+    // Glava panela — topbar naslov (datum) in podnaslov (statistika)
+    const titleEl = document.getElementById("rz-topbar-title");
+    if (titleEl) titleEl.textContent = formatTopbarTitle(date);
     const labelEl = document.getElementById("schedule-date-label");
     if (labelEl) labelEl.textContent = formatDateLabel(date);
+
     const visibleResv = reservations.filter((r) => r.status !== "cancelled");
-    const totalGuests = visibleResv.reduce(
-      (s, r) => s + parseInt(r.guest_count || 0),
-      0,
-    );
+    const confirmedCount = visibleResv.filter(
+      (r) => r.status === "confirmed",
+    ).length;
+    const pendingCount = visibleResv.filter(
+      (r) => r.status === "pending",
+    ).length;
+    const totalGuests = visibleResv
+      .filter((r) => r.status !== "cancelled")
+      .reduce((s, r) => s + parseInt(r.guest_count || 0), 0);
+
+    const tbC = document.getElementById("topbar-stat-confirmed");
+    const tbP = document.getElementById("topbar-stat-pending");
+    const tbG = document.getElementById("topbar-stat-guests");
+    if (tbC) tbC.textContent = confirmedCount;
+    if (tbP) tbP.textContent = pendingCount;
+    if (tbG) tbG.textContent = totalGuests;
+
     const sc = document.getElementById("stat-count");
     const sg = document.getElementById("stat-guests");
     if (sc) sc.textContent = visibleResv.length;
@@ -585,6 +553,11 @@ const Schedule = (() => {
     const body = document.getElementById("schedule-body");
     if (!body) return;
     body.innerHTML = "";
+
+    if (currentView === "list") {
+      renderList(reservations, body);
+      return;
+    }
 
     if (nowTimer) {
       clearInterval(nowTimer);
@@ -624,116 +597,127 @@ const Schedule = (() => {
 
     const allForLayout = groupPending(reservations);
 
-    // ── Wrapper ──────────────────────────────────────────────
-    const wrap = document.createElement("div");
-    wrap.className = hasTables ? "tl-wrap" : "tl-wrap tl-wrap--no-label";
-
-    // ── Časovna glava ────────────────────────────────────────
-    const timeHeader = document.createElement("div");
-    timeHeader.className = "tl-time-header";
-
-    const corner = document.createElement("div");
-    corner.className = "tl-corner";
-    timeHeader.appendChild(corner);
-
-    const timeAxis = document.createElement("div");
-    timeAxis.className = "tl-time-axis";
-
-    const lPct = (absMin) =>
-      Math.max(0, Math.min(((absMin - SCHEDULE_START) / totalMin) * 100, 100));
-
-    const firstHour = Math.ceil(SCHEDULE_START / 60);
-    const lastHour = Math.floor(SCHEDULE_END / 60);
-    for (let h = firstHour; h <= lastHour; h++) {
-      const lbl = document.createElement("span");
-      lbl.className = "tl-hour-label";
-      lbl.style.left = lPct(h * 60).toFixed(3) + "%";
-      lbl.textContent = `${String(h).padStart(2, "0")}:00`;
-      timeAxis.appendChild(lbl);
+    // Grupiraj mize po conah
+    let zones;
+    if (hasTables) {
+      const zoneMap = new Map();
+      rest.tables.forEach((t) => {
+        const k = t.area_name || "";
+        if (!zoneMap.has(k))
+          zoneMap.set(k, { name: t.area_name || "Splošno", tables: [] });
+        zoneMap.get(k).tables.push(t);
+      });
+      zones = [...zoneMap.values()];
     }
 
-    const nowBadge = document.createElement("span");
-    nowBadge.className = "tl-now-badge";
-    nowBadge.id = "tl-now-badge";
-    nowBadge.style.display = "none";
-    timeAxis.appendChild(nowBadge);
+    const firstHour = Math.floor(SCHEDULE_START / 60);
+    const lastHour = Math.ceil(SCHEDULE_END / 60);
+    const totalHours = lastHour - firstHour;
+    const totalWidth = totalHours * PX_PER_HOUR;
 
-    timeHeader.appendChild(timeAxis);
-    wrap.appendChild(timeHeader);
+    const nowCur = new Date();
+    const nowMin = isToday
+      ? nowCur.getHours() * 60 + nowCur.getMinutes()
+      : null;
+    const nowVisible =
+      nowMin !== null && nowMin >= SCHEDULE_START && nowMin <= SCHEDULE_END;
+    const nowX = nowVisible
+      ? ((nowMin - SCHEDULE_START) / 60) * PX_PER_HOUR
+      : null;
 
-    // ── Body ─────────────────────────────────────────────────
-    const tlBody = document.createElement("div");
-    tlBody.className = "tl-body";
+    // ── rz-tl-head-wrap ──────────────────────────────────────
+    const headWrap = mk("div", "rz-tl-head-wrap");
+    headWrap.appendChild(mk("div", "rz-tl-sticky-head"));
 
-    if (hasTables) {
-      const shownResv = new Set();
-      let lastArea = undefined;
-      rest.tables.forEach((table) => {
-        // Ločnica med conami
-        if (table.area_name !== lastArea) {
-          if (lastArea !== undefined) {
-            const sep = document.createElement("div");
-            sep.className = "tl-area-sep";
-            tlBody.appendChild(sep);
-          }
-          lastArea = table.area_name;
-        }
-        const tableResv = allForLayout.filter(
-          (r) =>
-            Array.isArray(r.table_assignments) &&
-            r.table_assignments.some((a) => a.table_id === table.id),
-        );
-        tableResv.forEach((r) => shownResv.add(r));
-        tlBody.appendChild(
-          buildTableRow(
-            table,
-            tableResv,
-            SCHEDULE_START,
-            SCHEDULE_END,
-            totalMin,
-            overlays,
-            dayPeriods,
-            isPast,
-            isToday,
-            ds,
-            duration,
-          ),
-        );
-      });
-      // Rezervacije brez dodeljene mize
-      const unassigned = allForLayout.filter((r) => !shownResv.has(r));
-      if (unassigned.length > 0) {
-        const urow = document.createElement("div");
-        urow.className = "tl-row";
-        const ulabel = document.createElement("div");
-        ulabel.className = "tl-row-label";
-        ulabel.innerHTML =
-          '<span class="tl-row-label-name" style="color:var(--color-muted);font-style:italic">Brez mize</span>';
-        urow.appendChild(ulabel);
-        urow.appendChild(
-          buildRowContent(
-            unassigned,
-            SCHEDULE_START,
-            SCHEDULE_END,
-            totalMin,
-            overlays,
-            dayPeriods,
-            isPast,
-            isToday,
-            ds,
-            duration,
-            null,
-          ),
-        );
-        tlBody.appendChild(urow);
-      }
+    const hoursDiv = mk("div", "rz-tl-hours");
+    const hoursInner = mk("div", "rz-tl-hours-inner");
+    hoursInner.style.width = totalWidth + "px";
+    for (let i = 0; i <= totalHours; i++) {
+      const h = firstHour + i;
+      const hourEl = mk("div", "rz-tl-hour");
+      hourEl.style.left = i * PX_PER_HOUR + "px";
+      const lbl = mk("span", "rz-tl-hour-label");
+      lbl.textContent = String(h).padStart(2, "0") + ":00";
+      hourEl.appendChild(lbl);
+      hoursInner.appendChild(hourEl);
+    }
+    if (nowX !== null) {
+      const pill = mk("div", "rz-tl-now-pill mono");
+      pill.id = "rz-now-pill";
+      pill.style.left = nowX + "px";
+      pill.textContent = `ZDAJ · ${minToTime(nowMin)}`;
+      hoursInner.appendChild(pill);
+    }
+    hoursDiv.appendChild(hoursInner);
+    headWrap.appendChild(hoursDiv);
+    body.appendChild(headWrap);
+
+    // ── rz-tl-body ───────────────────────────────────────────
+    const tlBody = mk("div", "rz-tl-body");
+
+    // Leva plošča
+    const leftPanel = mk("div", "rz-tl-left");
+    if (!hasTables) {
+      const rl = mk("div", "rz-tl-row-label");
+      const s = mk("span");
+      s.textContent = "Rezervacije";
+      rl.appendChild(s);
+      leftPanel.appendChild(rl);
     } else {
-      tlBody.appendChild(
-        buildSingleRow(
+      zones.forEach((zone) => {
+        const zoneEl = mk("div", "rz-tl-zone");
+        const zh = mk("div", "rz-tl-zone-head");
+        const zn = mk("span");
+        zn.textContent = zone.name;
+        const zc = mk("span", "rz-tl-zone-count");
+        zc.textContent = zone.tables.length;
+        zh.appendChild(zn);
+        zh.appendChild(zc);
+        zoneEl.appendChild(zh);
+        zone.tables.forEach((t) => {
+          const rl = mk("div", "rz-tl-row-label");
+          const n = mk("span");
+          n.textContent = t.name;
+          rl.appendChild(n);
+          if (t.capacity) {
+            const s = mk("span", "rz-tl-table-seats");
+            s.textContent = t.capacity;
+            rl.appendChild(s);
+          }
+          zoneEl.appendChild(rl);
+        });
+        leftPanel.appendChild(zoneEl);
+      });
+    }
+    tlBody.appendChild(leftPanel);
+
+    // Grid
+    const gridWrap = mk("div", "rz-tl-grid-wrap");
+    gridWrap.style.minWidth = totalWidth + "px";
+    const grid = mk("div", "rz-tl-grid");
+    grid.style.width = totalWidth + "px";
+
+    for (let i = 0; i <= totalHours; i++) {
+      const vl = mk("div", "rz-tl-vline");
+      vl.style.left = i * PX_PER_HOUR + "px";
+      grid.appendChild(vl);
+    }
+    if (nowX !== null) {
+      const nl = mk("div", "rz-tl-now-line");
+      nl.id = "rz-tl-now-line";
+      nl.style.left = nowX + "px";
+      nl.appendChild(mk("div", "rz-tl-now-dot"));
+      grid.appendChild(nl);
+    }
+
+    if (!hasTables) {
+      const zb = mk("div", "rz-tl-zone-body");
+      zb.appendChild(
+        buildTlRow(
           allForLayout,
+          null,
           SCHEDULE_START,
           SCHEDULE_END,
-          totalMin,
           overlays,
           dayPeriods,
           isPast,
@@ -742,52 +726,124 @@ const Schedule = (() => {
           duration,
         ),
       );
+      grid.appendChild(zb);
+    } else {
+      const shownResv = new Set();
+      zones.forEach((zone) => {
+        const zb = mk("div", "rz-tl-zone-body");
+        zb.appendChild(mk("div", "rz-tl-zone-spacer"));
+        zone.tables.forEach((table) => {
+          const tableResv = allForLayout.filter(
+            (r) =>
+              Array.isArray(r.table_assignments) &&
+              r.table_assignments.some((a) => a.table_id === table.id),
+          );
+          tableResv.forEach((r) => shownResv.add(r));
+          zb.appendChild(
+            buildTlRow(
+              tableResv,
+              table,
+              SCHEDULE_START,
+              SCHEDULE_END,
+              overlays,
+              dayPeriods,
+              isPast,
+              isToday,
+              ds,
+              duration,
+            ),
+          );
+        });
+        grid.appendChild(zb);
+      });
+
+      // Rezervacije brez dodeljene mize
+      const unassigned = allForLayout.filter((r) => !shownResv.has(r));
+      if (unassigned.length > 0) {
+        // Leva plošča — dodaj "Brez mize" cono
+        const uZoneEl = mk("div", "rz-tl-zone");
+        const uzh = mk("div", "rz-tl-zone-head");
+        const uzn = mk("span");
+        uzn.textContent = "Brez mize";
+        uzn.style.color = "var(--ink-mute)";
+        uzh.appendChild(uzn);
+        uZoneEl.appendChild(uzh);
+        const url = mk("div", "rz-tl-row-label");
+        const us = mk("span");
+        us.textContent = "—";
+        us.style.color = "var(--ink-mute)";
+        url.appendChild(us);
+        uZoneEl.appendChild(url);
+        leftPanel.appendChild(uZoneEl);
+        // Grid
+        const uzb = mk("div", "rz-tl-zone-body");
+        uzb.appendChild(mk("div", "rz-tl-zone-spacer"));
+        uzb.appendChild(
+          buildTlRow(
+            unassigned,
+            null,
+            SCHEDULE_START,
+            SCHEDULE_END,
+            overlays,
+            dayPeriods,
+            isPast,
+            isToday,
+            ds,
+            duration,
+          ),
+        );
+        grid.appendChild(uzb);
+      }
     }
 
-    wrap.appendChild(tlBody);
+    gridWrap.appendChild(grid);
+    tlBody.appendChild(gridWrap);
 
-    // Legenda
-    const legend = document.createElement("div");
-    legend.className = "tl-legend";
-    [
-      { color: "#9CA3AF", label: "Pretekle rezervacije" },
-      { color: "#F59E0B", label: "Trenutne rezervacije" },
-      { color: "#1B4332", label: "Naslednje rezervacije" },
-      { color: "#EF4444", label: "Rezervacije za potrditev" },
-    ].forEach(({ color, label }) => {
-      const item = document.createElement("span");
-      item.className = "tl-legend-item";
-      item.innerHTML = `<span class="tl-legend-dot" style="background:${color}"></span>${label}`;
-      legend.appendChild(item);
+    // Sinhronizacija horizontalnega skrolanja glave
+    tlBody.addEventListener("scroll", () => {
+      hoursInner.style.transform = `translateX(-${tlBody.scrollLeft}px)`;
     });
-    wrap.appendChild(legend);
 
-    body.appendChild(wrap);
+    body.appendChild(tlBody);
 
-    // Prazen dan
-    // if (reservations.length === 0) {
-    //   const empty = document.createElement("div");
-    //   empty.className = "schedule-empty";
-    //   empty.innerHTML = `
-    //     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-    //       <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
-    //     </svg>
-    //     <p>Ni rezervacij za ta dan</p>
-    //     ${!isPast ? '<small style="color:var(--color-muted);font-size:.75rem">Kliknite na razpored za novo rezervacijo</small>' : ""}
-    //   `;
-    //   body.appendChild(empty);
-    // }
-
-    // Now line + timer
+    // Now timer
     if (isToday) {
-      updateNowLine(wrap, SCHEDULE_START, totalMin);
+      updateNowLine(tlBody, SCHEDULE_START, totalMin);
       nowTimer = setInterval(
-        () => updateNowLine(wrap, SCHEDULE_START, totalMin),
+        () => updateNowLine(tlBody, SCHEDULE_START, totalMin),
         60000,
       );
-      requestAnimationFrame(() => scrollToNow(wrap, SCHEDULE_START, totalMin));
+      requestAnimationFrame(() =>
+        scrollToNow(tlBody, SCHEDULE_START, totalMin),
+      );
     }
   }
 
-  return { render };
+  function setView(view) {
+    currentView = view;
+    const eyebrowView = document.getElementById("sched-eyebrow-view");
+    if (eyebrowView)
+      eyebrowView.textContent = view === "list" ? "SEZNAM" : "TIMELINE";
+    document.querySelectorAll("#sched-view-seg button").forEach((btn) => {
+      btn.classList.toggle("is-sel", btn.dataset.view === view);
+    });
+    if (lastRenderArgs) {
+      const { date, reservations, duration, allRestaurants, bounds, overlays } =
+        lastRenderArgs;
+      render(date, reservations, duration, allRestaurants, bounds, overlays);
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll("#sched-view-seg button").forEach((btn) => {
+      btn.addEventListener("click", () => setView(btn.dataset.view));
+    });
+    const refreshBtn = document.getElementById("sched-refresh-btn");
+    if (refreshBtn)
+      refreshBtn.addEventListener("click", () => {
+        if (typeof App !== "undefined" && App.loadSchedule) App.loadSchedule();
+      });
+  });
+
+  return { render, setView };
 })();

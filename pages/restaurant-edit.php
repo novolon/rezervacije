@@ -3,6 +3,7 @@ require_once '../includes/auth_check.php';
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/plans.php';
+require_once '../includes/lang.php';
 
 if (!is_logged_in()) redirect_to_login();
 if ($_SESSION['role'] === 'superadmin') {
@@ -34,21 +35,31 @@ $activeTab = $_GET['tab'] ?? 'splosno';
 $hasSurvey      = user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey');
 $hasSurveyEdit  = user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey_edit');
 $hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_management');
+
+$isAdmin = true;
+$stmt2 = $pdo->prepare("
+    SELECT r.id, r.name, r.color FROM restaurants r
+    JOIN restaurant_admins ra ON r.id = ra.restaurant_id
+    WHERE ra.user_id = ? AND r.is_active = 1 ORDER BY r.name
+");
+$stmt2->execute([$_SESSION['user_id']]);
+$restaurants = $stmt2->fetchAll();
+
+$stmt3 = $pdo->prepare("
+    SELECT COUNT(*) FROM reservations rv
+    JOIN restaurant_admins ra ON rv.restaurant_id = ra.restaurant_id
+    WHERE ra.user_id = ? AND rv.status = 'pending'
+");
+$stmt3->execute([$_SESSION['user_id']]);
+$pendingCount = (int) $stmt3->fetchColumn();
 ?>
-<!DOCTYPE html>
-<html lang="sl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Uredi restavracijo – <?= h($rest['name']) ?></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css?v=4">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/admin.css?v=2">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/modal.css?v=2">
+<?php
+$pageTitle = t('re.page_title_prefix') . ' – ' . $rest['name'];
+$extraCss  = ['main.css?v=4', 'admin.css?v=3', 'modal.css?v=3', 'design.css?v=1'];
+require_once '../includes/html_head.php';
+?>
+<body>
     <style>
-        .rest-edit-wrap { max-width: 780px; margin: 0 auto; padding: calc(var(--header-h) + 24px) 20px 60px; }
-        body.has-trial-banner .rest-edit-wrap { padding-top: calc(var(--header-h) + var(--banner-h) + 24px); }
 
         .rest-edit-header { display:flex; align-items:center; gap:14px; margin-bottom:28px; flex-wrap:wrap; }
         .rest-edit-back { display:flex; align-items:center; gap:6px; color:var(--color-muted); font-size:.85rem; font-weight:500; text-decoration:none; transition:color var(--transition); }
@@ -56,15 +67,15 @@ $hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_manag
         .rest-edit-title { font-size:1.4rem; font-weight:700; color:var(--color-text); letter-spacing:-.02em; margin:0; flex:1; }
         .rest-color-dot { width:14px; height:14px; border-radius:50%; display:inline-block; vertical-align:middle; margin-right:6px; border:2px solid rgba(0,0,0,.1); }
 
-        /* Tabs */
-        .re-tabs { display:flex; gap:2px; border-bottom:2px solid var(--color-border); margin-bottom:28px; overflow-x:auto; }
-        .re-tab { padding:10px 16px; font-size:.85rem; font-weight:600; font-family:var(--font); color:var(--color-muted); background:transparent; border:none; cursor:pointer; border-bottom:2px solid transparent; transition:color var(--transition),border-color var(--transition); white-space:nowrap; }
-        .re-tab:hover { color:var(--color-text); }
-        .re-tab.active { color:var(--color-accent); border-bottom-color:var(--color-accent); }
-        .re-panel { display:none; } .re-panel.active { display:block; }
+        /* Tabs (Rezble-style) */
+        .re-tabs { display:flex; gap:4px; border-bottom:1px solid var(--line, var(--color-border)); margin-bottom:24px;}
+        .re-tab { padding:10px 14px; font-size:13px; font-weight:600; font-family:var(--font); color:var(--ink-mute, var(--color-muted)); background:transparent; border:none; cursor:pointer; border-bottom:2px solid transparent; transition:color .15s, border-color .15s; white-space:nowrap; border-radius:6px 6px 0 0; margin-bottom:-1px; }
+        .re-tab:hover { color:var(--ink, var(--color-text)); background:var(--bg-sunken, transparent); }
+        .re-tab.active { color:var(--accent, var(--color-accent)); border-bottom-color:var(--accent, var(--color-accent)); background:transparent; }
+        .re-panel { display:none; } .re-panel.active { display:block; animation: rz-fadeIn .25s var(--ease, ease-out); }
 
         /* Sekcija znotraj taba */
-        .re-section { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:22px 24px; margin-bottom:20px; }
+        .re-section { background:var(--color-surface); border:1px solid var(--color-border); border-radius:var(--radius-lg); padding:22px 24px;}
         .re-section-title { font-size:.75rem; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--color-muted); margin-bottom:16px; }
 
         /* Gumbi */
@@ -95,19 +106,15 @@ $hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_manag
         .re-note { padding:12px 16px; background:#FFF7ED; border:1px solid #FED7AA; border-radius:var(--radius); font-size:.825rem; color:#92400E; margin-top:16px; }
         .re-note-blue { background:#EFF6FF; border-color:#BFDBFE; color:#1D4ED8; }
 
-        /* Day schedule */
-        .day-row { display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid var(--color-border); }
-        .day-row:last-child { border-bottom:none; }
-        .day-label-wrap { display:flex; align-items:center; gap:8px; width:140px; flex-shrink:0; cursor:pointer; margin-top:6px; }
-        .day-periods-wrap { display:flex; flex-direction:column; gap:6px; flex:1; }
+        /* Day schedule edit area */
+        .day-periods-wrap { display:flex; flex-direction:column; gap:6px; }
         .day-period-row { display:flex; align-items:center; gap:6px; }
-        .day-times { display:flex; align-items:center; gap:6px; }
-        .day-time-input { border:1.5px solid var(--color-border); border-radius:8px; padding:7px 10px; font-size:.85rem; font-family:var(--font); color:var(--color-text); outline:none; width:90px; }
-        .day-time-input:focus { border-color:var(--color-accent); }
-        .btn-period-add { background:none; border:1.5px dashed var(--color-border); border-radius:8px; padding:5px 12px; font-size:.8rem; color:var(--color-muted); cursor:pointer; font-family:var(--font); transition:border-color .15s,color .15s; }
-        .btn-period-add:hover { border-color:var(--color-accent); color:var(--color-accent); }
-        .btn-period-del { background:none; border:none; color:var(--color-muted); cursor:pointer; font-size:1.1rem; line-height:1; padding:4px; border-radius:6px; transition:color .15s; }
-        .btn-period-del:hover { color:#DC2626; }
+        .day-time-input { border:1.5px solid var(--line); border-radius:8px; padding:7px 10px; font-size:.85rem; font-family:var(--font-sans); color:var(--ink); outline:none; width:90px; background:var(--bg-elev); }
+        .day-time-input:focus { border-color:var(--accent); box-shadow:0 0 0 3px color-mix(in oklab,var(--accent) 14%,transparent); }
+        .btn-period-add { background:none; border:1.5px dashed var(--line-strong); border-radius:8px; padding:5px 12px; font-size:.8rem; color:var(--ink-mute); cursor:pointer; font-family:var(--font-sans); transition:border-color .15s,color .15s; margin-top:2px; }
+        .btn-period-add:hover { border-color:var(--accent); color:var(--accent); }
+        .btn-period-del { background:none; border:none; color:var(--ink-mute); cursor:pointer; font-size:1.1rem; line-height:1; padding:4px; border-radius:6px; transition:color .15s; }
+        .btn-period-del:hover { color:var(--danger); }
 
         /* CF type/applies badges */
         .cf-badge { font-size:.7rem; padding:2px 7px; border-radius:4px; font-weight:600; }
@@ -118,402 +125,447 @@ $hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_manag
         .cf-badge-req  { background:#FEE2E2; color:#DC2626; }
 
         @media (max-width:600px) {
-            .rest-edit-wrap { padding: calc(var(--header-h) + 16px) 12px 40px; }
             .re-section { padding:16px; }
             .admin-field-row { grid-template-columns:1fr; }
         }
     </style>
-</head>
-<body>
 
-<header class="app-header">
-    <a href="<?= BASE_PATH ?>/pages/main.php" class="header-logo" style="flex-shrink:0">
-        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <rect width="28" height="28" rx="7" fill="#F59E0B"/>
-            <path d="M7 10h14M7 14h14M7 18h9" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <?= h(APP_NAME) ?>
-        <?= plan_badge($_SESSION['plan_slug'] ?? 'trial') ?>
-    </a>
-    <div class="header-restaurant">
-        <span style="color:rgba(255,255,255,.5);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;font-weight:600"><?= h($rest['name']) ?></span>
-    </div>
-    <div class="header-actions">
-        <span class="header-user">👤 <?= h($fullName) ?></span>
-        <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-            Razpored
-        </a>
-        <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">Admin</a>
-        <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
-    </div>
-    <button class="hamburger-btn" id="hamburger-btn" onclick="document.getElementById('mobile-nav').classList.toggle('open')">
-        <span></span><span></span><span></span>
-    </button>
-</header>
-<div class="mobile-nav" id="mobile-nav">
-    <div class="mobile-nav-user">👤 <?= h($fullName) ?></div>
-    <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin">Razpored</a>
-    <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">Admin</a>
-    <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
-</div>
+<div id="rz-app" class="rz-app">
+<?php require_once '../includes/sidebar.php'; ?>
+<main class="rz-main">
 
 <?php require_once '../includes/trial_banner.php'; ?>
 
-<div class="rest-edit-wrap">
+<?php
+    $topbarTitle    = $rest['name'];
+    $topbarSubtitle = t('re.topbar_subtitle') . ' <span class="rest-color-dot" id="hdr-color-dot" style="background:' . h($rest['color']) . '"></span>'
+                    . ' <span class="badge ' . ($rest['is_active'] ? 'badge-active' : 'badge-inactive') . '">' . ($rest['is_active'] ? t('re.status_active') : t('re.status_inactive')) . '</span>';
+    ob_start(); ?>
+    <a href="<?= BASE_PATH ?>/pages/admin.php" class="rz-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg>
+        <span><?= t('common.back') ?></span>
+    </a>
+<?php $topbarActions = ob_get_clean(); require_once '../includes/topbar.php'; ?>
 
-    <div class="rest-edit-header">
-        <a href="<?= BASE_PATH ?>/pages/admin.php" class="rest-edit-back">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
-            Admin
-        </a>
-        <h1 class="rest-edit-title">
-            <span class="rest-color-dot" id="hdr-color-dot" style="background:<?= h($rest['color']) ?>"></span>
-            <?= h($rest['name']) ?>
-        </h1>
-        <span class="badge <?= $rest['is_active'] ? 'badge-active' : 'badge-inactive' ?>"><?= $rest['is_active'] ? 'Aktivna' : 'Neaktivna' ?></span>
-    </div>
+<div class="rest-edit-wrap">
 
     <div id="page-error" style="display:none;background:#FEE2E2;color:#991B1B;padding:12px 16px;border-radius:var(--radius);margin-bottom:20px;font-size:.875rem"></div>
     <div id="page-success" style="display:none;background:#D1FAE5;color:#065F46;padding:12px 16px;border-radius:var(--radius);margin-bottom:20px;font-size:.875rem"></div>
 
     <!-- Tabs -->
     <div class="re-tabs">
-        <button class="re-tab active" data-tab="splosno">Splošno</button>
-        <button class="re-tab" data-tab="urnik">Urnik</button>
-        <button class="re-tab" data-tab="booking">Spletne rezervacije</button>
-        <button class="re-tab" data-tab="zaposleni">Zaposleni</button>
-        <button class="re-tab" data-tab="polja">Polja po meri</button>
-        <button class="re-tab" data-tab="anketa">Anketa</button>
-        <button class="re-tab" data-tab="mize">Mize</button>
+        <button class="re-tab active" data-tab="splosno"><?= t('re.tab_general') ?></button>
+        <button class="re-tab" data-tab="urnik"><?= t('re.tab_schedule') ?></button>
+        <button class="re-tab" data-tab="booking"><?= t('re.tab_booking') ?></button>
+        <button class="re-tab" data-tab="zaposleni"><?= t('re.tab_staff') ?></button>
+        <button class="re-tab" data-tab="polja"><?= t('re.tab_fields') ?></button>
+        <button class="re-tab" data-tab="anketa"><?= t('re.tab_survey') ?></button>
+        <button class="re-tab" data-tab="mize"><?= t('re.tab_tables') ?></button>
     </div>
 
     <!-- ── Tab: Splošno ────────────────────────────────────── -->
     <div id="panel-splosno" class="re-panel active">
+        <div class="flex flex--wrap flex--equal flex--gap20">
         <div class="re-section">
-            <div class="re-section-title">Osnovno</div>
+            <?=  card_head(t('re.card_basic'), t('re.card_rest_settings')); ?>
             <div class="admin-form">
                 <div class="admin-field-row">
                     <div class="admin-field">
-                        <label>Ime restavracije *</label>
+                        <label><?= t('re.field_name') ?></label>
                         <input id="r-name" type="text" value="<?= h($rest['name']) ?>">
                     </div>
                     <div class="admin-field" style="max-width:140px">
-                        <label>Barva</label>
+                        <label><?= t('re.field_color') ?></label>
                         <input id="r-color" type="color" value="<?= h($rest['color']) ?>"
                             style="height:42px;padding:4px;width:100%"
                             oninput="document.getElementById('hdr-color-dot').style.background=this.value">
                     </div>
                 </div>
-                <div class="admin-field-row">
-                    <div class="admin-field">
-                        <label>Trajanje rezervacije (min)</label>
-                        <input id="r-duration" type="number" min="15" step="15" value="<?= (int)$rest['reservation_duration'] ?>">
-                    </div>
-                    <div class="admin-field" style="justify-content:flex-end;padding-top:18px">
-                        <label class="toggle-wrap" style="cursor:pointer">
-                            <span class="toggle">
-                                <input type="checkbox" id="r-allow-custom" <?= $rest['allow_custom_duration'] ? 'checked' : '' ?>>
-                                <span class="toggle-track"></span>
-                            </span>
-                            <span class="toggle-label">Sprememba trajanja per-rezervacija</span>
-                        </label>
-                    </div>
-                </div>
                 <div class="admin-field">
-                    <label>Status</label>
+                    <label><?= t('re.field_status') ?></label>
                     <select id="r-active" style="max-width:200px">
-                        <option value="1" <?= $rest['is_active'] ? 'selected' : '' ?>>Aktivna</option>
-                        <option value="0" <?= !$rest['is_active'] ? 'selected' : '' ?>>Neaktivna</option>
+                        <option value="1" <?= $rest['is_active'] ? 'selected' : '' ?>><?= t('re.status_active') ?></option>
+                        <option value="0" <?= !$rest['is_active'] ? 'selected' : '' ?>><?= t('re.status_inactive') ?></option>
                     </select>
                 </div>
             </div>
         </div>
         <div class="re-section">
-            <div class="re-section-title">Kontaktni podatki</div>
-            <p style="font-size:.825rem;color:var(--color-muted);margin:0 0 14px;line-height:1.5">Prikazani gostom v potrditvenih emailih in na strani za urejanje rezervacije.</p>
+            <?=  card_head(t('re.card_basic'), t('re.card_contact')); ?>
+            <p style="font-size:.825rem;color:var(--color-muted);margin:0 0 14px;line-height:1.5"><?= t('re.contact_intro') ?></p>
             <div class="admin-form">
                 <div class="admin-field-row">
                     <div class="admin-field">
-                        <label>Kontaktni email</label>
+                        <label><?= t('re.field_contact_email') ?></label>
                         <input id="r-contact-email" type="email" placeholder="info@restavracija.si" value="<?= h($rest['contact_email'] ?? '') ?>">
                     </div>
                     <div class="admin-field">
-                        <label>Kontaktna telefonska</label>
+                        <label><?= t('re.field_contact_phone') ?></label>
                         <input id="r-contact-phone" type="tel" placeholder="+386 1 234 56 78" value="<?= h($rest['contact_phone'] ?? '') ?>">
                     </div>
                 </div>
             </div>
         </div>
+
+        <!-- Sistemski dostopi (uporabniki) -->
+        <div class="re-section flex--100">
+            <?php $uporabnikiBtn = '<button onclick="openRestUserModal(null)" class="btn btn-primary btn-sm">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                    ' . t('common.add') . '
+                </button>'; ?>
+            <?=  card_head(t('re.card_users_title'), t('re.card_users_subtitle'), $uporabnikiBtn); ?>
+            <p style="font-size:.8rem;color:var(--color-muted);margin:0 0 12px;line-height:1.5"><?= t_raw('re.users_intro') ?></p>
+            <div id="rest-users-list"><span style="color:var(--color-muted);font-size:.875rem"><?= t('common.loading') ?></span></div>
+        </div>
+        </div>
         <div class="re-save-bar">
-            <button class="btn btn-primary" id="btn-save-splosno">Shrani</button>
+            <button class="btn btn-primary" id="btn-save-splosno"><?= t('common.save') ?></button>
         </div>
     </div>
 
     <!-- ── Tab: Urnik ──────────────────────────────────────── -->
     <div id="panel-urnik" class="re-panel">
-        <div class="re-section">
-            <div class="re-section-title">Urnik po dnevih</div>
-            <p style="font-size:.825rem;color:var(--color-muted);margin:0 0 12px">Za vsak dan lahko dodate več terminov (npr. dopoldan in popoldan).</p>
-            <div id="day-schedule-wrap">Nalagam...</div>
-        </div>
-        <div class="re-section">
-            <div class="re-section-title">Blokirani datumi (izjeme)</div>
-            <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap;align-items:flex-end">
-                <div>
-                    <label style="display:block;font-size:.775rem;font-weight:600;color:var(--color-muted);margin-bottom:4px">Datum</label>
-                    <input type="date" id="blackout-date" min="<?= date('Y-m-d') ?>"
-                        style="border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none">
-                </div>
-                <div style="flex:1;min-width:150px">
-                    <label style="display:block;font-size:.775rem;font-weight:600;color:var(--color-muted);margin-bottom:4px">Razlog (neobvezno)</label>
-                    <input type="text" id="blackout-reason" placeholder="npr. Zaprt za praznike"
-                        style="width:100%;box-sizing:border-box;border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none">
+        <div class="rz-grid-2" style="margin-top:0">
+
+            <!-- Levo: odpiralni čas -->
+            <div class="rz-card">
+                <?=  card_head(t('re.card_opening_hours'), t('re.card_weekly_schedule')); ?>
+                <div class="rz-schedule" id="day-schedule-wrap">
+                    <div style="padding:16px;color:var(--ink-mute);font-size:.875rem"><?= t('common.loading') ?></div>
                 </div>
             </div>
-            <div style="margin-bottom:12px">
-                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.825rem;color:var(--color-text);margin-bottom:8px">
-                    <input type="checkbox" id="blackout-partial" style="width:15px;height:15px;accent-color:var(--color-accent)">
-                    Samo del dneva
-                </label>
-                <div id="blackout-time-wrap" style="display:none;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                    <div style="display:none" id="blackout-time-inner">
-                        <label style="display:block;font-size:.775rem;font-weight:600;color:var(--color-muted);margin-bottom:4px">Od</label>
-                        <input type="time" id="blackout-start"
-                            style="border:1.5px solid var(--color-border);border-radius:8px;padding:7px 10px;font-size:.85rem;font-family:var(--font);outline:none;width:110px">
-                    </div>
-                    <div style="display:none" id="blackout-time-inner2">
-                        <label style="display:block;font-size:.775rem;font-weight:600;color:var(--color-muted);margin-bottom:4px">Do</label>
-                        <input type="time" id="blackout-end"
-                            style="border:1.5px solid var(--color-border);border-radius:8px;padding:7px 10px;font-size:.85rem;font-family:var(--font);outline:none;width:110px">
+
+            <!-- Desno: nastavitve + blokirani dnevi -->
+            <div style="display:flex;flex-direction:column;gap:20px">
+
+                <!-- Nastavitve rezervacij -->
+                <div class="rz-card">
+                    <?=  card_head(t('re.card_rules'), t('re.card_res_settings')); ?>
+                    <div class="rz-form">
+                        <div class="rz-field" style="max-width:200px">
+                            <label class="rz-field-label"><?= t('re.field_duration') ?></label>
+                            <input id="r-duration" type="number" min="15" step="15" class="rz-input"
+                                value="<?= (int)$rest['reservation_duration'] ?>">
+                        </div>
+                        <div>
+                        <div class="rz-toggle-row">
+                            <div>
+                                <div class="rz-toggle-label"><?= t('re.toggle_custom_duration') ?></div>
+                                <div class="rz-toggle-hint"><?= t('re.toggle_custom_duration_hint') ?></div>
+                            </div>
+                            <label class="toggle-wrap" style="cursor:pointer;margin:0;flex-shrink:0">
+                                <span class="toggle">
+                                    <input type="checkbox" id="r-allow-custom" <?= $rest['allow_custom_duration'] ? 'checked' : '' ?>>
+                                    <span class="toggle-track"></span>
+                                </span>
+                            </label>
+                        </div>
+                        <div class="rz-toggle-row">
+                            <div>
+                                <div class="rz-toggle-label"><?= t('re.toggle_employee_override') ?></div>
+                                <div class="rz-toggle-hint"><?= t('re.toggle_employee_override_hint') ?></div>
+                            </div>
+                            <label class="toggle-wrap" style="cursor:pointer;margin:0;flex-shrink:0">
+                                <span class="toggle">
+                                    <input type="checkbox" id="r-employees-override">
+                                    <span class="toggle-track"></span>
+                                </span>
+                            </label>
+                        </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-            <button class="btn btn-primary btn-sm" id="btn-add-blackout" style="margin-bottom:16px">+ Dodaj</button>
-            <div id="blackout-list">Nalagam...</div>
-        </div>
-        <div class="re-section">
-            <div class="re-section-title">Nastavitve za zaposlene</div>
-            <label class="toggle" style="margin-bottom:4px">
-                <input type="checkbox" id="r-employees-override">
-                <div class="toggle-track"><div class="toggle-thumb"></div></div>
-                <span class="toggle-label">Zaposleni lahko dodajajo rezervacije na zaprte/blokirane dni</span>
-            </label>
-            <p style="font-size:.8rem;color:var(--color-muted);margin:4px 0 0">Ko je izklopljeno, zaposleni prejmejo sporočilo, da kontaktirajo admina.</p>
-        </div>
+
+                <!-- Dopusti in posebni dnevi -->
+                <div class="rz-card">
+                    <?php $dopusti_btn = '<button class="rz-btn" onclick="toggleBlackoutForm()">
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
+                            ' . t('common.add') . '
+                        </button>'; ?>
+                    <?=  card_head(t('re.card_blackouts_eyebrow'), t('re.card_blackouts_title'), $dopusti_btn, false); ?>
+
+                    <!-- Skrita forma za dodajanje -->
+                    <div id="blackout-add-form" style="display:none;background:var(--bg-sunken);border-radius:10px;padding:16px;margin-bottom:16px">
+                        <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap;align-items:flex-end">
+                            <div class="rz-field" style="flex-shrink:0">
+                                <label class="rz-field-label"><?= t('re.blackout_date_label') ?></label>
+                                <input type="date" id="blackout-date" min="<?= date('Y-m-d') ?>" class="rz-input" style="width:150px">
+                            </div>
+                            <div class="rz-field" style="flex:1;min-width:140px">
+                                <label class="rz-field-label"><?= t('re.blackout_reason_label') ?></label>
+                                <input type="text" id="blackout-reason" placeholder="<?= t('re.blackout_reason_placeholder') ?>" class="rz-input">
+                            </div>
+                        </div>
+                        <div style="margin-bottom:12px">
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.825rem;color:var(--ink);font-weight:500;margin-bottom:8px">
+                                <input type="checkbox" id="blackout-partial" style="width:15px;height:15px;accent-color:var(--accent)">
+                                <?= t('re.blackout_partial') ?>
+                            </label>
+                            <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+                                <div id="blackout-time-inner" class="rz-field" style="display:none">
+                                    <label class="rz-field-label"><?= t('re.blackout_from') ?></label>
+                                    <input type="time" id="blackout-start" class="rz-input" style="width:120px">
+                                </div>
+                                <div id="blackout-time-inner2" class="rz-field" style="display:none">
+                                    <label class="rz-field-label"><?= t('re.blackout_to') ?></label>
+                                    <input type="time" id="blackout-end" class="rz-input" style="width:120px">
+                                </div>
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:8px">
+                            <button class="rz-btn rz-btn-primary" id="btn-add-blackout"><?= t('re.btn_save_date') ?></button>
+                            <button class="rz-btn" onclick="toggleBlackoutForm()"><?= t('common.cancel') ?></button>
+                        </div>
+                    </div>
+
+                    <div id="blackout-list">
+                        <p style="font-size:.825rem;color:var(--ink-mute);margin:4px 0"><?= t('common.loading') ?></p>
+                    </div>
+                </div>
+
+            </div><!-- /desno -->
+        </div><!-- /rz-grid-2 -->
+
         <div class="re-save-bar">
-            <button class="btn btn-primary" id="btn-save-urnik">Shrani urnik</button>
+            <button class="btn btn-primary" id="btn-save-urnik"><?= t('re.btn_save_schedule') ?></button>
         </div>
     </div>
 
     <!-- ── Tab: Spletne rezervacije ────────────────────────── -->
     <div id="panel-booking" class="re-panel">
-        <div class="re-section">
-            <div class="re-section-title">Nastavitve</div>
-            <div class="admin-form">
-                <label class="toggle-wrap" style="cursor:pointer">
-                    <span class="toggle">
-                        <input type="checkbox" id="r-booking-enabled" <?= $rest['booking_enabled'] ? 'checked' : '' ?>
-                            onchange="document.getElementById('booking-settings').style.display=this.checked?'':'none'">
-                        <span class="toggle-track"></span>
-                    </span>
-                    <span class="toggle-label">Omogoči spletne rezervacije</span>
-                </label>
+        <div class="flex flex--equal flex--gap20">
+            <div class="flex flex--column flex--gap20">
+                <div class="re-section">
+                    <?=  card_head(t('re.card_settings'), t('re.tab_booking')); ?>
+                    <div class="admin-form">
 
-                <div id="booking-settings" style="display:<?= $rest['booking_enabled'] ? '' : 'none' ?>">
-                    <div class="admin-field-row" style="margin-top:8px">
-                        <div class="admin-field">
-                            <label>Min. gostov</label>
-                            <input id="r-min-guests" type="number" min="1" max="99" value="<?= (int)($rest['booking_min_guests'] ?? 2) ?>">
+                        <div class="rz-toggle-row">
+                            <div>
+                                <div class="rz-toggle-label"><?= t('re.toggle_booking_enabled') ?></div>
+                                <div class="rz-toggle-hint"><?= t('re.toggle_booking_enabled_hint') ?></div>
+                            </div>
+                            <label class="toggle-wrap" style="cursor:pointer;margin:0;flex-shrink:0">
+                                <span class="toggle">
+                                    <input type="checkbox" id="r-booking-enabled" <?= $rest['booking_enabled'] ? 'checked' : '' ?>
+                                    onchange="document.getElementById('booking-settings').style.display=this.checked?'':'none';document.getElementById('booking-dependent').style.display=this.checked?'contents':'none';document.getElementById('booking-dependent1').style.display=this.checked?'flex':'none'">
+                                    <span class="toggle-track"></span>
+                                </span>
+                            </label>
                         </div>
-                        <div class="admin-field">
-                            <label>Max. gostov</label>
-                            <input id="r-max-guests" type="number" min="1" max="500" value="<?= (int)($rest['booking_max_guests'] ?? 10) ?>">
+
+                        <div id="booking-settings" style="display:<?= $rest['booking_enabled'] ? '' : 'none' ?>">
+                            <div class="flex flex--gap20 flex--equal" style="margin-top:8px">
+                                <div class="admin-field">
+                                    <label><?= t('re.field_min_guests') ?></label>
+                                    <input id="r-min-guests" type="number" min="1" max="99" value="<?= (int)($rest['booking_min_guests'] ?? 2) ?>">
+                                </div>
+                                <div class="admin-field">
+                                    <label><?= t('re.field_max_guests') ?></label>
+                                    <input id="r-max-guests" type="number" min="1" max="500" value="<?= (int)($rest['booking_max_guests'] ?? 10) ?>">
+                                </div>
+                                <div class="admin-field">
+                                    <label><?= t('re.field_slot_interval') ?></label>
+                                    <select id="r-slot-interval">
+                                        <?php foreach ([15,20,30,45,60,90,120] as $m):
+                                            $lbl = $m < 60 ? "{$m} min" : ($m === 60 ? '1 ura' : ($m === 90 ? '1,5 ure' : ($m/60).' uri'));
+                                            $cur = $rest['booking_slot_interval'] ?? $rest['reservation_duration'];
+                                        ?>
+                                        <option value="<?= $m ?>" <?= $cur == $m ? 'selected' : '' ?>><?= $lbl ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                </div>
+                            </div>
+                            
+
+                            <div class="rz-toggle-row">
+                                <div>
+                                    <div class="rz-toggle-label"><?= t('re.toggle_auto_confirm') ?></div>
+                                    <div class="rz-toggle-hint"><?= t('re.toggle_auto_confirm_hint') ?></div>
+                                </div>
+                                <label class="toggle-wrap" style="cursor:pointer;margin:0;flex-shrink:0">
+                                    <span class="toggle">
+                                        <input type="checkbox" id="r-auto-confirm" <?= ($rest['booking_auto_confirm'] ?? 1) ? 'checked' : '' ?>>
+                                        <span class="toggle-track"></span>
+                                    </span>
+                                </label>
+                            </div>
                         </div>
-                    </div>
-                    <div class="admin-field" style="margin-top:10px">
-                        <label>Razmak med termini</label>
-                        <select id="r-slot-interval" style="max-width:200px">
-                            <?php foreach ([15,20,30,45,60,90,120] as $m):
-                                $lbl = $m < 60 ? "{$m} min" : ($m === 60 ? '1 ura' : ($m === 90 ? '1,5 ure' : ($m/60).' uri'));
-                                $cur = $rest['booking_slot_interval'] ?? $rest['reservation_duration'];
-                            ?>
-                            <option value="<?= $m ?>" <?= $cur == $m ? 'selected' : '' ?>><?= $lbl ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <div style="margin-top:12px">
-                        <label class="toggle-wrap" style="cursor:pointer">
-                            <span class="toggle">
-                                <input type="checkbox" id="r-auto-confirm" <?= ($rest['booking_auto_confirm'] ?? 1) ? 'checked' : '' ?>>
-                                <span class="toggle-track"></span>
-                            </span>
-                            <span class="toggle-label">Samodejno potrdi rezervacije</span>
-                        </label>
                     </div>
                 </div>
-            </div>
-        </div>
 
-        <!-- ── Samourejanje rezervacij (gost) ──────────────── -->
-        <div class="re-section">
-            <div class="re-section-title">Samourejanje (gost) <span style="background:#DBEAFE;color:#1D4ED8;font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:4px">Advanced+</span></div>
-            <p style="font-size:.825rem;color:var(--color-muted);margin:0 0 14px;line-height:1.5">
-                Gost dobi link za urejanje/odpoved v potrditvenem emailu. Nastavite rok, do kdaj je to mogoče.
-            </p>
-            <div class="admin-form">
-                <div class="admin-field-row" style="align-items:flex-start;gap:16px">
-                    <div class="admin-field" style="flex:1">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                            <label style="margin:0">Gost lahko uredi</label>
-                            <label class="toggle-wrap" style="cursor:pointer;margin:0">
+                <div id="booking-dependent" style="display:<?= $rest['booking_enabled'] ? 'contents' : 'none' ?>">
+
+                <!-- ── Samourejanje rezervacij (gost) ──────────────── -->
+                <div class="re-section">
+                    <?=  card_head(t('re.card_guest'), t('re.card_guest_edit'), false, 'advanced'); ?>
+                    <p class="nastavitve-intro">
+                        <?= t('re.guest_edit_intro') ?>
+                    </p>
+                    <div class="admin-form">
+                        <div class="admin-field-row1">
+                            <div class="admin-field1 flex flex--gap20 flex--center">
+                                <div class="rz-toggle-row flex--1">
+                                    <div>
+                                        <div class="rz-toggle-label"><?= t('re.toggle_allow_edit') ?></div>
+                                        <div class="rz-toggle-hint"><?= t('re.toggle_allow_edit_hint') ?></div>
+                                    </div>
+                                    <label class="toggle-wrap" style="cursor:pointer;margin:0;flex-shrink:0">
+                                        <span class="toggle">
+                                            <input type="checkbox" id="r-allow-edit" <?= ($rest['allow_guest_edit'] ?? 1) ? 'checked' : '' ?>>
+                                            <span class="toggle-track"></span>
+                                        </span>
+                                    </label>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px" id="edit-cutoff-wrap">
+                                    <input type="number" id="r-edit-cutoff" min="1" max="168" style="width:70px;border:1.5px solid var(--color-border);border-radius:8px;padding:7px 10px;font-size:.875rem;font-family:var(--font);outline:none" value="<?= (int)($rest['guest_edit_cutoff_hours'] ?? 24) ?>">
+                                    <span style="font-size:.825rem;color:var(--color-muted)"><?= t('re.cutoff_hours_suffix') ?></span>
+                                </div>
+                            </div>
+                            <div class="admin-field1 flex flex--gap20 flex--center">
+                                <div class="rz-toggle-row flex--1">
+                                    <div>
+                                        <div class="rz-toggle-label"><?= t('re.toggle_allow_cancel') ?></div>
+                                        <div class="rz-toggle-hint"><?= t('re.toggle_allow_cancel_hint') ?></div>
+                                    </div>
+                                    <label class="toggle-wrap" style="cursor:pointer;margin:0;flex-shrink:0">
+                                        <span class="toggle">
+                                            <input type="checkbox" id="r-allow-cancel" <?= ($rest['allow_guest_cancel'] ?? 1) ? 'checked' : '' ?>>
+                                            <span class="toggle-track"></span>
+                                        </span>
+                                    </label>
+                                </div>
+                                <div style="display:flex;align-items:center;gap:8px" id="edit-cancel-wrap">
+                                    <input type="number" id="r-cancel-cutoff" min="1" max="168" style="width:70px;border:1.5px solid var(--color-border);border-radius:8px;padding:7px 10px;font-size:.875rem;font-family:var(--font);outline:none" value="<?= (int)($rest['guest_cancel_cutoff_hours'] ?? 24) ?>">
+                                    <span style="font-size:.825rem;color:var(--color-muted)"><?= t('re.cutoff_hours_suffix') ?></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ── Čakalna lista ────────────────────────────────────── -->
+                <div class="re-section">
+                    <?=  card_head(t('re.card_settings'), t('re.card_waitlist'), false, 'advanced'); ?>
+                    <p class="nastavitve-intro">
+                        <?= t('re.waitlist_intro') ?>
+                    </p>
+                    <?php if (!user_has_feature($pdo, (int)$_SESSION['user_id'], 'waitlist')): ?>
+                    <p style="font-size:.825rem;color:#92400E;background:#FEF3C7;border-radius:8px;padding:10px 14px;margin:0">
+                        <?= t_raw('re.waitlist_gate', ['url' => BASE_PATH . '/pages/billing.php']) ?>
+                    </p>
+                    <?php else: ?>
+                        <div class="rz-toggle-row">
+                            <div>
+                                <div class="rz-toggle-label"><?= t('re.toggle_waitlist_enabled') ?></div>
+                                <div class="rz-toggle-hint"><?= t('re.toggle_waitlist_enabled_hint') ?></div>
+                            </div>
+                            <label class="toggle-wrap" style="cursor:pointer;margin:0;flex-shrink:0">
                                 <span class="toggle">
                                     <input type="checkbox" id="r-allow-edit" <?= ($rest['allow_guest_edit'] ?? 1) ? 'checked' : '' ?>>
                                     <span class="toggle-track"></span>
                                 </span>
                             </label>
                         </div>
-                        <div style="display:flex;align-items:center;gap:8px" id="edit-cutoff-wrap">
-                            <input type="number" id="r-edit-cutoff" min="1" max="168" style="width:70px;border:1.5px solid var(--color-border);border-radius:8px;padding:7px 10px;font-size:.875rem;font-family:var(--font);outline:none" value="<?= (int)($rest['guest_edit_cutoff_hours'] ?? 24) ?>">
-                            <span style="font-size:.825rem;color:var(--color-muted)">ur pred terminom</span>
+                        <div class="admin-field" style="padding: 12px 0;">
+                            <label><?= t('re.field_waitlist_max') ?></label>
+                            <input type="number" id="r-waitlist-max" min="0" max="100"
+                                value="<?= (int)($rest['waitlist_max_per_slot'] ?? 3) ?>">
+                            <p style="font-size:.775rem;color:var(--color-muted);margin:6px 0 0"><?= t('re.waitlist_max_note') ?></p>
                         </div>
-                    </div>
-                    <div class="admin-field" style="flex:1">
-                        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-                            <label style="margin:0">Gost lahko odpove</label>
-                            <label class="toggle-wrap" style="cursor:pointer;margin:0">
+                        
+                    <?php endif; ?>
+                </div>
+
+                <?php if ($hasTableMgmt): ?>
+                <div class="re-section">
+                    <?=  card_head(t('re.card_space_settings'), t('re.card_area_choice'), false, 'advanced'); ?>
+                    <div class="rz-toggle-row">
+                            <div>
+                                <div class="rz-toggle-label"><?= t('re.toggle_area_choice') ?></div>
+                                <div class="rz-toggle-hint"><?= t('re.toggle_area_choice_hint') ?></div>
+                            </div>
+                            <label class="toggle-wrap" style="cursor:pointer;margin:0;flex-shrink:0">
                                 <span class="toggle">
-                                    <input type="checkbox" id="r-allow-cancel" <?= ($rest['allow_guest_cancel'] ?? 1) ? 'checked' : '' ?>>
+                                    <input type="checkbox" id="r-allow-area-choice" <?= !empty($rest['allow_area_choice']) ? 'checked' : '' ?>>
                                     <span class="toggle-track"></span>
                                 </span>
                             </label>
                         </div>
-                        <div style="display:flex;align-items:center;gap:8px" id="cancel-cutoff-wrap">
-                            <input type="number" id="r-cancel-cutoff" min="1" max="168" style="width:70px;border:1.5px solid var(--color-border);border-radius:8px;padding:7px 10px;font-size:.875rem;font-family:var(--font);outline:none" value="<?= (int)($rest['guest_cancel_cutoff_hours'] ?? 4) ?>">
-                            <span style="font-size:.825rem;color:var(--color-muted)">ur pred terminom</span>
-                        </div>
+                </div>
+                <?php endif; ?>
+  </div>
+    </div>
+    <div class="flex flex--column flex--gap20" id="booking-dependent1" style="display:<?= $rest['booking_enabled'] ? 'flex' : 'none' ?>">
+                <?php if ($rest['booking_token']): ?>
+                <div class="re-section">
+                    <?=  card_head(t('re.card_link'), t('re.card_booking_url'), false, 'advanced'); ?>
+                    <p class="nastavitve-intro"><?= t('re.booking_link_intro') ?></p>
+                    <div class="rz-link-box mono">
+                        <input type="text" id="booking-url-input" readonly
+                            style="flex:1;min-width:200px;background:rgba(255,255,255,0.3);font-size:.8rem;color:#374151;border:1.5px solid var(--color-border);border-radius:8px;padding:9px 12px;font-family:var(--font-mono)"
+                            onclick="this.select()">
+                        <button class="rz-btn rz-btn-ghost" onclick="copyBookingUrl()"><?= t('re.btn_copy') ?></button>
                     </div>
                 </div>
-            </div>
-        </div>
-
-        <!-- ── Čakalna lista ────────────────────────────────────── -->
-        <div class="re-section">
-            <div class="re-section-title">Čakalna lista <span style="background:#FEF3C7;color:#92400E;font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:4px">Advanced+</span></div>
-            <p style="font-size:.825rem;color:var(--color-muted);margin:0 0 14px;line-height:1.5">
-                Ko za izbrani datum ni prostih terminov, se gostom ponudi vpis na čakalno listo. Ko se sprosti termin, jih sistem samodejno obvesti.
-            </p>
-            <?php if (!user_has_feature($pdo, (int)$_SESSION['user_id'], 'waitlist')): ?>
-            <p style="font-size:.825rem;color:#92400E;background:#FEF3C7;border-radius:8px;padding:10px 14px;margin:0">
-                Čakalna lista je na voljo v paketu <strong>Advanced</strong> ali višjem.
-                <a href="<?= BASE_PATH ?>/pages/billing.php" style="color:#92400E;font-weight:600">Nadgradi →</a>
-            </p>
-            <?php else: ?>
-            <label class="toggle-wrap" style="cursor:pointer">
-                <span class="toggle">
-                    <input type="checkbox" id="r-waitlist-enabled" <?= ($rest['waitlist_enabled'] ?? 1) ? 'checked' : '' ?>>
-                    <span class="toggle-track"></span>
-                </span>
-                <span class="toggle-label">Omogoči čakalno listo za javno rezervacijo</span>
-            </label>
-            <div style="margin-top:14px">
-                <label style="font-size:.825rem;font-weight:600;color:var(--color-text);display:block;margin-bottom:6px">
-                    Max vpisov na čakalno listo po terminu
-                </label>
-                <div style="display:flex;align-items:center;gap:10px">
-                    <input type="number" id="r-waitlist-max" min="0" max="100"
-                        value="<?= (int)($rest['waitlist_max_per_slot'] ?? 3) ?>"
-                        style="width:90px;border:1.5px solid var(--color-border);border-radius:8px;padding:8px 10px;font-size:.875rem;font-family:var(--font);outline:none">
-                    <span style="font-size:.8rem;color:var(--color-muted)">(<code>0</code> = brez omejitve)</span>
+                <div class="re-section">
+                    <?=  card_head(t('re.card_link'), t('re.card_embed'), false, 'premium'); ?>
+                    <p class="nastavitve-intro"><?= t('re.booking_link_intro') ?></p>
+                    <div class="rz-link-box mono">
+                        <textarea id="embed-code-input" readonly rows="3" onclick="this.select()"
+                        style="flex:1;height:90px;min-width:200px;background:rgba(255,255,255,0.3);font-size:.8rem;color:#374151;border:1.5px solid var(--color-border);border-radius:8px;padding:9px 12px;font-family:var(--font-mono)"></textarea>
+                        <button class="rz-btn rz-btn-ghost" onclick="copyEmbed()"><?= t('re.btn_copy') ?></button>
+                    </div>
                 </div>
-                <p style="font-size:.775rem;color:var(--color-muted);margin:6px 0 0">Ko je dosežen limit, se termin popolnoma zaklene za nove vpise.</p>
-            </div>
-            <?php endif; ?>
-        </div>
+                <?php endif; ?>
+</div>
+</div>
+            </div><!-- /booking-dependent -->
 
-        <?php if ($hasTableMgmt): ?>
-        <div class="re-section">
-            <div class="re-section-title">Izbira prostora pri rezervaciji
-                <span style="background:#D1FAE5;color:#065F46;font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:6px">Advanced/Premium</span>
-            </div>
-            <label class="toggle-wrap" style="cursor:pointer">
-                <span class="toggle">
-                    <input type="checkbox" id="r-allow-area-choice" <?= !empty($rest['allow_area_choice']) ? 'checked' : '' ?>>
-                    <span class="toggle-track"></span>
-                </span>
-                <span class="toggle-label">Gostje lahko izberejo prostor/cono med rezervacijo</span>
-            </label>
-            <p style="font-size:.775rem;color:var(--color-muted);margin:8px 0 0">Ko je vklopljeno, se po izbiri termina prikaže dodaten korak z razpoložljivimi conami. Cone brez prostih miz so onemogočene.</p>
-        </div>
-        <?php endif; ?>
-
-        <?php if ($rest['booking_token']): ?>
-        <div class="re-section">
-            <div class="re-section-title">Rezervacijska povezava</div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                <input type="text" id="booking-url-input" readonly
-                    style="flex:1;min-width:200px;background:#F9FAFB;font-size:.8rem;color:#374151;border:1.5px solid var(--color-border);border-radius:8px;padding:9px 12px;font-family:monospace"
-                    onclick="this.select()">
-                <button class="btn btn-ghost" onclick="copyBookingUrl()">Kopiraj</button>
-            </div>
-        </div>
-        <div class="re-section">
-            <div class="re-section-title">Embed koda <span style="background:#EDE9FE;color:#5B21B6;font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:4px">Premium</span></div>
-            <p style="font-size:.825rem;color:var(--color-muted);margin-bottom:8px">Prilepite to kodo na katerokoli spletno stran.</p>
-            <textarea id="embed-code-input" readonly rows="3" onclick="this.select()"
-                style="width:100%;background:#F9FAFB;font-size:.75rem;color:#374151;font-family:monospace;line-height:1.6;resize:none;border:1.5px solid var(--color-border);border-radius:8px;padding:10px 12px"></textarea>
-            <button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="copyEmbed()">Kopiraj embed kodo</button>
-        </div>
-        <?php endif; ?>
-
-        <div class="re-save-bar">
-            <button class="btn btn-primary" id="btn-save-booking">Shrani</button>
-        </div>
-    </div>
+          
 
     <!-- ── Tab: Zaposleni ──────────────────────────────────── -->
     <div id="panel-zaposleni" class="re-panel">
         <div class="re-section">
-            <div class="re-section-title">Seznam zaposlenih</div>
-            <div id="staff-list" style="margin-bottom:14px">Nalagam...</div>
+            <?=  card_head(t('re.tab_staff'), t('re.card_staff_list'), '<button class="btn btn-primary" id="btn-save-booking">' . t('common.save') . '</button>'); ?>
+            <div id="staff-list" style="margin-bottom:14px"><?= t('common.loading') ?></div>
             <div style="display:flex;gap:8px">
-                <input type="text" id="staff-name-input" placeholder="Ime zaposlenega"
+                <input type="text" id="staff-name-input" placeholder="<?= t('re.staff_placeholder') ?>"
                     style="flex:1;border:1.5px solid var(--color-border);border-radius:8px;padding:9px 12px;font-size:.875rem;font-family:var(--font);outline:none"
                     onkeydown="if(event.key==='Enter')addStaff()">
-                <button class="btn btn-primary" onclick="addStaff()">+ Dodaj</button>
+                <button class="btn btn-primary" onclick="addStaff()">+ <?= t('common.add') ?></button>
             </div>
         </div>
         <div class="re-note">
-            Ko ima restavracija vsaj enega zaposlenega, se pri dodajanju rezervacije pojavi izbira "Sprejel".
+            <?= t('re.staff_note') ?>
         </div>
     </div>
 
     <!-- ── Tab: Polja po meri ──────────────────────────────── -->
     <div id="panel-polja" class="re-panel">
         <div class="re-section">
-            <div class="re-section-title">Polja po meri</div>
-            <div id="cf-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px">Nalagam...</div>
+            <?=  card_head(t('re.card_extra'), t('re.tab_fields'), false, 'advanced'); ?>
+            <p class="nastavitve-intro"><?= t('re.cf_intro') ?></p>
+            <div class="info-box">
+            <strong><?= t('re.cf_info_int') ?></strong> = <?= t('re.cf_info_int_desc') ?><br>
+            <strong><?= t('re.cf_info_pub') ?></strong> = <?= t('re.cf_info_pub_desc') ?><br>
+            <strong><?= t('re.cf_info_both') ?></strong> = <?= t('re.cf_info_both_desc') ?>
+        </div>
+            <div id="cf-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"><?= t('common.loading') ?></div>
             <button onclick="cfAddCard()" style="width:100%;border:2px dashed var(--color-border);border-radius:8px;padding:10px;font-size:.875rem;color:var(--color-muted);background:none;cursor:pointer;font-family:var(--font);transition:.15s"
                 onmouseenter="this.style.borderColor='var(--color-accent)';this.style.color='var(--color-accent)'"
                 onmouseleave="this.style.borderColor='';this.style.color=''">
-                + Dodaj polje
+                <?= t('re.btn_add_field') ?>
             </button>
-        </div>
-
-        <div class="re-note re-note-blue">
-            <strong>Interno</strong> = polje vidijo samo zaposleni pri dodajanju rezervacije.<br>
-            <strong>Splet</strong> = polje se prikaže gostom pri spletni rezervaciji.<br>
-            <strong>Interno + Splet</strong> = oboje.
         </div>
     </div>
 
     <!-- ── Tab: Anketa ───────────────────────────────────────── -->
     <div id="panel-anketa" class="re-panel">
+    <div class="flex flex--column flex--gap20">
     <?php if (!$hasSurvey): ?>
         <div class="re-section" style="background:#FEF3C7;border-color:#FDE68A">
             <p style="margin:0;font-size:.9rem;color:#92400E">
-                Anketa o zadovoljstvu je na voljo v paketu <strong>Advanced</strong> ali višjem.
-                <a href="<?= BASE_PATH ?>/pages/billing.php" style="color:#B45309;font-weight:600">Nadgradi paket →</a>
+                <?= t_raw('re.survey_gate', ['url' => BASE_PATH . '/pages/billing.php']) ?>
             </p>
         </div>
     <?php else: ?>
@@ -521,96 +573,96 @@ $hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_manag
     <?php if (!$hasSurveyEdit): ?>
         <div class="re-section" style="background:#EFF6FF;border-color:#BFDBFE;margin-bottom:20px">
             <p style="margin:0;font-size:.875rem;color:#1E40AF">
-                <strong>Advanced paket:</strong> Anketa je prikazana samo za branje. Za urejanje vprašanj in nastavitev nadgradite na
-                <a href="<?= BASE_PATH ?>/pages/billing.php" style="color:#1D4ED8;font-weight:600">Premium →</a>
+                <?= t_raw('re.survey_readonly_note', ['url' => BASE_PATH . '/pages/billing.php']) ?>
             </p>
         </div>
     <?php endif; ?>
-
-        <!-- Nastavitve -->
-        <div class="re-section">
-            <div class="re-section-title">Nastavitve ankete</div>
-            <div class="admin-form">
-                <div class="admin-field-row">
-                    <div class="admin-field" style="flex:2">
-                        <label>Naslov ankete</label>
-                        <input type="text" id="sf-title" maxlength="255">
+        <div class="flex flex--gap20 flex--equal">
+            <!-- Nastavitve -->
+            <div class="re-section">
+                <?=  card_head(t('re.tab_survey'), t('re.card_survey_general'), false, 'advanced'); ?>
+                <div class="admin-form">
+                    <div class="admin-field-row1">
+                        <div class="admin-field" style="flex:2">
+                            <label><?= t('re.field_survey_title') ?></label>
+                            <input type="text" id="sf-title" maxlength="255">
+                        </div>
                     </div>
-                </div>
-                <div class="admin-field-row">
-                    <div class="admin-field">
-                        <label>Opis (opcionalno)</label>
-                        <textarea id="sf-description" rows="2" style="width:100%;border:1.5px solid var(--color-border);border-radius:8px;padding:9px 12px;font-size:.875rem;font-family:var(--font);resize:vertical;outline:none"></textarea>
+                    <div class="admin-field-row1">
+                        <div class="admin-field">
+                            <label><?= t('re.field_survey_desc') ?></label>
+                            <textarea id="sf-description" rows="2" style="width:100%;border:1.5px solid var(--color-border);border-radius:8px;padding:9px 12px;font-size:.875rem;font-family:var(--font);resize:vertical;outline:none"></textarea>
+                        </div>
                     </div>
-                </div>
-                <div class="admin-field-row">
-                    <div class="admin-field">
-                        <label>Besedilo zahvalnega emaila</label>
-                        <textarea id="sf-thankyou" rows="3" style="width:100%;border:1.5px solid var(--color-border);border-radius:8px;padding:9px 12px;font-size:.875rem;font-family:var(--font);resize:vertical;outline:none"></textarea>
+                    <div class="admin-field-row1">
+                        <div class="admin-field">
+                            <label><?= t('re.field_survey_thankyou') ?></label>
+                            <textarea id="sf-thankyou" rows="3" style="width:100%;border:1.5px solid var(--color-border);border-radius:8px;padding:9px 12px;font-size:.875rem;font-family:var(--font);resize:vertical;outline:none"></textarea>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
 
-        <!-- Pošiljanje -->
-        <div class="re-section">
-            <div class="re-section-title">Samodejno pošiljanje</div>
-            <div style="display:flex;flex-direction:column;gap:0">
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--color-border)">
-                    <div>
-                        <span style="font-size:.875rem;color:var(--color-text);font-weight:500">Vklopljeno</span>
-                        <div style="font-size:.78rem;color:var(--color-muted);margin-top:2px">Po obisku sistem samodejno pošlje email gostu</div>
+            <!-- Pošiljanje -->
+            <div class="re-section">
+                <?=  card_head(t('re.tab_survey'), t('re.card_survey_send'), false, 'advanced'); ?>
+                <div style="display:flex;flex-direction:column;gap:0">
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--color-border)">
+                        <div>
+                            <span style="font-size:.875rem;color:var(--color-text);font-weight:500"><?= t('re.survey_send_enabled') ?></span>
+                            <div style="font-size:.78rem;color:var(--color-muted);margin-top:2px"><?= t('re.survey_send_enabled_hint') ?></div>
+                        </div>
+                        <label class="toggle-wrap" style="cursor:pointer;margin:0">
+                            <span class="toggle">
+                                <input type="checkbox" id="sf-send-enabled" onchange="surveyToggleDelay()">
+                                <span class="toggle-track"></span>
+                            </span>
+                        </label>
                     </div>
-                    <label class="toggle-wrap" style="cursor:pointer;margin:0">
-                        <span class="toggle">
-                            <input type="checkbox" id="sf-send-enabled" onchange="surveyToggleDelay()">
-                            <span class="toggle-track"></span>
-                        </span>
-                    </label>
-                </div>
-                <div id="sf-delay-row" style="display:none;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--color-border)">
-                    <span style="font-size:.875rem;color:var(--color-text)">Pošlji po</span>
-                    <input type="number" id="sf-delay" min="0" max="168" value="2"
-                        style="width:60px;border:1.5px solid var(--color-border);border-radius:8px;padding:7px 10px;font-size:.875rem;font-family:var(--font)">
-                    <span style="font-size:.875rem;color:var(--color-muted)">urah po prihodu gosta</span>
-                </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--color-border)">
-                    <span style="font-size:.875rem;color:var(--color-text)">Vključi zahvalo v email</span>
-                    <label class="toggle-wrap" style="cursor:pointer;margin:0">
-                        <span class="toggle">
-                            <input type="checkbox" id="sf-incl-thankyou" checked>
-                            <span class="toggle-track"></span>
-                        </span>
-                    </label>
-                </div>
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
-                    <span style="font-size:.875rem;color:var(--color-text)">Vključi povezavo do ankete</span>
-                    <label class="toggle-wrap" style="cursor:pointer;margin:0">
-                        <span class="toggle">
-                            <input type="checkbox" id="sf-incl-survey" checked>
-                            <span class="toggle-track"></span>
-                        </span>
-                    </label>
+                    <div id="sf-delay-row" style="display:none;align-items:center;gap:8px;padding:10px 0;border-bottom:1px solid var(--color-border)">
+                        <span style="font-size:.875rem;color:var(--color-text)"><?= t('re.survey_delay_prefix') ?></span>
+                        <input type="number" id="sf-delay" min="0" max="168" value="2"
+                            style="width:60px;border:1.5px solid var(--color-border);border-radius:8px;padding:7px 10px;font-size:.875rem;font-family:var(--font)">
+                        <span style="font-size:.875rem;color:var(--color-muted)"><?= t('re.survey_delay_suffix') ?></span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--color-border)">
+                        <span style="font-size:.875rem;color:var(--color-text)"><?= t('re.survey_incl_thankyou') ?></span>
+                        <label class="toggle-wrap" style="cursor:pointer;margin:0">
+                            <span class="toggle">
+                                <input type="checkbox" id="sf-incl-thankyou" checked>
+                                <span class="toggle-track"></span>
+                            </span>
+                        </label>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
+                        <span style="font-size:.875rem;color:var(--color-text)"><?= t('re.survey_incl_survey') ?></span>
+                        <label class="toggle-wrap" style="cursor:pointer;margin:0">
+                            <span class="toggle">
+                                <input type="checkbox" id="sf-incl-survey" checked>
+                                <span class="toggle-track"></span>
+                            </span>
+                        </label>
+                    </div>
                 </div>
             </div>
         </div>
 
         <!-- Vprašanja -->
         <div class="re-section">
-            <div class="re-section-title">Vprašanja</div>
+            <?=  card_head(t('re.tab_survey'), t('re.card_survey_questions'), false, 'Premium'); ?>
             <div id="sf-question-list" style="display:flex;flex-direction:column;gap:8px;margin-bottom:12px"></div>
             <?php if ($hasSurveyEdit): ?>
             <button onclick="surveyAddQuestion()" style="width:100%;border:2px dashed var(--color-border);border-radius:8px;padding:10px;font-size:.875rem;color:var(--color-muted);background:none;cursor:pointer;font-family:var(--font);transition:.15s"
                 onmouseenter="this.style.borderColor='var(--color-accent)';this.style.color='var(--color-accent)'"
                 onmouseleave="this.style.borderColor='';this.style.color=''">
-                + Dodaj vprašanje
+                <?= t('re.btn_add_question') ?>
             </button>
             <?php endif; ?>
         </div>
 
         <?php if ($hasSurveyEdit): ?>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:32px">
-            <button class="btn-success" id="btn-save-survey" onclick="saveSurveyForm()">Shrani anketo</button>
+            <button class="btn-success" id="btn-save-survey" onclick="saveSurveyForm()"><?= t('re.btn_save_survey') ?></button>
             <span id="sf-save-status" style="font-size:.85rem;color:var(--color-muted)"></span>
         </div>
         <?php else: ?>
@@ -620,126 +672,144 @@ $hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_manag
         <!-- Odgovori -->
         <div class="re-section">
             <div class="re-section-title" style="display:flex;justify-content:space-between;align-items:center">
-                <span>Prejeti odgovori</span>
+                <span><?= t('re.card_survey_responses') ?></span>
                 <div style="display:flex;gap:8px;align-items:center">
                     <input type="date" id="sr-from" style="border:1px solid var(--color-border);border-radius:6px;padding:5px 9px;font-size:.8rem;font-family:var(--font)">
                     <input type="date" id="sr-to"   style="border:1px solid var(--color-border);border-radius:6px;padding:5px 9px;font-size:.8rem;font-family:var(--font)">
-                    <button onclick="loadSurveyResults()" style="background:var(--color-accent);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:.8rem;font-weight:600;cursor:pointer;font-family:var(--font)">Prikaži</button>
+                    <button onclick="loadSurveyResults()" style="background:var(--color-accent);color:#fff;border:none;border-radius:6px;padding:6px 14px;font-size:.8rem;font-weight:600;cursor:pointer;font-family:var(--font)"><?= t('re.btn_show') ?></button>
                     <?php if (user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey_export')): ?>
                     <button onclick="exportSurveyCsv()" style="background:#fff;border:1px solid var(--color-border);border-radius:6px;padding:6px 12px;font-size:.8rem;color:var(--color-text);cursor:pointer;font-family:var(--font)">↓ CSV</button>
                     <?php endif; ?>
                 </div>
             </div>
-            <div id="sr-list" style="margin-top:14px"><p style="font-size:.85rem;color:var(--color-muted)">Kliknite Prikaži za nalaganje odgovorov.</p></div>
+            <div id="sr-list" style="margin-top:14px"><p style="font-size:.85rem;color:var(--color-muted)"><?= t('re.survey_results_click_load') ?></p></div>
         </div>
 
     <?php endif; ?>
     </div>
+    </div>
 
     <!-- ── Tab: Mize ─────────────────────────────────────────── -->
     <div id="panel-mize" class="re-panel">
+    <div style="display:flex;flex-direction:column;gap:20px">
     <?php if (!$hasTableMgmt): ?>
-        <div class="re-section" style="background:#FEF3C7;border-color:#FDE68A">
-            <p style="margin:0;font-size:.9rem;color:#92400E">
-                Upravljanje miz je na voljo v paketu <strong>Advanced</strong> ali višjem.
-                <a href="<?= BASE_PATH ?>/pages/billing.php" style="color:#B45309;font-weight:600">Nadgradi paket →</a>
+        <div class="rz-card" style="background:color-mix(in oklab,var(--warning) 10%,transparent);border-color:color-mix(in oklab,var(--warning) 30%,var(--line))">
+            <p style="margin:0;font-size:.9rem;color:var(--warning)">
+                <?= t_raw('re.tables_gate', ['url' => BASE_PATH . '/pages/billing.php']) ?>
             </p>
         </div>
     <?php else: ?>
-
-        <!-- Cone in mize (cone-first prikaz) -->
-        <div class="re-section">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-                <div class="re-section-title" style="margin:0">Cone in mize</div>
-                <button onclick="showAreaForm()" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">+ Cona</button>
-            </div>
-            <div style="font-size:.8rem;color:var(--color-muted);margin-bottom:12px">
-                Najprej ustvarite cone (npr. Terasa, Notranjost), nato dodajte mize znotraj vsake cone.
-            </div>
+        <div class="flex flex--equal flex--gap20">
+        <!-- Cone in mize -->
+        <div class="rz-card">
+            <?php $mizeBtn = '<button onclick="showAreaForm()" class="rz-btn rz-btn-primary">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                    ' . t('re.card_areas_eyebrow_btn') . '
+                </button>'; ?>
+            <?=  card_head(t('re.card_areas_eyebrow'), t('re.card_areas_title'), $mizeBtn, 'advanced'); ?>
+            <p class="nastavitve-intro">
+                <?= t('re.areas_intro') ?>
+            </p>
             <!-- Forma za cono -->
-            <div id="area-form" style="display:none;margin-bottom:14px;background:var(--color-bg);border-radius:8px;padding:12px;border:1px solid var(--color-border)">
-                <div style="font-size:.78rem;font-weight:600;color:var(--color-muted);margin-bottom:6px" id="area-form-title">Nova cona</div>
+            <div id="area-form" style="display:none;margin-bottom:14px;background:var(--bg-sunken);border-radius:10px;padding:14px;border:1px solid var(--line)">
+                <div class="rz-card-eyebrow mono" style="margin-bottom:10px" id="area-form-title"><?= t('re.area_form_new') ?></div>
                 <div style="display:flex;gap:8px;align-items:center">
-                    <input type="text" id="area-name-input" placeholder="Ime cone (npr. Zunaj, 1. nadstropje)" style="flex:1;border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none">
-                    <button onclick="saveArea()" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">Shrani</button>
-                    <button onclick="cancelAreaForm()" style="font-size:.8rem;padding:.4rem .9rem;background:transparent;border:1.5px solid var(--color-border);border-radius:8px;cursor:pointer;font-family:var(--font)">Prekliči</button>
+                    <input type="text" id="area-name-input" placeholder="<?= t('re.area_name_placeholder') ?>" class="rz-input" style="flex:1">
+                    <button onclick="saveArea()" class="rz-btn rz-btn-primary"><?= t('common.save') ?></button>
+                    <button onclick="cancelAreaForm()" class="rz-btn"><?= t('common.cancel') ?></button>
                 </div>
                 <input type="hidden" id="area-edit-id" value="">
             </div>
             <!-- Cone z mizami (dinamično) -->
-            <div id="areas-list"></div>
+            <div id="areas-list" style="display:flex;flex-direction:column;gap:12px"></div>
             <!-- Forma za mizo (deljeno, skrita) -->
-            <div id="table-form" style="display:none;margin-top:10px;background:var(--color-bg);border-radius:8px;padding:14px;border:1px solid var(--color-border)">
-                <div style="font-size:.78rem;font-weight:600;color:var(--color-muted);margin-bottom:8px" id="table-form-title">Nova miza</div>
-                <div style="display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:end">
-                    <div>
-                        <label style="font-size:.78rem;font-weight:600;color:var(--color-muted);display:block;margin-bottom:4px">Ime mize *</label>
-                        <input type="text" id="table-name-input" placeholder="npr. Miza 1, Bar 3"
-                            style="width:100%;border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none;box-sizing:border-box">
+            <div id="table-form" style="display:none;margin-top:12px;background:var(--bg-sunken);border-radius:10px;padding:14px;border:1px solid var(--line)">
+                <div class="rz-card-eyebrow mono" style="margin-bottom:10px" id="table-form-title"><?= t('re.table_form_new') ?></div>
+                <div style="display:grid;grid-template-columns:1fr 100px auto;gap:10px;align-items:end">
+                    <div class="rz-field">
+                        <label class="rz-field-label"><?= t('re.table_name_label') ?></label>
+                        <input type="text" id="table-name-input" placeholder="<?= t('re.table_name_placeholder') ?>" class="rz-input">
                     </div>
-                    <div>
-                        <label style="font-size:.78rem;font-weight:600;color:var(--color-muted);display:block;margin-bottom:4px">Zmogljivost *</label>
-                        <input type="number" id="table-cap-input" min="1" max="50" value="2"
-                            style="width:80px;border:1.5px solid var(--color-border);border-radius:8px;padding:8px 10px;font-size:.875rem;font-family:var(--font);outline:none">
+                    <div class="rz-field">
+                        <label class="rz-field-label"><?= t('re.table_cap_label') ?></label>
+                        <input type="number" id="table-cap-input" min="1" max="50" value="2" class="rz-input">
                     </div>
-                    <div>
-                        <label style="font-size:.78rem;font-weight:600;color:var(--color-muted);display:block;margin-bottom:4px">Cona</label>
-                        <select id="table-area-select"
-                            style="border:1.5px solid var(--color-border);border-radius:8px;padding:8px 10px;font-size:.875rem;font-family:var(--font);outline:none;background:var(--color-surface)">
-                            <option value="">— brez cone —</option>
+                    <div class="rz-field">
+                        <label class="rz-field-label"><?= t('re.table_area_label') ?></label>
+                        <select id="table-area-select" class="rz-input">
+                            <option value=""><?= t('re.table_no_area') ?></option>
                         </select>
                     </div>
                 </div>
-                <div style="display:flex;gap:8px;margin-top:10px">
-                    <button onclick="saveTable()" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">Shrani</button>
-                    <button onclick="cancelTableForm()" style="font-size:.8rem;padding:.4rem .9rem;background:transparent;border:1.5px solid var(--color-border);border-radius:8px;cursor:pointer;font-family:var(--font)">Prekliči</button>
+                <div style="display:flex;gap:8px;margin-top:12px">
+                    <button onclick="saveTable()" class="rz-btn rz-btn-primary"><?= t('common.save') ?></button>
+                    <button onclick="cancelTableForm()" class="rz-btn"><?= t('common.cancel') ?></button>
                 </div>
                 <input type="hidden" id="table-edit-id" value="">
                 <input type="hidden" id="table-form-anchor" value="">
             </div>
         </div>
-
-        <!-- Nastavitev: vse mize so združljive -->
-        <div class="re-section">
-            <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer">
-                <input type="checkbox" id="all-tables-mergeable-toggle"
-                    <?= !empty($rest['all_tables_mergeable']) ? 'checked' : '' ?>
-                    onchange="saveTableMergeableSetting(this.checked)"
-                    style="margin-top:2px;width:16px;height:16px;cursor:pointer;accent-color:var(--color-primary)">
-                <div>
-                    <div style="font-weight:600;font-size:.875rem">Vse mize so združljive</div>
-                    <div style="font-size:.8rem;color:var(--color-muted);margin-top:2px">
-                        Sistem lahko za večje skupine samodejno združi katerekoli proste mize, ne samo predefinirane kombinacije. Koristno, kadar ne želite ročno nastavljati vsake kombinacije.
+        <div class="flex flex--column flex--gap20">
+            <!-- Nastavitev: vse mize so združljive -->
+        <div class="rz-card">
+            <?=  card_head(t('re.card_areas_eyebrow'), t('re.card_areas_title'), $mizeBtn, 'advanced'); ?>
+            <p class="nastavitve-intro">
+                <?= t('re.all_mergeable_intro') ?>
+            </p>
+                <div class="rz-toggle-row">
+                    <div>
+                        <div class="rz-toggle-label"><?= t('re.toggle_all_mergeable') ?></div>
+                        <div class="rz-toggle-hint"><?= t('re.toggle_all_mergeable_hint') ?></div>
                     </div>
+                    <label class="toggle-wrap" style="cursor:pointer;margin:0;flex-shrink:0">
+                        <span class="toggle">
+                            <input type="checkbox" id="all-tables-mergeable-toggle" <?= !empty($rest['all_tables_mergeable']) ? 'checked' : '' ?>
+                    onchange="saveTableMergeableSetting(this.checked)">
+                            <span class="toggle-track"></span>
+                        </span>
+                    </label>
                 </div>
-            </label>
-        </div>
 
         <!-- Združene mize -->
-        <div class="re-section" id="merge-groups-section">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-                <div class="re-section-title" style="margin:0">Združene mize</div>
-                <button onclick="showMergeForm()" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">+ Skupina</button>
+        <div id="merge-groups-section" style="margin-top: 2em;">
+            <div class="rz-card-head">
+                <div>
+                    <h2 class="rz-card-title display"><?= t('re.card_merge_groups') ?></h2>
+                </div>
             </div>
-            <div style="font-size:.8rem;color:var(--color-muted);margin-bottom:12px">
-                Definirajte, katere mize se lahko združijo (npr. sosednje mize za večje gruče gostov).
-            </div>
-            <div id="merge-groups-list"></div>
-            <div id="merge-form" style="display:none;margin-top:12px;background:var(--color-bg);border-radius:8px;padding:14px;border:1px solid var(--color-border)">
-                <label style="font-size:.78rem;font-weight:600;color:var(--color-muted);display:block;margin-bottom:4px">Ime skupine (opcionalno)</label>
-                <input type="text" id="mg-name-input" placeholder="npr. Terasa 1+2"
-                    style="width:100%;border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none;box-sizing:border-box;margin-bottom:10px">
-                <label style="font-size:.78rem;font-weight:600;color:var(--color-muted);display:block;margin-bottom:6px">Izberite mize (vsaj 2) *</label>
-                <div id="mg-tables-checkboxes" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px"></div>
+            <p style="font-size:13px;color:var(--ink-soft);margin:0 0 14px">
+                <?= t('re.merge_groups_intro') ?>
+            </p>
+            <div id="merge-groups-list" style="display:flex;flex-direction:column;gap:6px"></div>
+            <div id="merge-form" style="display:none;margin-top:12px;background:var(--bg-sunken);border-radius:10px;padding:14px;border:1px solid var(--line)">
+                <div class="rz-field" style="margin-bottom:10px">
+                    <label class="rz-field-label"><?= t('re.merge_group_name_label') ?></label>
+                    <input type="text" id="mg-name-input" placeholder="<?= t('re.merge_group_name_placeholder') ?>" class="rz-input">
+                </div>
+                <div class="rz-field" style="margin-bottom:12px">
+                    <label class="rz-field-label"><?= t('re.merge_select_label') ?></label>
+                    <div id="mg-tables-checkboxes" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px"></div>
+                </div>
                 <div style="display:flex;gap:8px">
-                    <button onclick="saveMergeGroup()" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">Shrani</button>
-                    <button onclick="cancelMergeForm()" style="font-size:.8rem;padding:.4rem .9rem;background:transparent;border:1.5px solid var(--color-border);border-radius:8px;cursor:pointer;font-family:var(--font)">Prekliči</button>
+                    <button onclick="saveMergeGroup()" class="rz-btn rz-btn-primary"><?= t('common.save') ?></button>
+                    <button onclick="cancelMergeForm()" class="rz-btn"><?= t('common.cancel') ?></button>
                 </div>
                 <input type="hidden" id="mg-edit-id" value="">
             </div>
+            <button onclick="showMergeForm()" style="margin-top: 1em;width:100%;border:2px dashed var(--color-border);border-radius:8px;padding:10px;font-size:.875rem;color:var(--color-muted);background:none;cursor:pointer;font-family:var(--font);transition:.15s"
+                onmouseenter="this.style.borderColor='var(--color-accent)';this.style.color='var(--color-accent)'"
+                onmouseleave="this.style.borderColor='';this.style.color=''">
+                <?= t('re.btn_add_merge_group') ?>
+            </button>
+        </div>
+        </div>
+        </div>
         </div>
 
+        
+
     <?php endif; ?>
+    </div>
     </div>
 
 </div><!-- .rest-edit-wrap -->
@@ -795,50 +865,252 @@ async function apiCall(method, url, body=null) {
     return json.data;
 }
 
+// ── Sistemski dostopi (uporabniki za to restavracijo) ─────────
+let restUsers = [];
+
+async function loadRestUsers() {
+    const wrap = document.getElementById('rest-users-list');
+    if (!wrap) return;
+    try {
+        const all = await apiCall('GET', '/api/users.php');
+        restUsers = (all || []).filter(u => (u.restaurant_id == REST_ID) || (u.linked_restaurant_id == REST_ID));
+        renderRestUsers();
+    } catch(e) {
+        if (wrap) wrap.innerHTML = `<span style="color:var(--color-danger);font-size:.8rem">${e.message}</span>`;
+    }
+}
+
+function renderRestUsers() {
+    const wrap = document.getElementById('rest-users-list');
+    if (!wrap) return;
+    if (!restUsers.length) {
+        wrap.innerHTML = `<p style="color:var(--color-muted);font-size:.875rem;padding:4px 0">${window.t('re.no_users')}</p>`;
+        return;
+    }
+    wrap.innerHTML = `<table class="admin-table" style="margin:0">
+        <thead><tr>
+            <th>${window.t('re.table_col_name')}</th>
+            <th>${window.t('re.table_col_login')}</th>
+            <th>${window.t('re.table_col_role')}</th>
+            <th>${window.t('re.table_col_status')}</th>
+            <th></th>
+        </tr></thead>
+        <tbody>${restUsers.map(u => {
+            const roleB = u.role === 'admin'
+                ? `<span style="background:color-mix(in oklab,var(--color-accent) 12%,transparent);color:var(--color-accent);border-radius:4px;padding:2px 8px;font-size:.72rem;font-weight:700">Admin</span>`
+                : `<span style="background:var(--color-bg);color:var(--color-muted);border-radius:4px;padding:2px 8px;font-size:.72rem;font-weight:600;border:1px solid var(--color-border)">${window.t('re.role_staff_short')}</span>`;
+            const loginId = u.email ? escHtml(u.email) : `<span style="color:var(--color-muted)">👤 ${escHtml(u.username||'')}</span>`;
+            return `<tr>
+                <td><strong>${escHtml(u.full_name)}</strong></td>
+                <td style="color:var(--color-text-2)">${loginId}</td>
+                <td>${roleB}</td>
+                <td><span class="badge ${u.is_active==1?'badge-active':'badge-inactive'}">${u.is_active==1?window.t('re.user_active'):window.t('re.user_inactive')}</span></td>
+                <td><div class="table-actions">
+                    <button class="btn-icon" title="${window.t('common.edit')}" onclick="openRestUserModal(${u.id})">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                    <button class="btn-icon danger" title="${u.is_active==1?window.t('re.btn_deactivate'):window.t('re.btn_activate')}" onclick="toggleRestUser(${u.id},'${escHtml(u.full_name)}',${u.is_active})">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                    </button>
+                    <button class="btn-icon danger" title="${window.t('re.btn_perm_delete')}" onclick="deleteRestUser(${u.id},'${escHtml(u.full_name)}')">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                    </button>
+                </div></td>
+            </tr>`;
+        }).join('')}</tbody>
+    </table>`;
+}
+
+function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s || '';
+    return d.innerHTML;
+}
+
+function openRestUserModal(userId) {
+    const u = userId ? restUsers.find(x => x.id === userId) : null;
+    const isEdit = !!u;
+    const loginType = u ? (u.email ? 'email' : 'username') : 'email';
+
+    const existing = document.getElementById('rest-user-modal');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'rest-user-modal';
+    overlay.innerHTML = `
+    <div class="modal-box" style="max-width:480px">
+        <div class="modal-header">
+            <div class="modal-title">${isEdit ? window.t('re.user_modal_edit') : window.t('re.user_modal_new')}</div>
+            <button class="modal-close" onclick="document.getElementById('rest-user-modal').remove()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+            </button>
+        </div>
+        <div class="modal-body">
+            <div id="ru-error" style="display:none;background:#FEE2E2;color:#991B1B;padding:10px 12px;border-radius:8px;font-size:.825rem;margin-bottom:12px"></div>
+            <div class="admin-form">
+                <div class="admin-field">
+                    <label>${window.t('re.field_full_name')}</label>
+                    <input id="ru-name" type="text" value="${escHtml(u?.full_name||'')}">
+                </div>
+                <div class="admin-field">
+                    <label>${window.t('re.field_login_type')}</label>
+                    <div style="display:flex;gap:16px;margin-top:4px">
+                        <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer">
+                            <input type="radio" name="ru-login" value="email" ${loginType==='email'?'checked':''} onchange="ruToggleLogin()"> Email
+                        </label>
+                        <label style="display:flex;align-items:center;gap:6px;font-weight:400;cursor:pointer">
+                            <input type="radio" name="ru-login" value="username" ${loginType==='username'?'checked':''} onchange="ruToggleLogin()"> ${window.t('re.login_type_username')}
+                        </label>
+                    </div>
+                </div>
+                <div class="admin-field-row">
+                    <div class="admin-field" id="ru-email-wrap" style="${loginType!=='email'?'display:none':''}">
+                        <label>${window.t('re.field_email')}</label>
+                        <input id="ru-email" type="email" value="${escHtml(u?.email||'')}">
+                    </div>
+                    <div class="admin-field" id="ru-uname-wrap" style="${loginType!=='username'?'display:none':''}">
+                        <label>${window.t('re.field_username')}</label>
+                        <input id="ru-uname" type="text" value="${escHtml(u?.username||'')}">
+                    </div>
+                    <div class="admin-field">
+                        <label>${isEdit ? window.t('re.field_password_edit') : window.t('re.field_password_new')}</label>
+                        <input id="ru-pass" type="password" autocomplete="new-password">
+                    </div>
+                </div>
+                <div class="admin-field">
+                    <label>${window.t('re.field_role')}</label>
+                    <select id="ru-role">
+                        <option value="user" ${u?.role!=='admin'?'selected':''}>${window.t('re.role_user')}</option>
+                        <option value="admin" ${u?.role==='admin'?'selected':''}>${window.t('re.role_admin')}</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-ghost" onclick="document.getElementById('rest-user-modal').remove()">${window.t('common.cancel')}</button>
+            <button class="btn btn-primary" id="ru-save-btn" onclick="saveRestUser(${userId||0})">
+                ${isEdit ? window.t('re.btn_save_changes') : window.t('re.btn_create_access')}
+            </button>
+        </div>
+    </div>`;
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+    setTimeout(() => document.getElementById('ru-name')?.focus(), 50);
+}
+
+window.ruToggleLogin = function() {
+    const t = document.querySelector('input[name="ru-login"]:checked')?.value;
+    document.getElementById('ru-email-wrap').style.display = t === 'email' ? '' : 'none';
+    document.getElementById('ru-uname-wrap').style.display = t === 'username' ? '' : 'none';
+};
+
+async function saveRestUser(userId) {
+    const btn = document.getElementById('ru-save-btn');
+    const errEl = document.getElementById('ru-error');
+    const name = document.getElementById('ru-name').value.trim();
+    const loginType = document.querySelector('input[name="ru-login"]:checked')?.value || 'email';
+    const email = document.getElementById('ru-email').value.trim();
+    const uname = document.getElementById('ru-uname').value.trim();
+    const pass = document.getElementById('ru-pass').value;
+    const role = document.getElementById('ru-role').value;
+
+    errEl.style.display = 'none';
+    if (!name) { errEl.textContent = window.t('re.err_name_required'); errEl.style.display = 'block'; return; }
+    if (loginType === 'email' && !email) { errEl.textContent = window.t('re.err_email_required'); errEl.style.display = 'block'; return; }
+    if (loginType === 'username' && !uname) { errEl.textContent = window.t('re.err_username_required'); errEl.style.display = 'block'; return; }
+    if (!userId && !pass) { errEl.textContent = window.t('re.err_password_required'); errEl.style.display = 'block'; return; }
+
+    btn.disabled = true; btn.textContent = '...';
+    const payload = { full_name: name, role, restaurant_id: REST_ID };
+    if (loginType === 'email') payload.email = email; else payload.username = uname;
+    if (pass) payload.password = pass;
+
+    try {
+        if (userId) {
+            await apiCall('PUT', `/api/users.php?id=${userId}`, payload);
+        } else {
+            await apiCall('POST', '/api/users.php', payload);
+        }
+        document.getElementById('rest-user-modal').remove();
+        toast(userId ? window.t('re.toast_access_updated') : window.t('re.toast_access_created'));
+        await loadRestUsers();
+    } catch(e) {
+        errEl.textContent = e.message || window.t('common.error');
+        errEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = userId ? window.t('re.btn_save_changes') : window.t('re.btn_create_access');
+    }
+}
+
+async function toggleRestUser(id, name, isActive) {
+    if (!confirm(window.t(isActive ? 're.confirm_deactivate' : 're.confirm_activate', {name}))) return;
+    try {
+        await apiCall('PUT', `/api/users.php?id=${id}`, { is_active: isActive ? 0 : 1 });
+        toast(window.t(isActive ? 're.toast_user_deactivated' : 're.toast_user_activated', {name}));
+        await loadRestUsers();
+    } catch(e) { toast(e.message, 'error'); }
+}
+
+async function deleteRestUser(id, name) {
+    if (!confirm(window.t('re.confirm_delete_user', {name}))) return;
+    try {
+        await apiCall('DELETE', `/api/users.php?id=${id}&force=1`);
+        toast(window.t('re.toast_user_deleted', {name}));
+        await loadRestUsers();
+    } catch(e) { toast(e.message, 'error'); }
+}
+
+loadRestUsers();
+
 // ── Tabs ──────────────────────────────────────────────────────
+function activateTab(name) {
+    const tab = document.querySelector(`.re-tab[data-tab="${name}"]`);
+    if (!tab) return;
+    document.querySelectorAll('.re-tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.re-panel').forEach(p=>p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-'+name).classList.add('active');
+    if (name === 'urnik'     && !urnikLoaded)  loadUrnik();
+    if (name === 'zaposleni' && !staffLoaded)  loadStaff();
+    if (name === 'polja'     && !cfLoaded)     loadCustomFields();
+    if (name === 'anketa'    && !surveyLoaded) loadSurveyForm();
+    if (name === 'mize'      && !tablesLoaded) loadTables();
+}
+
 document.querySelectorAll('.re-tab').forEach(tab => {
     tab.addEventListener('click', () => {
-        document.querySelectorAll('.re-tab').forEach(t=>t.classList.remove('active'));
-        document.querySelectorAll('.re-panel').forEach(p=>p.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById('panel-'+tab.dataset.tab).classList.add('active');
-        // Lazy load
-        if (tab.dataset.tab === 'urnik'   && !urnikLoaded)  loadUrnik();
-        if (tab.dataset.tab === 'zaposleni' && !staffLoaded) loadStaff();
-        if (tab.dataset.tab === 'polja'   && !cfLoaded)    loadCustomFields();
-        if (tab.dataset.tab === 'anketa'  && !surveyLoaded) loadSurveyForm();
-        if (tab.dataset.tab === 'mize'    && !tablesLoaded) loadTables();
+        history.replaceState(null, '', '#' + tab.dataset.tab);
+        activateTab(tab.dataset.tab);
     });
 });
+
 
 // ── Splošno – shrani ──────────────────────────────────────────
 document.getElementById('btn-save-splosno').addEventListener('click', async () => {
     const name         = document.getElementById('r-name').value.trim();
     const color        = document.getElementById('r-color').value;
-    const duration     = parseInt(document.getElementById('r-duration').value)||60;
-    const allowCustom  = document.getElementById('r-allow-custom').checked ? 1 : 0;
     const active       = parseInt(document.getElementById('r-active').value);
     const contactEmail = document.getElementById('r-contact-email').value.trim();
     const contactPhone = document.getElementById('r-contact-phone').value.trim();
-    if (!name) { showPageErr('Ime je obvezno.'); return; }
+    if (!name) { showPageErr(window.t('re.err_name_required')); return; }
     const btn = document.getElementById('btn-save-splosno');
     btn.disabled=true; btn.textContent='...';
     try {
         await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}`, {
-            name, color, reservation_duration: duration,
-            allow_custom_duration: allowCustom, is_active: active,
+            name, color, is_active: active,
             contact_email: contactEmail, contact_phone: contactPhone,
         });
         document.querySelector('.rest-edit-title').innerHTML =
             `<span class="rest-color-dot" id="hdr-color-dot" style="background:${color}"></span>${h(name)}`;
-        showPageOk('Shranjeno!');
+        showPageOk(window.t('re.toast_saved'));
     } catch(e) { showPageErr(e.message); }
-    btn.disabled=false; btn.textContent='Shrani';
+    btn.disabled=false; btn.textContent=window.t('common.save');
 });
 
 
 // ── Urnik ─────────────────────────────────────────────────────
-const DAY_NAMES = ['Ponedeljek','Torek','Sreda','Četrtek','Petek','Sobota','Nedelja'];
+const DAY_NAMES = [0,1,2,3,4,5,6].map(i => window.t('days.'+i));
 let urnikLoaded = false;
 let blackouts = [];
 
@@ -854,37 +1126,86 @@ async function loadUrnik() {
     } catch(e) { toast(e.message,'error'); }
 }
 
+function daySummary(day, periods) {
+    const times = periods.map(p => minsToTime(p.start_time) + ' – ' + minsToTime(p.end_time));
+    const timeStr = times.join(', ');
+    const slots   = periods.length > 1 ? `<div class="rz-sched-slots">${periods.length} termina</div>` : '';
+    return `<div class="rz-sched-time">${timeStr}</div>${slots}`;
+}
+
 function renderDaySchedule(ds) {
     const wrap = document.getElementById('day-schedule-wrap');
     wrap.innerHTML = DAY_NAMES.map((name, i) => {
-        const d      = ds.find(x=>x.day_of_week==i) || null;
-        const open   = d ? !!d.is_open : (i<5);
-        const periods = (d && d.periods && d.periods.length) ? d.periods : [{start_time: d?d.start_time:480, end_time: d?d.end_time:1380}];
-        const periodsHtml = periods.map((p,pi) => `
+        const d       = ds.find(x => x.day_of_week == i) || null;
+        const open    = d ? !!d.is_open : (i < 5);
+        const periods = (d && d.periods && d.periods.length)
+            ? d.periods
+            : [{start_time: d ? d.start_time : 480, end_time: d ? d.end_time : 1380}];
+
+        const periodsHtml = periods.map((p, pi) => `
             <div class="day-period-row" data-period="${pi}">
-                <input type="time" class="day-time-input day-start" data-day="${i}" data-period="${pi}" value="${minsToTime(p.start_time)}">
-                <span style="color:var(--color-muted);font-size:.8rem">–</span>
-                <input type="time" class="day-time-input day-end" data-day="${i}" data-period="${pi}" value="${minsToTime(p.end_time)}">
-                <button class="btn-period-del" onclick="removePeriod(${i},${pi},this)" title="Odstrani termin" ${periods.length<=1?'style="visibility:hidden"':''}>×</button>
+                <input type="time" class="day-time-input day-start" data-day="${i}" data-period="${pi}"
+                    value="${minsToTime(p.start_time)}" oninput="updateDaySummary(${i})">
+                <span style="color:var(--ink-mute);font-size:.8rem">–</span>
+                <input type="time" class="day-time-input day-end" data-day="${i}" data-period="${pi}"
+                    value="${minsToTime(p.end_time)}" oninput="updateDaySummary(${i})">
+                <button class="btn-period-del" onclick="removePeriod(${i},${pi},this)" ${periods.length<=1?'style="visibility:hidden"':''}>×</button>
             </div>`).join('');
-        return `<div class="day-row" id="day-row-${i}">
-            <label class="day-label-wrap">
-                <input type="checkbox" class="day-cb" data-day="${i}" ${open?'checked':''}
-                    style="width:16px;height:16px;accent-color:var(--color-accent);cursor:pointer;flex-shrink:0"
-                    onchange="toggleDayRow(${i},this.checked)">
-                <span style="font-size:.875rem;font-weight:500;color:var(--color-text)">${name}</span>
-            </label>
-            <div class="day-periods-wrap" id="day-periods-${i}" style="${!open?'opacity:.35;pointer-events:none':''}">
-                ${periodsHtml}
-                <button class="btn-period-add" onclick="addPeriod(${i})">+ Dodaj termin</button>
+
+        return `
+            <div class="rz-sched-row${open ? '' : ' is-closed'}" id="day-row-${i}">
+                <label class="rz-sched-day" style="cursor:pointer">
+                    <input type="checkbox" class="day-cb" data-day="${i}" ${open ? 'checked' : ''}
+                        style="width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0"
+                        onchange="toggleDayRow(${i},this.checked)">
+                    ${name}
+                </label>
+                <div id="day-summary-${i}">
+                    ${open ? daySummary(i, periods) : `<div class="rz-sched-time" style="color:var(--ink-mute)">${window.t('re.day_closed')}</div>`}
+                </div>
+                <span class="rz-chip ${open ? 'rz-chip-ok' : 'rz-chip-mute'}" id="day-chip-${i}">${open ? window.t('re.chip_open') : window.t('re.chip_closed')}</span>
+                <button class="rz-iconbtn" onclick="toggleDayEdit(${i})" title="Uredi urnik">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
             </div>
-        </div>`;
+            <div id="day-edit-${i}" class="rz-sched-edit" style="display:none">
+                <div class="day-periods-wrap" id="day-periods-${i}">
+                    ${periodsHtml}
+                    <button class="btn-period-add" onclick="addPeriod(${i})">${window.t('re.btn_add_period')}</button>
+                </div>
+            </div>`;
     }).join('');
 }
 
 window.toggleDayRow = (day, open) => {
-    const el = document.getElementById('day-periods-'+day);
-    if (el) { el.style.opacity=open?'1':'.35'; el.style.pointerEvents=open?'':'none'; }
+    const row  = document.getElementById('day-row-' + day);
+    const chip = document.getElementById('day-chip-' + day);
+    if (row)  { open ? row.classList.remove('is-closed') : row.classList.add('is-closed'); }
+    if (chip) { chip.className = `rz-chip ${open ? 'rz-chip-ok' : 'rz-chip-mute'}`; chip.textContent = open ? window.t('re.chip_open') : window.t('re.chip_closed'); }
+    updateDaySummary(day);
+    if (!open) { const ed = document.getElementById('day-edit-' + day); if (ed) ed.style.display = 'none'; }
+};
+
+window.toggleDayEdit = (day) => {
+    const ed = document.getElementById('day-edit-' + day);
+    if (ed) ed.style.display = ed.style.display === 'none' ? '' : 'none';
+};
+
+window.updateDaySummary = (day) => {
+    const cb   = document.querySelector(`.day-cb[data-day="${day}"]`);
+    const open = cb ? cb.checked : false;
+    const sum  = document.getElementById('day-summary-' + day);
+    if (!sum) return;
+    if (!open) { sum.innerHTML = `<div class="rz-sched-time" style="color:var(--ink-mute)">${window.t('re.day_closed')}</div>`; return; }
+    const wrap = document.getElementById('day-periods-' + day);
+    if (!wrap) return;
+    const periods = [];
+    wrap.querySelectorAll('.day-period-row').forEach(row => {
+        const st = timeToMins(row.querySelector('.day-start')?.value || '08:00');
+        const en = timeToMins(row.querySelector('.day-end')?.value   || '23:00');
+        periods.push({start_time: st, end_time: en});
+    });
+    sum.innerHTML = daySummary(day, periods);
 };
 
 window.addPeriod = (day) => {
@@ -892,42 +1213,40 @@ window.addPeriod = (day) => {
     if (!wrap) return;
     const rows = wrap.querySelectorAll('.day-period-row');
     const pi = rows.length;
-    // Vzemi konec zadnje periode kot začetek nove
     const lastEnd = wrap.querySelector(`.day-end[data-day="${day}"][data-period="${pi-1}"]`);
     const newStart = lastEnd ? lastEnd.value : '08:00';
     const div = document.createElement('div');
     div.className = 'day-period-row';
     div.dataset.period = pi;
     div.innerHTML = `
-        <input type="time" class="day-time-input day-start" data-day="${day}" data-period="${pi}" value="${newStart}">
-        <span style="color:var(--color-muted);font-size:.8rem">–</span>
-        <input type="time" class="day-time-input day-end" data-day="${day}" data-period="${pi}" value="${newStart}">
-        <button class="btn-period-del" onclick="removePeriod(${day},${pi},this)" title="Odstrani termin">×</button>`;
+        <input type="time" class="day-time-input day-start" data-day="${day}" data-period="${pi}" value="${newStart}" oninput="updateDaySummary(${day})">
+        <span style="color:var(--ink-mute);font-size:.8rem">–</span>
+        <input type="time" class="day-time-input day-end" data-day="${day}" data-period="${pi}" value="${newStart}" oninput="updateDaySummary(${day})">
+        <button class="btn-period-del" onclick="removePeriod(${day},${pi},this)">×</button>`;
     wrap.insertBefore(div, wrap.querySelector('.btn-period-add'));
-    // Pokaži delete button pri prvi periodi če je sedaj >1
     if (pi === 1) {
         const firstDel = wrap.querySelector(`.day-period-row[data-period="0"] .btn-period-del`);
         if (firstDel) firstDel.style.visibility = '';
     }
+    updateDaySummary(day);
 };
 
 window.removePeriod = (day, pi, btn) => {
     const wrap = document.getElementById('day-periods-'+day);
     if (!wrap) return;
     btn.closest('.day-period-row').remove();
-    // Renumber remaining periods
     wrap.querySelectorAll('.day-period-row').forEach((row,idx)=>{
         row.dataset.period = idx;
         row.querySelectorAll('[data-period]').forEach(el => el.dataset.period = idx);
         const del = row.querySelector('.btn-period-del');
         if (del) del.setAttribute('onclick', `removePeriod(${day},${idx},this)`);
     });
-    // Skrij delete pri edini periodi
     const rows = wrap.querySelectorAll('.day-period-row');
     if (rows.length === 1) {
         const del = rows[0].querySelector('.btn-period-del');
         if (del) del.style.visibility = 'hidden';
     }
+    updateDaySummary(day);
 };
 
 function getDaySchedules() {
@@ -953,69 +1272,86 @@ function getDaySchedules() {
     });
 }
 
-function blackoutTimeLabel(b) {
-    if (b.block_start == null || b.block_end == null) return '';
-    function fmt(m) { return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
-    return ` <span style="font-size:.8rem;background:#FFF7ED;border:1px solid #FED7AA;border-radius:4px;padding:1px 6px;color:#92400E">${fmt(b.block_start)}–${fmt(b.block_end)}</span>`;
+function fmtMins(m) { return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0'); }
+
+function fmtBlackoutDate(dateStr) {
+    const d = new Date(dateStr + 'T00:00:00');
+    const loc = (window.__T__ && window.__T__['common.locale']) || 'sl-SI';
+    return d.toLocaleDateString(loc, {day:'numeric', month:'short'});
 }
 
 function renderBlackouts() {
     const el = document.getElementById('blackout-list');
-    if (!blackouts.length) { el.innerHTML='<p style="font-size:.825rem;color:var(--color-muted)">Ni blokiranih datumov.</p>'; return; }
-    el.innerHTML = blackouts.map(b=>`
-        <div class="item-row" data-date="${b.blackout_date}">
-            <span class="item-row-name">${h(b.blackout_date)}${blackoutTimeLabel(b)}${b.reason?` <span style="color:var(--color-muted);font-weight:400">– ${h(b.reason)}</span>`:''}</span>
-            <button class="item-row-del" onclick="removeBlackout('${b.blackout_date}',this)" title="Odstrani">×</button>
-        </div>`).join('');
+    if (!blackouts.length) {
+        el.innerHTML = '<p style="font-size:.825rem;color:var(--ink-mute);margin:4px 0">Ni blokiranih datumov.</p>';
+        return;
+    }
+    el.innerHTML = blackouts.map(b => {
+        const sub = (b.block_start != null && b.block_end != null)
+            ? `${window.t('re.blackout_partial_schedule')} ${fmtMins(b.block_start)}–${fmtMins(b.block_end)}`
+            : window.t('re.day_closed');
+        return `
+        <div style="display:grid;grid-template-columns:80px 1fr auto;align-items:center;gap:14px;padding:12px 4px;border-top:1px solid var(--line)" data-date="${h(b.blackout_date)}">
+            <span style="font-size:13px;font-weight:700;color:var(--accent);font-family:var(--font-mono)">${fmtBlackoutDate(b.blackout_date)}</span>
+            <div>
+                <div style="font-size:13px;font-weight:600;color:var(--ink)">${b.reason ? h(b.reason) : window.t('re.blackout_blocked')}</div>
+                <div style="font-size:11px;color:var(--ink-mute);margin-top:2px">${sub}</div>
+            </div>
+            <button class="rz-iconbtn" onclick="removeBlackout('${h(b.blackout_date)}',this)" title="Odstrani">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+            </button>
+        </div>`;
+    }).join('');
 }
 
 window.removeBlackout = async (date, btn) => {
     try {
         await apiCall('DELETE', `/api/restaurants.php?id=${REST_ID}&action=remove_blackout&date=${date}`);
-        btn.closest('.item-row').remove();
-        blackouts = blackouts.filter(b=>b.blackout_date!==date);
+        btn.closest('[data-date]').remove();
+        blackouts = blackouts.filter(b => b.blackout_date !== date);
         if (!blackouts.length) renderBlackouts();
-        toast('Datum odstranjen.');
+        toast(window.t('re.toast_date_removed'));
     } catch(e) { toast(e.message,'error'); }
 };
 
-// Prikaži/skrij čas vnos pri delnem blokiranju
+window.toggleBlackoutForm = () => {
+    const form = document.getElementById('blackout-add-form');
+    if (form) form.style.display = form.style.display === 'none' ? '' : 'none';
+};
+
 document.getElementById('blackout-partial').addEventListener('change', function() {
-    const t1 = document.getElementById('blackout-time-inner');
-    const t2 = document.getElementById('blackout-time-inner2');
-    if (t1) t1.style.display = this.checked ? '' : 'none';
-    if (t2) t2.style.display = this.checked ? '' : 'none';
+    document.getElementById('blackout-time-inner').style.display  = this.checked ? '' : 'none';
+    document.getElementById('blackout-time-inner2').style.display = this.checked ? '' : 'none';
 });
 
 document.getElementById('btn-add-blackout').addEventListener('click', async () => {
     const date    = document.getElementById('blackout-date').value;
     const reason  = document.getElementById('blackout-reason').value.trim();
     const partial = document.getElementById('blackout-partial').checked;
-    if (!date) { toast('Izberite datum.','error'); return; }
+    if (!date) { toast(window.t('re.err_date_required'),'error'); return; }
     const payload = {date, reason};
     if (partial) {
         const bsVal = document.getElementById('blackout-start').value;
         const beVal = document.getElementById('blackout-end').value;
-        if (!bsVal || !beVal) { toast('Vnesite začetni in končni čas.','error'); return; }
+        if (!bsVal || !beVal) { toast(window.t('re.err_time_required'),'error'); return; }
         const bs = timeToMins(bsVal), be = timeToMins(beVal);
-        if (be <= bs) { toast('Končni čas mora biti večji od začetnega.','error'); return; }
+        if (be <= bs) { toast(window.t('re.err_end_after_start'),'error'); return; }
         payload.block_start = bs;
         payload.block_end   = be;
     }
     try {
-        const result = await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}&action=add_blackout`, payload);
+        await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}&action=add_blackout`, payload);
         blackouts.push({blackout_date:date, reason:reason||null, block_start:payload.block_start??null, block_end:payload.block_end??null});
         renderBlackouts();
-        document.getElementById('blackout-date').value='';
-        document.getElementById('blackout-reason').value='';
-        document.getElementById('blackout-partial').checked=false;
-        document.getElementById('blackout-start').value='';
-        document.getElementById('blackout-end').value='';
-        const t1 = document.getElementById('blackout-time-inner');
-        const t2 = document.getElementById('blackout-time-inner2');
-        if (t1) t1.style.display='none';
-        if (t2) t2.style.display='none';
-        toast('Datum dodan!');
+        document.getElementById('blackout-date').value = '';
+        document.getElementById('blackout-reason').value = '';
+        document.getElementById('blackout-partial').checked = false;
+        document.getElementById('blackout-start').value = '';
+        document.getElementById('blackout-end').value = '';
+        document.getElementById('blackout-time-inner').style.display  = 'none';
+        document.getElementById('blackout-time-inner2').style.display = 'none';
+        toggleBlackoutForm();
+        toast(window.t('re.toast_blackout_added'));
     } catch(e) { toast(e.message,'error'); }
 });
 
@@ -1027,7 +1363,7 @@ document.getElementById('btn-save-urnik').addEventListener('click', async () => 
         const name = DAY_NAMES[d.day_of_week];
         for (const p of d.periods) {
             if (p.end_time <= p.start_time) {
-                showPageErr(`${name}: končni čas mora biti večji od začetnega.`); return;
+                showPageErr(window.t('re.err_time_end_before_start', {name})); return;
             }
         }
         // Preveri prekrivanja med periodami
@@ -1035,19 +1371,28 @@ document.getElementById('btn-save-urnik').addEventListener('click', async () => 
         for (let i = 1; i < sorted.length; i++) {
             if (sorted[i].start_time < sorted[i-1].end_time) {
                 const fmt = m => String(Math.floor(m/60)).padStart(2,'0') + ':' + String(m%60).padStart(2,'0');
-                showPageErr(`${name}: termina ${fmt(sorted[i-1].start_time)}–${fmt(sorted[i-1].end_time)} in ${fmt(sorted[i].start_time)}–${fmt(sorted[i].end_time)} se prekrivata.`);
+                const t1 = fmt(sorted[i-1].start_time)+'–'+fmt(sorted[i-1].end_time);
+                const t2 = fmt(sorted[i].start_time)+'–'+fmt(sorted[i].end_time);
+                showPageErr(window.t('re.err_periods_overlap', {name, t1, t2}));
                 return;
             }
         }
     }
-    const overrideVal = document.getElementById('r-employees-override')?.checked ? 1 : 0;
+    const overrideVal  = document.getElementById('r-employees-override')?.checked ? 1 : 0;
+    const duration     = parseInt(document.getElementById('r-duration')?.value) || 60;
+    const allowCustom  = document.getElementById('r-allow-custom')?.checked ? 1 : 0;
     const btn = document.getElementById('btn-save-urnik');
     btn.disabled=true; btn.textContent='...';
     try {
-        await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}`, {day_schedules:ds, employees_can_override_schedule:overrideVal});
-        showPageOk('Urnik shranjen!');
+        await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}`, {
+            day_schedules: ds,
+            employees_can_override_schedule: overrideVal,
+            reservation_duration: duration,
+            allow_custom_duration: allowCustom,
+        });
+        showPageOk(window.t('re.toast_schedule_saved'));
     } catch(e) { showPageErr(e.message); }
-    btn.disabled=false; btn.textContent='Shrani urnik';
+    btn.disabled=false; btn.textContent=window.t('re.btn_save_schedule');
 });
 
 // ── Booking ───────────────────────────────────────────────────
@@ -1065,11 +1410,11 @@ document.getElementById('btn-save-urnik').addEventListener('click', async () => 
 
 window.copyBookingUrl = () => {
     const v = document.getElementById('booking-url-input')?.value;
-    if (v) navigator.clipboard.writeText(v).then(()=>toast('Povezava kopirana!'),()=>prompt('Kopiraj:',v));
+    if (v) navigator.clipboard.writeText(v).then(()=>toast(window.t('re.toast_url_copied')),()=>prompt(window.t('re.btn_copy')+':',v));
 };
 window.copyEmbed = () => {
     const v = document.getElementById('embed-code-input')?.value;
-    if (v) navigator.clipboard.writeText(v).then(()=>toast('Embed koda kopirana!'),()=>prompt('Kopiraj:',v));
+    if (v) navigator.clipboard.writeText(v).then(()=>toast(window.t('re.toast_embed_copied')),()=>prompt(window.t('re.btn_copy')+':',v));
 };
 
 document.getElementById('btn-save-booking').addEventListener('click', async () => {
@@ -1082,7 +1427,7 @@ document.getElementById('btn-save-booking').addEventListener('click', async () =
     const editCutoff  = parseInt(document.getElementById('r-edit-cutoff')?.value||'24');
     const allowCancel = document.getElementById('r-allow-cancel')?.checked ? 1 : 0;
     const cancelCutoff = parseInt(document.getElementById('r-cancel-cutoff')?.value||'4');
-    if (enabled && minG > maxG) { showPageErr('Min. gostov ne more biti večje od max.'); return; }
+    if (enabled && minG > maxG) { showPageErr(window.t('re.err_min_max_guests')); return; }
     const btn = document.getElementById('btn-save-booking');
     btn.disabled=true; btn.textContent='...';
     try {
@@ -1095,9 +1440,9 @@ document.getElementById('btn-save-booking').addEventListener('click', async () =
             waitlist_max_per_slot: parseInt(document.getElementById('r-waitlist-max')?.value ?? 3) || 0,
             allow_area_choice: document.getElementById('r-allow-area-choice')?.checked ? 1 : 0,
         });
-        showPageOk('Shranjeno!');
+        showPageOk(window.t('re.toast_saved'));
     } catch(e) { showPageErr(e.message); }
-    btn.disabled=false; btn.textContent='Shrani';
+    btn.disabled=false; btn.textContent=window.t('common.save');
 });
 
 // ── Zaposleni ─────────────────────────────────────────────────
@@ -1108,29 +1453,29 @@ async function loadStaff() {
     try {
         const staff = await apiCall('GET', `/api/staff.php?restaurant_id=${REST_ID}`);
         renderStaff(staff || []);
-    } catch(e) { document.getElementById('staff-list').innerHTML='<p style="color:var(--color-danger);font-size:.875rem">Napaka pri nalaganju.</p>'; }
+    } catch(e) { document.getElementById('staff-list').innerHTML=`<p style="color:var(--color-danger);font-size:.875rem">${window.t('re.err_load')}</p>`; }
 }
 
 function renderStaff(staff) {
     const el = document.getElementById('staff-list');
-    if (!staff.length) { el.innerHTML='<p style="font-size:.875rem;color:var(--color-muted)">Ni zaposlenih.</p>'; return; }
+    if (!staff.length) { el.innerHTML=`<p style="font-size:.875rem;color:var(--color-muted)">${window.t('re.no_staff')}</p>`; return; }
     el.innerHTML = staff.map(s=>`
         <div class="item-row" id="staff-row-${s.id}">
             <span class="item-row-name">${h(s.name)}</span>
-            ${s.is_active==0?'<span class="item-row-badge" style="background:#F3F4F6;color:var(--color-muted)">neaktiven</span>':''}
-            <button class="item-row-del" onclick="removeStaff(${s.id})" title="Odstrani">×</button>
+            ${s.is_active==0?`<span class="item-row-badge" style="background:#F3F4F6;color:var(--color-muted)">${window.t('re.staff_inactive_badge')}</span>`:''}
+            <button class="item-row-del" onclick="removeStaff(${s.id})" title="${window.t('re.btn_remove')}">×</button>
         </div>`).join('');
 }
 
 window.addStaff = async () => {
     const inp  = document.getElementById('staff-name-input');
     const name = inp.value.trim();
-    if (!name) { toast('Vnesite ime.','error'); return; }
+    if (!name) { toast(window.t('re.err_staff_name'),'error'); return; }
     try {
         await apiCall('POST', '/api/staff.php', {restaurant_id:REST_ID, name});
         inp.value = '';
         await loadStaff();
-        toast('Zaposleni dodan!');
+        toast(window.t('re.toast_staff_added'));
     } catch(e) { toast(e.message,'error'); }
 };
 
@@ -1138,15 +1483,15 @@ window.removeStaff = async (id) => {
     try {
         await apiCall('DELETE', `/api/staff.php?id=${id}`);
         await loadStaff();
-        toast('Zaposleni odstranjen.');
+        toast(window.t('re.toast_staff_removed'));
     } catch(e) { toast(e.message,'error'); }
 };
 
 // ── Polja po meri ──────────────────────────────────────────────
 let cfLoaded = false;
-const APPLIES_LABELS = {internal:'Samo interno', public:'Samo splet', both:'Interno + Splet'};
+const APPLIES_LABELS = () => ({internal:window.t('re.cf_applies_internal'), public:window.t('re.cf_applies_public'), both:window.t('re.cf_applies_both')});
 const APPLIES_CLASS  = {internal:'cf-badge-int',  public:'cf-badge-pub',  both:'cf-badge-both'};
-const TYPE_LABELS    = {text:'Besedilo', select:'Izbira', checkbox:'Da/Ne'};
+const TYPE_LABELS    = () => ({text:window.t('re.cf_type_text'), select:window.t('re.cf_type_select'), checkbox:window.t('re.cf_type_checkbox')});
 
 async function loadCustomFields() {
     cfLoaded = true;
@@ -1155,14 +1500,14 @@ async function loadCustomFields() {
         fields = await apiCall('GET', `/api/customfields.php?restaurant_id=${REST_ID}`);
     } catch(e) {
         console.error('CF load error:', e);
-        document.getElementById('cf-list').innerHTML = `<p style="color:var(--color-danger);font-size:.875rem">Napaka pri nalaganju: ${e.message}</p>`;
+        document.getElementById('cf-list').innerHTML = `<p style="color:var(--color-danger);font-size:.875rem">${window.t('re.err_load')}: ${e.message}</p>`;
         return;
     }
     try {
         renderCustomFields(fields || []);
     } catch(e) {
         console.error('CF render error:', e);
-        document.getElementById('cf-list').innerHTML = `<p style="color:var(--color-danger);font-size:.875rem">Napaka pri prikazu: ${e.message}</p>`;
+        document.getElementById('cf-list').innerHTML = `<p style="color:var(--color-danger);font-size:.875rem">${window.t('re.err_load')}: ${e.message}</p>`;
     }
 }
 
@@ -1186,9 +1531,9 @@ function cfAddCard(data = null) {
     const req     = data ? !!data.is_required : false;
     const opts    = data && data.options ? data.options : [];
 
-    const typeOpts = Object.entries(TYPE_LABELS).map(([v,l]) =>
+    const typeOpts = Object.entries(TYPE_LABELS()).map(([v,l]) =>
         `<option value="${v}"${v===type?' selected':''}>${l}</option>`).join('');
-    const appliesOpts = Object.entries(APPLIES_LABELS).map(([v,l]) =>
+    const appliesOpts = Object.entries(APPLIES_LABELS()).map(([v,l]) =>
         `<option value="${v}"${v===applies?' selected':''}>${l}</option>`).join('');
 
     const card = document.createElement('div');
@@ -1204,7 +1549,7 @@ function cfAddCard(data = null) {
                 <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/><circle cx="2" cy="6" r="1.5"/><circle cx="8" cy="6" r="1.5"/><circle cx="2" cy="10" r="1.5"/><circle cx="8" cy="10" r="1.5"/><circle cx="2" cy="14" r="1.5"/><circle cx="8" cy="14" r="1.5"/></svg>
             </div>
             <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-                <input type="text" id="cflabel-${ck}" placeholder="Oznaka polja (npr. Alergije) *" value="${h(label)}"
+                <input type="text" id="cflabel-${ck}" placeholder="${window.t('re.cf_label_placeholder')}" value="${h(label)}"
                     style="border:1.5px solid var(--color-border);border-radius:7px;padding:8px 10px;font-size:.875rem;font-family:var(--font);color:var(--color-text);width:100%;outline:none;box-sizing:border-box">
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                     <select id="cftype-${ck}"
@@ -1212,21 +1557,21 @@ function cfAddCard(data = null) {
                     <select id="cfapplies-${ck}"
                         style="border:1.5px solid var(--color-border);border-radius:7px;padding:7px 10px;font-size:.825rem;font-family:var(--font);background:var(--color-surface)">${appliesOpts}</select>
                     <label style="font-size:.82rem;color:var(--color-muted);display:flex;align-items:center;gap:5px;cursor:pointer">
-                        <input type="checkbox" id="cfreq-${ck}"${req?' checked':''} style="cursor:pointer;accent-color:var(--color-accent)"> Obvezno
+                        <input type="checkbox" id="cfreq-${ck}"${req?' checked':''} style="cursor:pointer;accent-color:var(--color-accent)"> ${window.t('re.cf_required')}
                     </label>
                 </div>
                 <div id="cfopts-${ck}" style="display:none;flex-direction:column;gap:4px"></div>
                 <button id="cfaddopt-${ck}" style="display:none;border:1px dashed var(--color-border);border-radius:6px;padding:5px 10px;font-size:.8rem;color:var(--color-muted);background:none;cursor:pointer;text-align:left;font-family:var(--font)"
                     onmouseenter="this.style.borderColor='var(--color-accent)';this.style.color='var(--color-accent)'"
-                    onmouseleave="this.style.borderColor='';this.style.color=''">+ Dodaj možnost</button>
+                    onmouseleave="this.style.borderColor='';this.style.color=''">+ ${window.t('re.cf_add_option')}</button>
             </div>
             <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;align-items:flex-end">
                 <button id="cfsave-${ck}"
-                    style="background:var(--color-accent);color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:.8rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap">Shrani</button>
+                    style="background:var(--color-accent);color:#fff;border:none;border-radius:7px;padding:6px 14px;font-size:.8rem;font-weight:600;cursor:pointer;font-family:var(--font);white-space:nowrap">${window.t('common.save')}</button>
                 <button id="cfdel-${ck}"
                     style="background:none;border:none;cursor:pointer;color:#EF4444;font-size:.8rem;padding:4px 6px;border-radius:5px;display:flex;align-items:center;gap:3px;white-space:nowrap"
                     onmouseenter="this.style.background='#FEF2F2'" onmouseleave="this.style.background='none'">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg> Briši
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg> ${window.t('common.delete')}
                 </button>
             </div>
         </div>`;
@@ -1263,7 +1608,7 @@ function cfAddCardOpt(ck, value = '') {
     row.id = `cfoptrow-${ok}`;
     row.style.cssText = 'display:flex;align-items:center;gap:6px';
     row.innerHTML = `
-        <input type="text" id="${ok}" placeholder="Možnost..." value="${h(value)}"
+        <input type="text" id="${ok}" placeholder="${window.t('re.cf_opt_placeholder')}" value="${h(value)}"
             style="flex:1;border:1.5px solid var(--color-border);border-radius:6px;padding:6px 9px;font-size:.83rem;font-family:var(--font);outline:none">
         <button onclick="document.getElementById('cfoptrow-${ok}').remove()"
             style="background:none;border:none;cursor:pointer;color:var(--color-muted);font-size:1.1rem;line-height:1;padding:2px 5px"
@@ -1278,12 +1623,12 @@ async function cfSaveCard(ck) {
     const type    = document.getElementById(`cftype-${ck}`).value;
     const applies = document.getElementById(`cfapplies-${ck}`).value;
     const req     = document.getElementById(`cfreq-${ck}`).checked ? 1 : 0;
-    if (!label) { toast('Oznaka je obvezna.', 'error'); return; }
+    if (!label) { toast(window.t('re.err_cf_label'), 'error'); return; }
     const options = type === 'select'
         ? Array.from(card.querySelectorAll(`#cfopts-${ck} input[type=text]`))
             .map(i => i.value.trim()).filter(Boolean)
         : [];
-    if (type === 'select' && !options.length) { toast('Vnesite vsaj eno možnost.', 'error'); return; }
+    if (type === 'select' && !options.length) { toast(window.t('re.err_cf_options'), 'error'); return; }
     const sortOrder = Array.from(document.querySelectorAll('#cf-list .cf-card')).indexOf(card);
     try {
         if (id) {
@@ -1297,18 +1642,18 @@ async function cfSaveCard(ck) {
             });
             card.dataset.cfId = result.id;
         }
-        toast('Shranjeno!');
+        toast(window.t('re.toast_saved'));
     } catch(e) { toast(e.message, 'error'); }
 }
 
 async function cfDeleteCard(ck) {
     const card = document.getElementById(`cfcard-${ck}`);
     const id   = card.dataset.cfId ? parseInt(card.dataset.cfId) : null;
-    if (id && !confirm('Izbrišete polje? Obstoječe vrednosti se ohranijo.')) return;
+    if (id && !confirm(window.t('re.confirm_cf_delete'))) return;
     if (id) {
         try {
             await apiCall('DELETE', `/api/customfields.php?id=${id}`);
-            toast('Polje odstranjeno.');
+            toast(window.t('re.toast_cf_deleted'));
         } catch(e) { toast(e.message, 'error'); return; }
     }
     card.remove();
@@ -1373,10 +1718,10 @@ let surveyLoaded = false;
 let sfQCounter   = 0;
 let sfOptCounter = 0;
 
-const SF_TYPE_LABELS = {
-    rating:'Zvezdičasta ocena (1–5)', radio:'Izbirni gumb (radio)',
-    checkbox:'Potrditvena polja', text:'Kratko besedilno polje', textarea:'Dolgo besedilno polje',
-};
+const SF_TYPE_LABELS = () => ({
+    rating:window.t('re.sf_type_rating'), radio:window.t('re.sf_type_radio'),
+    checkbox:window.t('re.sf_type_checkbox'), text:window.t('re.sf_type_text'), textarea:window.t('re.sf_type_textarea'),
+});
 
 function surveyToggleDelay() {
     const row = document.getElementById('sf-delay-row');
@@ -1465,7 +1810,7 @@ function fillSurveyForm(d) {
 }
 
 function resetSurveyForm() {
-    document.getElementById('sf-title').value        = 'Anketa o zadovoljstvu';
+    document.getElementById('sf-title').value        = window.t('re.survey_default_title');
     document.getElementById('sf-description').value  = '';
     document.getElementById('sf-thankyou').value     = '';
     document.getElementById('sf-send-enabled').checked  = false;
@@ -1490,10 +1835,13 @@ function surveyAddQuestion(data = null) {
     card.id = `sfcard-${qk}`;
     card.style.cssText = 'background:var(--color-bg);border:1px solid var(--color-border);border-radius:8px;padding:12px 14px';
 
-    const typeOpts = Object.entries(SF_TYPE_LABELS).map(([v,l]) =>
+    const typeOpts = Object.entries(SF_TYPE_LABELS()).map(([v,l]) =>
         `<option value="${v}"${v===type?' selected':''}>${l}</option>`).join('');
 
-    const TYPE_READABLE = { rating:'Zvezdičasta ocena (1–5)', radio:'Izbirni gumb', checkbox:'Potrditvena polja', text:'Kratko besedilo', textarea:'Dolgo besedilo' };
+    const TYPE_READABLE = {
+        rating:window.t('re.sf_type_rating'), radio:window.t('re.sf_type_radio_short'),
+        checkbox:window.t('re.sf_type_checkbox'), text:window.t('re.sf_type_text_short'), textarea:window.t('re.sf_type_textarea_short')
+    };
 
     if (canEdit) {
         card.draggable = true;
@@ -1503,22 +1851,22 @@ function surveyAddQuestion(data = null) {
                 <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor"><circle cx="2" cy="2" r="1.5"/><circle cx="8" cy="2" r="1.5"/><circle cx="2" cy="6" r="1.5"/><circle cx="8" cy="6" r="1.5"/><circle cx="2" cy="10" r="1.5"/><circle cx="8" cy="10" r="1.5"/><circle cx="2" cy="14" r="1.5"/><circle cx="8" cy="14" r="1.5"/></svg>
             </div>
             <div style="flex:1;display:flex;flex-direction:column;gap:6px">
-                <input type="text" id="sfqt-${qk}" placeholder="Besedilo vprašanja..." value="${h(text)}"
+                <input type="text" id="sfqt-${qk}" placeholder="${window.t('re.sf_q_placeholder')}" value="${h(text)}"
                     style="border:1.5px solid var(--color-border);border-radius:7px;padding:8px 10px;font-size:.875rem;font-family:var(--font);color:var(--color-text);width:100%;outline:none">
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                     <select id="sfqtype-${qk}" onchange="sfTypeChange('${qk}')"
                         style="border:1.5px solid var(--color-border);border-radius:7px;padding:7px 10px;font-size:.825rem;font-family:var(--font);background:#fff">${typeOpts}</select>
                     <label style="font-size:.82rem;color:var(--color-muted);display:flex;align-items:center;gap:5px;cursor:pointer">
-                        <input type="checkbox" id="sfqreq-${qk}"${req?' checked':''} style="cursor:pointer;accent-color:var(--color-accent)"> Obvezno
+                        <input type="checkbox" id="sfqreq-${qk}"${req?' checked':''} style="cursor:pointer;accent-color:var(--color-accent)"> ${window.t('re.cf_required')}
                     </label>
                 </div>
                 <div id="sfqopts-${qk}" style="display:flex;flex-direction:column;gap:4px"></div>
-                <button id="sfqaddopt-${qk}" onclick="sfAddOpt('${qk}')" style="display:none;border:1px dashed var(--color-border);border-radius:6px;padding:5px 10px;font-size:.8rem;color:var(--color-muted);background:none;cursor:pointer;text-align:left">+ Dodaj možnost</button>
+                <button id="sfqaddopt-${qk}" onclick="sfAddOpt('${qk}')" style="display:none;border:1px dashed var(--color-border);border-radius:6px;padding:5px 10px;font-size:.8rem;color:var(--color-muted);background:none;cursor:pointer;text-align:left">+ ${window.t('re.cf_add_option')}</button>
             </div>
             <button onclick="document.getElementById('sfcard-${qk}').remove()"
                 style="background:none;border:none;cursor:pointer;color:#EF4444;font-size:.8rem;padding:4px 6px;border-radius:5px;flex-shrink:0;display:flex;align-items:center;gap:3px;white-space:nowrap"
                 onmouseenter="this.style.background='#FEF2F2'" onmouseleave="this.style.background='none'">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg> Briši
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg> ${window.t('common.delete')}
             </button>
         </div>`;
         document.getElementById('sf-question-list').appendChild(card);
@@ -1526,7 +1874,7 @@ function surveyAddQuestion(data = null) {
         sfTypeChange(qk);
     } else {
         // Readonly prikaz vprašanja
-        const reqBadge = req ? '<span style="font-size:.72rem;background:#FEE2E2;color:#DC2626;padding:1px 6px;border-radius:10px;font-weight:600;margin-left:6px">Obvezno</span>' : '';
+        const reqBadge = req ? `<span style="font-size:.72rem;background:#FEE2E2;color:#DC2626;padding:1px 6px;border-radius:10px;font-weight:600;margin-left:6px">${window.t('re.cf_required')}</span>` : '';
         const typeBadge = `<span style="font-size:.72rem;background:var(--color-border);color:var(--color-muted);padding:1px 6px;border-radius:10px">${TYPE_READABLE[type]||type}</span>`;
         let optsHtml = '';
         if (opts.length) {
@@ -1560,7 +1908,7 @@ function sfAddOpt(qk, value = '') {
     row.id = `sfoptrow-${ok}`;
     row.style.cssText = 'display:flex;align-items:center;gap:6px';
     row.innerHTML = `
-        <input type="text" id="${ok}" placeholder="Možnost..." value="${h(value)}"
+        <input type="text" id="${ok}" placeholder="${window.t('re.cf_opt_placeholder')}" value="${h(value)}"
             style="flex:1;border:1.5px solid var(--color-border);border-radius:6px;padding:6px 9px;font-size:.83rem;font-family:var(--font);outline:none">
         <button onclick="document.getElementById('sfoptrow-${ok}').remove()"
             style="background:none;border:none;cursor:pointer;color:var(--color-muted);font-size:1.1rem;line-height:1;padding:2px 5px"
@@ -1593,7 +1941,7 @@ function collectSurveyQuestions() {
 async function saveSurveyForm() {
     const btn = document.getElementById('btn-save-survey');
     const st  = document.getElementById('sf-save-status');
-    btn.disabled = true; st.style.color=''; st.textContent = 'Shranjujem...';
+    btn.disabled = true; st.style.color=''; st.textContent = window.t('re.survey_status_saving');
     try {
         await apiCall('POST', '/api/survey.php?action=save_form', {
             restaurant_id:    REST_ID,
@@ -1606,10 +1954,10 @@ async function saveSurveyForm() {
             include_survey:   document.getElementById('sf-incl-survey').checked ? 1 : 0,
             questions:        collectSurveyQuestions(),
         });
-        st.style.color = '#059669'; st.textContent = 'Shranjeno!';
+        st.style.color = '#059669'; st.textContent = window.t('re.toast_saved');
         setTimeout(() => st.textContent = '', 3000);
     } catch(e) {
-        st.style.color = '#EF4444'; st.textContent = e.message || 'Napaka.';
+        st.style.color = '#EF4444'; st.textContent = e.message || window.t('common.error');
     }
     btn.disabled = false;
 }
@@ -1622,7 +1970,7 @@ async function loadSurveyResults() {
     if (from) params.set('date_from', from);
     if (to)   params.set('date_to',   to);
     const list = document.getElementById('sr-list');
-    list.innerHTML = '<p style="font-size:.85rem;color:var(--color-muted)">Nalagam...</p>';
+    list.innerHTML = `<p style="font-size:.85rem;color:var(--color-muted)">${window.t('common.loading')}</p>`;
     try {
         const rows = await apiCall('GET', `/api/survey.php?${params}`);
         renderSurveyResults(rows || []);
@@ -1631,23 +1979,24 @@ async function loadSurveyResults() {
 
 function renderSurveyResults(rows) {
     const list = document.getElementById('sr-list');
-    if (!rows.length) { list.innerHTML='<p style="font-size:.85rem;color:var(--color-muted)">Ni odgovorov.</p>'; return; }
-    const CONSENT = { public:'Javno', anonymous:'Anonimno', private:'Zasebno' };
+    if (!rows.length) { list.innerHTML=`<p style="font-size:.85rem;color:var(--color-muted)">${window.t('re.survey_no_responses')}</p>`; return; }
+    const CONSENT = { public:window.t('re.survey_consent_public'), anonymous:window.t('re.survey_consent_anon'), private:window.t('re.survey_consent_private') };
+    const loc = (window.__T__ && window.__T__['common.locale']) || 'sl-SI';
     list.innerHTML = `
     <table style="width:100%;border-collapse:collapse;font-size:.85rem">
         <thead><tr style="border-bottom:2px solid var(--color-border)">
-            <th style="padding:7px 10px;text-align:left;font-size:.75rem;font-weight:600;color:var(--color-muted)">Datum</th>
-            <th style="padding:7px 10px;text-align:left;font-size:.75rem;font-weight:600;color:var(--color-muted)">Gost</th>
-            <th style="padding:7px 10px;text-align:left;font-size:.75rem;font-weight:600;color:var(--color-muted)">Soglasje</th>
-            <th style="padding:7px 10px;text-align:left;font-size:.75rem;font-weight:600;color:var(--color-muted)">Status</th>
+            <th style="padding:7px 10px;text-align:left;font-size:.75rem;font-weight:600;color:var(--color-muted)">${window.t('re.survey_col_date')}</th>
+            <th style="padding:7px 10px;text-align:left;font-size:.75rem;font-weight:600;color:var(--color-muted)">${window.t('re.survey_col_guest')}</th>
+            <th style="padding:7px 10px;text-align:left;font-size:.75rem;font-weight:600;color:var(--color-muted)">${window.t('re.survey_col_consent')}</th>
+            <th style="padding:7px 10px;text-align:left;font-size:.75rem;font-weight:600;color:var(--color-muted)">${window.t('re.survey_col_status')}</th>
         </tr></thead>
         <tbody>${rows.map(r => {
-            const submitted = r.submitted_at ? new Date(r.submitted_at.replace(' ','T')).toLocaleDateString('sl-SI') : '–';
+            const submitted = r.submitted_at ? new Date(r.submitted_at.replace(' ','T')).toLocaleDateString(loc) : '–';
             const status = r.submitted_at
-                ? `<span style="color:#059669;font-size:.78rem;font-weight:600">Izpolnjena</span>`
+                ? `<span style="color:#059669;font-size:.78rem;font-weight:600">${window.t('re.survey_status_submitted')}</span>`
                 : r.email_sent_at
-                    ? `<span style="color:#92400E;font-size:.78rem">Email poslan</span>`
-                    : `<span style="color:var(--color-muted);font-size:.78rem">Čaka</span>`;
+                    ? `<span style="color:#92400E;font-size:.78rem">${window.t('re.survey_status_email_sent')}</span>`
+                    : `<span style="color:var(--color-muted);font-size:.78rem">${window.t('re.survey_status_pending')}</span>`;
             const consent = r.consent ? CONSENT[r.consent] || r.consent : '–';
             return `<tr style="border-bottom:1px solid var(--color-bg);cursor:${r.submitted_at?'pointer':'default'}"
                 onclick="${r.submitted_at ? `openSrDetail(${r.id})` : ''}">
@@ -1664,13 +2013,14 @@ async function openSrDetail(id) {
     const overlay = document.getElementById('sr-detail-overlay');
     const content = document.getElementById('sr-detail-content');
     overlay.style.display = 'flex';
-    content.innerHTML = '<p style="text-align:center;padding:30px;color:var(--color-muted)">Nalagam...</p>';
+    content.innerHTML = `<p style="text-align:center;padding:30px;color:var(--color-muted)">${window.t('common.loading')}</p>`;
     try {
         const { response: sr, answers } = await apiCall('GET', `/api/survey.php?action=get_response_detail&id=${id}`);
-        const CONSENT_MAP = { public:'Javno z imenom', anonymous:'Anonimno', private:'Ne strinja se z objavo' };
-        const submitted = sr.submitted_at ? new Date(sr.submitted_at.replace(' ','T')).toLocaleString('sl-SI') : '–';
-        let html = `<div style="font-size:1rem;font-weight:700;color:var(--color-text);margin-bottom:4px">Odgovor ankete</div>
-            <div style="font-size:.8rem;color:var(--color-muted);margin-bottom:18px">Oddano: ${submitted} · Soglasje: ${CONSENT_MAP[sr.consent]||'–'}</div>`;
+        const CONSENT_MAP = { public:window.t('re.survey_consent_public_full'), anonymous:window.t('re.survey_consent_anon'), private:window.t('re.survey_consent_private_full') };
+        const loc = (window.__T__ && window.__T__['common.locale']) || 'sl-SI';
+        const submitted = sr.submitted_at ? new Date(sr.submitted_at.replace(' ','T')).toLocaleString(loc) : '–';
+        let html = `<div style="font-size:1rem;font-weight:700;color:var(--color-text);margin-bottom:4px">${window.t('re.survey_detail_title')}</div>
+            <div style="font-size:.8rem;color:var(--color-muted);margin-bottom:18px">${window.t('re.survey_detail_submitted')} ${submitted} · ${window.t('re.survey_detail_consent')} ${CONSENT_MAP[sr.consent]||'–'}</div>`;
         (answers||[]).forEach(a => {
             html += `<div style="margin-bottom:14px">
                 <div style="font-size:.8rem;font-weight:600;color:var(--color-muted);margin-bottom:4px">${h(a.question_text)}</div>`;
@@ -1713,7 +2063,7 @@ async function saveTableMergeableSetting(enabled) {
     try {
         await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}`, { all_tables_mergeable: enabled ? 1 : 0 });
         applyMergeableSectionVisibility(enabled);
-        toast(enabled ? 'Združevanje vseh miz vklopljeno.' : 'Združevanje vseh miz izklopljeno.');
+        toast(enabled ? window.t('re.toast_merge_enabled') : window.t('re.toast_merge_disabled'));
     } catch(e) {
         toast(e.message, 'error');
         document.getElementById('all-tables-mergeable-toggle').checked = !enabled;
@@ -1730,18 +2080,21 @@ async function loadTables() {
         renderAreasWithTables();
         renderMergeGroups();
     } catch(e) {
-        document.getElementById('areas-list').innerHTML = `<p style="color:#EF4444;font-size:.875rem">${h(e.message)}</p>`;
+        document.getElementById('areas-list').innerHTML = `<p style="color:#EF4444;font-size:.875rem">${window.t('re.err_load')}: ${h(e.message)}</p>`;
     }
 }
 
 function renderTableRow(t) {
-    return `<div class="item-row" style="opacity:${t.is_active?1:.5};padding-left:20px">
-        <span style="font-size:.7rem;color:var(--color-muted);margin-right:2px">⌐</span>
-        <span class="item-row-name">${h(t.name)}</span>
-        <span class="item-row-badge" style="background:#DBEAFE;color:#1D4ED8">${t.capacity} oseb</span>
-        <span class="item-row-badge" style="background:${t.is_active?'#D1FAE5':'#F3F4F6'};color:${t.is_active?'#065F46':'#6B7280'}">${t.is_active?'Aktivna':'Neaktivna'}</span>
-        <button onclick="editTable(${t.id})" style="font-size:.8rem;padding:3px 8px;border:1.5px solid var(--color-border);border-radius:6px;background:transparent;cursor:pointer;font-family:var(--font)">Uredi</button>
-        <button class="item-row-del" onclick="deleteTable(${t.id})" title="Briši">✕</button>
+    const activeChip = t.is_active
+        ? `<span class="rz-chip rz-chip-ok">${window.t('re.table_chip_active')}</span>`
+        : `<span class="rz-chip rz-chip-mute">${window.t('re.table_chip_inactive')}</span>`;
+    return `<div style="display:grid;grid-template-columns:20px 1fr auto auto auto 26px;gap:10px;align-items:center;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg-elev);opacity:${t.is_active?1:.5}">
+        <span style="color:var(--ink-mute)">└</span>
+        <span style="font-size:13px;font-weight:500">${h(t.name)}</span>
+        <span class="rz-chip" style="background:color-mix(in oklab,var(--info) 12%,transparent);color:var(--info);border-color:transparent">${t.capacity} oseb</span>
+        ${activeChip}
+        <button onclick="editTable(${t.id})" class="rz-btn" style="padding:4px 10px;font-size:11px">${window.t('common.edit')}</button>
+        <button onclick="deleteTable(${t.id})" class="rz-iconbtn" style="width:26px;height:26px" title="${window.t('common.delete')}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>`;
 }
 
@@ -1765,51 +2118,52 @@ function renderAreasWithTables() {
     let html = '';
 
     if (!tablesData.areas.length && !tablesData.tables.length) {
-        el.innerHTML = '<p style="font-size:.85rem;color:var(--color-muted)">Ni definiranih con. Kliknite <strong>+ Cona</strong> za začetek. Cone so opcijsko — mize brez cone dodajte z gumbom spodaj.</p>';
-        // Gumb za dodajanje mize brez cone
-        el.innerHTML += `<div style="margin-top:10px"><button onclick="showTableForm(null,null)" class="btn-success" style="font-size:.8rem;padding:.4rem .9rem">+ Miza brez cone</button></div>`;
+        el.innerHTML = `<p style="font-size:13px;color:var(--ink-mute)">${window.t('re.no_areas_hint')}</p>
+            <div style="margin-top:10px"><button onclick="showTableForm(null,null)" class="rz-btn rz-btn-primary" style="font-size:12px;padding:5px 12px">+ ${window.t('re.btn_table_no_area')}</button></div>`;
         return;
     }
 
     // Cone s svojimi mizami
     tablesData.areas.forEach(a => {
         const tables = tablesByArea[a.id] || [];
-        html += `<div id="area-block-${a.id}" style="border:1.5px solid var(--color-border);border-radius:10px;margin-bottom:10px;overflow:hidden">
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--color-surface);border-bottom:${tables.length?'1px solid var(--color-border)':'none'}">
-                <div style="display:flex;align-items:center;gap:8px">
-                    <strong style="font-size:.875rem">${h(a.name)}</strong>
-                    <span class="item-row-badge" style="background:${a.is_active?'#D1FAE5':'#F3F4F6'};color:${a.is_active?'#065F46':'#6B7280'}">${a.is_active?'Aktivna':'Neaktivna'}</span>
-                    <span style="font-size:.78rem;color:var(--color-muted)">${tables.length} ${tables.length===1?'miza':'miz'}</span>
+        const activeChip = a.is_active
+            ? `<span class="rz-chip rz-chip-ok">AKTIVNA</span>`
+            : `<span class="rz-chip rz-chip-mute">NEAKTIVNA</span>`;
+        html += `<div id="area-block-${a.id}" style="border:1px solid var(--line);border-radius:10px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--bg-sunken);border-bottom:1px solid var(--line)">
+                <strong style="font-size:14px;color:var(--ink)">${h(a.name)}</strong>
+                ${activeChip}
+                <span style="font-size:12px;color:var(--ink-mute)">${window.t('re.area_tables_count', {count: tables.length})}</span>
+                <div style="margin-left:auto;display:flex;gap:6px">
+                    <button onclick="showTableForm(null,${a.id})" class="rz-btn rz-btn-primary" style="padding:5px 10px;font-size:12px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> ${window.t('re.btn_add_table')}</button>
+                    <button onclick="editArea(${a.id})" class="rz-btn" style="padding:5px 10px;font-size:12px">${window.t('re.btn_edit_area')}</button>
+                    <button onclick="deleteArea(${a.id})" class="rz-iconbtn" style="width:26px;height:26px" title="${window.t('common.delete')}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
                 </div>
-                <div style="display:flex;gap:6px;align-items:center">
-                    <button onclick="showTableForm(null,${a.id})" class="btn-success" style="font-size:.75rem;padding:3px 8px">+ Miza</button>
-                    <button onclick="editArea(${a.id})" style="font-size:.78rem;padding:3px 8px;border:1.5px solid var(--color-border);border-radius:6px;background:transparent;cursor:pointer;font-family:var(--font)">Uredi cono</button>
-                    <button class="item-row-del" onclick="deleteArea(${a.id})" title="Briši cono">✕</button>
-                </div>
-            </div>`;
+            </div>
+            <div style="padding:10px;display:flex;flex-direction:column;gap:6px">`;
         if (tables.length) {
-            html += `<div style="padding:4px 0">${tables.map(renderTableRow).join('')}</div>`;
+            html += tables.map(renderTableRow).join('');
         } else {
-            html += `<p style="font-size:.8rem;color:var(--color-muted);margin:0;padding:10px 14px">Ni miz v tej coni.</p>`;
+            html += `<p style="font-size:13px;color:var(--ink-mute);margin:0">${window.t('re.no_tables_in_area')}</p>`;
         }
-        html += '</div>';
+        html += `</div></div>`;
     });
 
     // Mize brez cone
     if (noAreaTables.length || !tablesData.areas.length) {
-        const headerLabel = tablesData.areas.length ? 'Brez cone' : 'Mize';
-        html += `<div id="area-block-no-area" style="border:1.5px dashed var(--color-border);border-radius:10px;margin-bottom:10px;overflow:hidden">
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;background:var(--color-surface)">
-                <div style="display:flex;align-items:center;gap:8px">
-                    <strong style="font-size:.875rem;color:var(--color-muted)">${headerLabel}</strong>
-                    <span style="font-size:.78rem;color:var(--color-muted)">${noAreaTables.length} ${noAreaTables.length===1?'miza':'miz'}</span>
+        const headerLabel = tablesData.areas.length ? window.t('re.no_area_label') : window.t('re.tab_tables');
+        html += `<div id="area-block-no-area" style="border:1px dashed var(--line);border-radius:10px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--bg-sunken)">
+                <strong style="font-size:14px;color:var(--ink-mute)">${headerLabel}</strong>
+                <span style="font-size:12px;color:var(--ink-mute)">${window.t('re.area_tables_count', {count: noAreaTables.length})}</span>
+                <div style="margin-left:auto">
+                    <button onclick="showTableForm(null,null)" class="rz-btn rz-btn-primary" style="padding:5px 10px;font-size:12px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> ${window.t('re.btn_add_table')}</button>
                 </div>
-                <button onclick="showTableForm(null,null)" class="btn-success" style="font-size:.75rem;padding:3px 8px">+ Miza</button>
             </div>`;
         if (noAreaTables.length) {
-            html += `<div style="padding:4px 0">${noAreaTables.map(renderTableRow).join('')}</div>`;
+            html += `<div style="padding:10px;display:flex;flex-direction:column;gap:6px">${noAreaTables.map(renderTableRow).join('')}</div>`;
         }
-        html += '</div>';
+        html += `</div>`;
     }
 
     el.innerHTML = html;
@@ -1817,14 +2171,14 @@ function renderAreasWithTables() {
 
 function renderMergeGroups() {
     const el = document.getElementById('merge-groups-list');
-    if (!tablesData.merge_groups.length) { el.innerHTML = '<p style="font-size:.85rem;color:var(--color-muted)">Ni definiranih skupin za združevanje.</p>'; return; }
+    if (!tablesData.merge_groups.length) { el.innerHTML = `<p style="font-size:13px;color:var(--ink-mute)">${window.t('re.no_merge_groups')}</p>`; return; }
     el.innerHTML = tablesData.merge_groups.map(g => `
-        <div class="item-row">
-            <span class="item-row-name">${g.name ? h(g.name) : '<em style="color:var(--color-muted)">Brez imena</em>'}</span>
-            <span class="item-row-badge" style="background:#FEF3C7;color:#92400E">${g.member_names.join(' + ')}</span>
-            <span class="item-row-badge" style="background:#DBEAFE;color:#1D4ED8">${g.total_capacity} oseb skupaj</span>
-            <button onclick="editMergeGroup(${g.id})" style="font-size:.8rem;padding:3px 8px;border:1.5px solid var(--color-border);border-radius:6px;background:transparent;cursor:pointer;font-family:var(--font)">Uredi</button>
-            <button class="item-row-del" onclick="deleteMergeGroup(${g.id})" title="Briši">✕</button>
+        <div style="display:grid;grid-template-columns:1fr auto auto auto 26px;gap:10px;align-items:center;padding:12px 14px;border:1px solid var(--line);border-radius:8px">
+            <strong style="font-size:13px">${g.name ? h(g.name) : `<em style="color:var(--ink-mute)">${window.t('re.no_name')}</em>`}</strong>
+            <span class="rz-chip" style="background:color-mix(in oklab,var(--warning) 18%,transparent);color:var(--warning);border-color:transparent">${g.member_names.join(' + ')}</span>
+            <span class="rz-chip" style="background:color-mix(in oklab,var(--success) 12%,transparent);color:var(--success);border-color:transparent">${window.t('re.merge_capacity', {n: g.total_capacity})}</span>
+            <button onclick="editMergeGroup(${g.id})" class="rz-btn" style="padding:4px 10px;font-size:11px">${window.t('common.edit')}</button>
+            <button onclick="deleteMergeGroup(${g.id})" class="rz-iconbtn" style="width:26px;height:26px" title="${window.t('common.delete')}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
     `).join('');
 }
@@ -1835,7 +2189,7 @@ function showAreaForm(editId=null) {
     const existing = editId ? tablesData.areas.find(a=>a.id===editId) : null;
     document.getElementById('area-name-input').value = existing?.name || '';
     document.getElementById('area-edit-id').value = editId || '';
-    document.getElementById('area-form-title').textContent = editId ? 'Uredi cono' : 'Nova cona';
+    document.getElementById('area-form-title').textContent = editId ? window.t('re.area_form_edit') : window.t('re.area_form_new');
     f.style.display = 'block';
     document.getElementById('area-name-input').focus();
 }
@@ -1845,7 +2199,7 @@ function editArea(id) { showAreaForm(id); }
 async function saveArea() {
     const name   = document.getElementById('area-name-input').value.trim();
     const editId = document.getElementById('area-edit-id').value;
-    if (!name) { toast('Vnesite ime cone.','error'); return; }
+    if (!name) { toast(window.t('re.err_area_name'),'error'); return; }
     try {
         if (editId) {
             await apiCall('PUT', `/api/tables.php?area_id=${editId}`, { name });
@@ -1854,23 +2208,23 @@ async function saveArea() {
         }
         cancelAreaForm();
         await loadTables();
-        toast(editId ? 'Cona posodobljena.' : 'Cona dodana.');
+        toast(editId ? window.t('re.toast_area_updated') : window.t('re.toast_area_added'));
     } catch(e) { toast(e.message,'error'); }
 }
 
 async function deleteArea(id) {
-    if (!confirm('Izbriši cono? Mize v tej coni bodo ostale brez dodelitve.')) return;
+    if (!confirm(window.t('re.confirm_delete_area'))) return;
     try {
         await apiCall('DELETE', `/api/tables.php?area_id=${id}`);
         tablesLoaded = false; await loadTables();
-        toast('Cona izbrisana.');
+        toast(window.t('re.toast_area_deleted'));
     } catch(e) { toast(e.message,'error'); }
 }
 
 // ─ Table form ─
 function populateAreaSelect(selectedId=null) {
     const sel = document.getElementById('table-area-select');
-    sel.innerHTML = '<option value="">— brez cone —</option>' +
+    sel.innerHTML = `<option value="">${window.t('re.table_no_area')}</option>` +
         tablesData.areas.map(a => `<option value="${a.id}" ${selectedId==a.id?'selected':''}>${h(a.name)}</option>`).join('');
 }
 
@@ -1882,7 +2236,7 @@ function showTableForm(editId=null, presetAreaId=null) {
     document.getElementById('table-cap-input').value  = t?.capacity || 2;
     document.getElementById('table-edit-id').value    = editId || '';
     document.getElementById('table-form-anchor').value = presetAreaId || '';
-    document.getElementById('table-form-title').textContent = editId ? 'Uredi mizo' : 'Nova miza';
+    document.getElementById('table-form-title').textContent = editId ? window.t('re.table_form_edit') : window.t('re.table_form_new');
     populateAreaSelect(t?.area_id ?? presetAreaId);
 
     // Forma se prikaže pod pravilno cono (ali na koncu, če brez cone)
@@ -1904,7 +2258,7 @@ async function saveTable() {
     const capacity = parseInt(document.getElementById('table-cap-input').value) || 2;
     const areaId   = document.getElementById('table-area-select').value || null;
     const editId   = document.getElementById('table-edit-id').value;
-    if (!name) { toast('Vnesite ime mize.','error'); return; }
+    if (!name) { toast(window.t('re.err_table_name'),'error'); return; }
     try {
         if (editId) {
             await apiCall('PUT', `/api/tables.php?table_id=${editId}`, { name, capacity, area_id: areaId });
@@ -1913,16 +2267,16 @@ async function saveTable() {
         }
         cancelTableForm();
         tablesLoaded = false; await loadTables();
-        toast(editId ? 'Miza posodobljena.' : 'Miza dodana.');
+        toast(editId ? window.t('re.toast_table_updated') : window.t('re.toast_table_added'));
     } catch(e) { toast(e.message,'error'); }
 }
 
 async function deleteTable(id) {
-    if (!confirm('Izbriši mizo?')) return;
+    if (!confirm(window.t('re.confirm_delete_table'))) return;
     try {
         await apiCall('DELETE', `/api/tables.php?table_id=${id}`);
         tablesLoaded = false; await loadTables();
-        toast('Miza izbrisana.');
+        toast(window.t('re.toast_table_deleted'));
     } catch(e) { toast(e.message,'error'); }
 }
 
@@ -1934,9 +2288,9 @@ function showMergeForm(editId=null) {
     document.getElementById('mg-edit-id').value    = editId || '';
     const cbWrap = document.getElementById('mg-tables-checkboxes');
     cbWrap.innerHTML = tablesData.tables.filter(t=>t.is_active).map(t => `
-        <label style="display:flex;align-items:center;gap:6px;font-size:.85rem;cursor:pointer;background:var(--color-surface);border:1.5px solid var(--color-border);border-radius:8px;padding:6px 10px">
-            <input type="checkbox" value="${t.id}" ${g?.member_ids?.includes(t.id)?'checked':''}>
-            ${h(t.name)} <span style="font-size:.75rem;color:var(--color-muted)">(${t.capacity} os.)</span>
+        <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;background:var(--bg-elev);border:1px solid var(--line);border-radius:8px;padding:6px 10px">
+            <input type="checkbox" value="${t.id}" ${g?.member_ids?.includes(t.id)?'checked':''} style="accent-color:var(--accent)">
+            ${h(t.name)} <span style="font-size:11px;color:var(--ink-mute)">(${t.capacity} os.)</span>
         </label>
     `).join('');
     f.style.display = 'block';
@@ -1948,7 +2302,7 @@ async function saveMergeGroup() {
     const name    = document.getElementById('mg-name-input').value.trim() || null;
     const editId  = document.getElementById('mg-edit-id').value;
     const checked = [...document.querySelectorAll('#mg-tables-checkboxes input:checked')].map(i=>parseInt(i.value));
-    if (checked.length < 2) { toast('Izberite vsaj 2 mizi.','error'); return; }
+    if (checked.length < 2) { toast(window.t('re.err_merge_min_tables'),'error'); return; }
     try {
         if (editId) {
             await apiCall('PUT', `/api/tables.php?merge_group_id=${editId}`, { name, member_table_ids: checked });
@@ -1957,23 +2311,32 @@ async function saveMergeGroup() {
         }
         cancelMergeForm();
         tablesLoaded = false; await loadTables();
-        toast(editId ? 'Skupina posodobljena.' : 'Skupina dodana.');
+        toast(editId ? window.t('re.toast_merge_group_updated') : window.t('re.toast_merge_group_added'));
     } catch(e) { toast(e.message,'error'); }
 }
 
 async function deleteMergeGroup(id) {
-    if (!confirm('Izbriši skupino za združevanje?')) return;
+    if (!confirm(window.t('re.confirm_delete_merge_group'))) return;
     try {
         await apiCall('DELETE', `/api/tables.php?merge_group_id=${id}`);
         tablesLoaded = false; await loadTables();
-        toast('Skupina izbrisana.');
+        toast(window.t('re.toast_merge_group_deleted'));
     } catch(e) { toast(e.message,'error'); }
 }
 <?php else: ?>
 let tablesLoaded = false;
 function loadTables() { tablesLoaded = true; }
 <?php endif; ?>
+// Ob zagonu aktiviraj tab iz hash-a
+(function() {
+    const hash = location.hash.replace('#', '');
+    const valid = ['splosno','urnik','booking','zaposleni','polja','anketa','mize'];
+    if (hash && valid.includes(hash)) activateTab(hash);
+})();
 </script>
+<script src="<?= BASE_PATH ?>/assets/js/rezble-shell.js?v=1"></script>
 
+</main>
+</div><!-- /rz-app -->
 </body>
 </html>

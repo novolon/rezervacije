@@ -46,25 +46,33 @@ if ($method === 'GET') {
     if (!$rest_id) json_response(false, null, 'restaurant_id je obvezen.', 400);
     check_rest_access($pdo, $session, $rest_id);
 
-    // Profil posameznega gosta (po emailu)
-    if (!empty($_GET['email'])) {
-        $email = strtolower(trim($_GET['email']));
-        $profile = get_guest_profile($pdo, $rest_id, $email);
+    // Profil posameznega gosta (po emailu ALI telefonu)
+    if (!empty($_GET['email']) || !empty($_GET['phone'])) {
+        $email = !empty($_GET['email']) ? strtolower(trim($_GET['email'])) : null;
+        $phone = !empty($_GET['phone']) ? trim($_GET['phone']) : null;
+
+        $profile = get_guest_profile($pdo, $rest_id, $email, $phone);
         if (!$profile) json_response(false, null, 'Gost ne obstaja.', 404);
         $profile['tags'] = $profile['tags'] ? json_decode($profile['tags'], true) : [];
-        $profile['history'] = get_guest_history($pdo, $rest_id, $email, 20);
+        $profile['history'] = get_guest_history($pdo, $rest_id, $profile['email'], 20, $profile['phone']);
 
         // Ankete – povprečna ocena
         try {
+            $surveyEmailCond = $profile['email']
+                ? "sr.email = ?"
+                : "1=0";
+            $surveyParams = $profile['email']
+                ? [$profile['email'], $rest_id]
+                : [$rest_id];
             $stmt = $pdo->prepare("
                 SELECT AVG(sq.rating_value) AS avg_rating, COUNT(DISTINCT sr.id) AS survey_count
                 FROM survey_responses sr
                 JOIN survey_answers sa ON sa.response_id = sr.id
                 JOIN survey_questions sq ON sa.question_id = sq.id AND sq.type = 'rating'
-                WHERE sr.email = ? AND sr.submitted_at IS NOT NULL
+                WHERE {$surveyEmailCond} AND sr.submitted_at IS NOT NULL
                   AND EXISTS (SELECT 1 FROM survey_forms sf WHERE sf.id = sr.survey_id AND sf.restaurant_id = ?)
             ");
-            $stmt->execute([$email, $rest_id]);
+            $stmt->execute($surveyParams);
             $row = $stmt->fetch();
             $profile['avg_rating']   = $row['avg_rating']   ? round((float)$row['avg_rating'], 1) : null;
             $profile['survey_count'] = (int)($row['survey_count'] ?? 0);

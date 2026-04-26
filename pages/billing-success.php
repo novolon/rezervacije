@@ -3,6 +3,7 @@ require_once '../includes/auth_check.php';
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/plans.php';
+require_once '../includes/lang.php';
 
 if (!is_logged_in()) redirect_to_login();
 if ($_SESSION['role'] !== 'admin') {
@@ -19,11 +20,11 @@ $planName = PLANS[$sub['plan_slug'] ?? 'basic']['name'] ?? 'paket';
 $fullName = $_SESSION['full_name'];
 ?>
 <!DOCTYPE html>
-<html lang="sl">
+<html lang="<?= get_lang() ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Plačilo uspešno – <?= h(APP_NAME) ?></title>
+    <title><?= t('billing_success.page_title') ?> – <?= h(APP_NAME) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css">
@@ -39,7 +40,7 @@ $fullName = $_SESSION['full_name'];
     </a>
     <div class="header-actions">
         <span class="header-user">👤 <?= h($fullName) ?></span>
-        <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
+        <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout"><?= t('billing_success.logout') ?></a>
     </div>
 </header>
 
@@ -48,12 +49,12 @@ $fullName = $_SESSION['full_name'];
         <div style="width:64px;height:64px;background:#D1FAE5;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
         </div>
-        <h1 style="font-size:1.5rem;font-weight:700;color:#111827;margin:0 0 10px">Plačilo uspešno!</h1>
-        <p style="color:#6B7280;margin:0 0 8px">Paket <strong><?= h($planName) ?></strong> je aktiviran.</p>
-        <p style="color:#6B7280;font-size:.875rem;margin:0 0 28px">Zahvaljujemo se za zaupanje. Vse funkcionalnosti so zdaj na voljo.</p>
+        <h1 style="font-size:1.5rem;font-weight:700;color:#111827;margin:0 0 10px"><?= t('billing_success.page_title') ?></h1>
+        <p style="color:#6B7280;margin:0 0 8px"><?= t('billing_success.plan_prefix') ?> <strong><?= h($planName) ?></strong> <?= t('billing_success.plan_activated') ?></p>
+        <p style="color:#6B7280;font-size:.875rem;margin:0 0 28px"><?= t('billing_success.thank_you') ?></p>
         <a href="<?= BASE_PATH ?>/pages/main.php" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:8px;text-decoration:none">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-            Na razpored
+            <?= t('billing_success.go_schedule') ?>
         </a>
     </div>
 </div>

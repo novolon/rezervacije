@@ -4,15 +4,16 @@
  * URL: /pages/survey.php?t={token}
  */
 require_once '../config.php';
+require_once '../includes/lang.php';
 
 $token = trim($_GET['t'] ?? '');
 ?>
 <!DOCTYPE html>
-<html lang="sl">
+<html lang="<?= get_lang() ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Anketa – <?= htmlspecialchars(APP_NAME, ENT_QUOTES) ?></title>
+    <title><?= t('survey.page_title') ?> – <?= htmlspecialchars(APP_NAME, ENT_QUOTES) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -63,6 +64,10 @@ $token = trim($_GET['t'] ?? '');
         .err-text{color:#EF4444;font-size:.83rem;margin-top:6px}
         @media(max-width:480px){.survey-card{padding:20px 16px 24px}}
     </style>
+    <script>
+    window.__T__ = <?= json_encode(get_lang_strings(), JSON_UNESCAPED_UNICODE) ?>;
+    window.t = function(k, p) { var s = window.__T__[k] || k; if (p) { for (var x in p) s = s.split('{'+x+'}').join(p[x]); } return s; };
+    </script>
 </head>
 <body>
 <div class="survey-page">
@@ -78,7 +83,7 @@ $token = trim($_GET['t'] ?? '');
     </div>
 
     <div id="app">
-        <div class="state-wrap"><div class="state-icon">⏳</div><div class="state-sub">Nalagam...</div></div>
+        <div class="state-wrap"><div class="state-icon">⏳</div><div class="state-sub"><?= t('survey.loading') ?></div></div>
     </div>
 </div>
 
@@ -102,22 +107,22 @@ function showState(icon, title, sub) {
 }
 
 if (!TOKEN) {
-    showState('❌', 'Neveljavna povezava', 'Ta anketa ne obstaja ali je bila izbrisana.');
+    showState('❌', window.t('survey.invalid_link'), window.t('survey.invalid_link_sub'));
 } else {
     fetch(`${BASE}/api/survey.php?action=get_by_token&token=${encodeURIComponent(TOKEN)}`)
         .then(r => r.json())
         .then(res => {
             if (!res.success) {
-                showState('❌', 'Neveljavna povezava', res.error || '');
+                showState('❌', window.t('survey.invalid_link'), res.error || '');
                 return;
             }
             if (res.data && res.data.already_submitted) {
-                showState('✅', 'Anketa je bila že izpolnjena', 'Hvala! Vaše mnenje smo že prejeli.');
+                showState('✅', window.t('survey.already_submitted_title'), window.t('survey.already_submitted_sub'));
                 return;
             }
             renderSurvey(res.data);
         })
-        .catch(() => showState('❌', 'Napaka', 'Prišlo je do napake. Poskusite znova.'));
+        .catch(() => showState('❌', window.t('survey.error_title'), window.t('survey.error_sub')));
 }
 
 function renderSurvey(data) {
@@ -159,24 +164,24 @@ function renderSurvey(data) {
     // Soglasje
     const consentHtml = `
     <div class="question-block" id="block-consent">
-        <span class="question-label">Soglasje za objavo<span class="required">*</span></span>
+        <span class="question-label">${window.t('survey.consent_label')}<span class="required">*</span></span>
         <div class="consent-section">
-            <div class="consent-title">Kako smemo uporabiti vaše odgovore?</div>
+            <div class="consent-title">${window.t('survey.consent_title')}</div>
             <div class="option-item" onclick="selectConsent('public', this)">
                 <input type="radio" name="consent" value="public" id="c-public">
-                <label for="c-public">Strinjam se z objavo z imenom</label>
+                <label for="c-public">${window.t('survey.consent_public')}</label>
             </div>
             <div class="option-item" onclick="selectConsent('anonymous', this)">
                 <input type="radio" name="consent" value="anonymous" id="c-anon">
-                <label for="c-anon">Strinjam se z anonimno objavo</label>
+                <label for="c-anon">${window.t('survey.consent_anonymous')}</label>
             </div>
             <div class="option-item" onclick="selectConsent('private', this)">
                 <input type="radio" name="consent" value="private" id="c-private">
-                <label for="c-private">Ne strinjam se z objavo</label>
+                <label for="c-private">${window.t('survey.consent_private')}</label>
             </div>
-            <p class="consent-note">Vaš email ne bo nikoli javno objavljen.</p>
+            <p class="consent-note">${window.t('survey.consent_note')}</p>
         </div>
-        <div class="err-text" id="err-consent" style="display:none">Prosimo, izberite eno od možnosti.</div>
+        <div class="err-text" id="err-consent" style="display:none">${window.t('survey.consent_error')}</div>
     </div>`;
 
     app.innerHTML = `
@@ -187,7 +192,7 @@ function renderSurvey(data) {
         <form class="survey-card" id="survey-form" onsubmit="return false">
             ${qHtml}
             ${consentHtml}
-            <button type="button" class="btn-submit" id="btn-submit" onclick="submitSurvey()">Pošlji anketo</button>
+            <button type="button" class="btn-submit" id="btn-submit" onclick="submitSurvey()">${window.t('survey.submit_btn')}</button>
         </form>`;
 }
 
@@ -293,7 +298,7 @@ function validate(answers) {
         const ans = answers[qid];
         const missing = ans === undefined || ans === null || ans === '' || (Array.isArray(ans) && ans.length === 0);
         errEl.style.display = missing ? '' : 'none';
-        errEl.textContent = 'To polje je obvezno.';
+        errEl.textContent = window.t('survey.field_required');
         if (missing) ok = false;
     });
     if (!selectedConsent) {
@@ -309,7 +314,7 @@ function submitSurvey() {
 
     const btn = document.getElementById('btn-submit');
     btn.disabled = true;
-    btn.textContent = 'Pošiljam...';
+    btn.textContent = window.t('survey.submitting');
 
     fetch(`${BASE}/api/survey.php?action=submit_response`, {
         method: 'POST',
@@ -319,17 +324,17 @@ function submitSurvey() {
     .then(r => r.json())
     .then(res => {
         if (res.success) {
-            showState('🙏', 'Hvala za vaše mnenje!', 'Vaši odgovori so bili shranjeni. Veselimo se vašega naslednjega obiska!');
+            showState('🙏', window.t('survey.thank_you_title'), window.t('survey.thank_you_sub'));
         } else {
             btn.disabled = false;
-            btn.textContent = 'Pošlji anketo';
-            alert(res.error || 'Napaka pri pošiljanju. Poskusite znova.');
+            btn.textContent = window.t('survey.submit_btn');
+            alert(res.error || window.t('survey.err_submit'));
         }
     })
     .catch(() => {
         btn.disabled = false;
-        btn.textContent = 'Pošlji anketo';
-        alert('Prišlo je do napake. Preverite internetno povezavo in poskusite znova.');
+        btn.textContent = window.t('survey.submit_btn');
+        alert(window.t('survey.err_network'));
     });
 }
 </script>

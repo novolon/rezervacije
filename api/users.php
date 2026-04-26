@@ -158,11 +158,21 @@ if ($method === 'GET') {
 
 // ─── POST (ustvari ali poveži obstoječega) ─────────────────────
 if ($method === 'POST') {
+    $body = get_body();
+
+    // Preklopitev restavracije (sidebar switcher)
+    if (isset($body['action']) && $body['action'] === 'switch_restaurant') {
+        $newRestId = (int)($body['restaurant_id'] ?? 0);
+        if ($newRestId && ($session['role'] === 'superadmin' || in_array($newRestId, $adminRestIds))) {
+            $_SESSION['restaurant_id'] = $newRestId;
+        }
+        json_response(true, ['restaurant_id' => $_SESSION['restaurant_id'] ?? 0]);
+    }
+
     if ($session['role'] === 'superadmin') {
         json_response(false, null, 'Superadmin ne ustvarja userjev.', 403);
     }
 
-    $body      = get_body();
     $rest_id   = isset($body['restaurant_id']) ? (int)$body['restaurant_id'] : null;
     $role      = isset($body['role']) && $body['role'] === 'admin' ? 'admin' : 'user';
 

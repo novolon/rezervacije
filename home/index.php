@@ -2,6 +2,7 @@
 require_once '../config.php';
 require_once '../includes/db.php';
 require_once '../includes/plans.php';
+require_once '../includes/lang.php';
 
 $appUrl = APP_URL . BASE_PATH;
 
@@ -29,12 +30,12 @@ function initialMonthly(array $d): string {
 }
 ?>
 <!DOCTYPE html>
-<html lang="sl">
+<html lang="<?= get_lang() ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rezervacije – Sistem za upravljanje rezervacij v restavraciji</title>
-    <meta name="description" content="Nadomestite papirne beležke s preglednim, sprotno posodabljajočim sistemom za rezervacije. Brez namestititve, brez skrite cene.">
+    <title><?= t('landing.meta_title') ?></title>
+    <meta name="description" content="<?= t('landing.meta_description') ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -73,11 +74,11 @@ function initialMonthly(array $d): string {
                 Rezervacije<span class="text-terracotta">.</span>
             </a>
             <div class="hidden md:flex items-center space-x-8">
-                <a href="#features" class="text-forest/80 hover:text-forest font-medium transition-colors">Funkcionalnosti</a>
-                <a href="#pricing"  class="text-forest/80 hover:text-forest font-medium transition-colors">Cenik</a>
-                <a href="#faq"      class="text-forest/80 hover:text-forest font-medium transition-colors">FAQ</a>
-                <a href="<?= $appUrl ?>/login.php"    class="text-forest/80 hover:text-forest font-medium transition-colors">Prijava</a>
-                <a href="<?= $appUrl ?>/register.php" class="bg-terracotta hover:bg-terracotta-hover text-white px-6 py-2.5 rounded-full font-medium transition-colors shadow-sm">Začni brezplačno</a>
+                <a href="#features" class="text-forest/80 hover:text-forest font-medium transition-colors"><?= t('landing.nav_features') ?></a>
+                <a href="#pricing"  class="text-forest/80 hover:text-forest font-medium transition-colors"><?= t('landing.nav_pricing') ?></a>
+                <a href="#faq"      class="text-forest/80 hover:text-forest font-medium transition-colors"><?= t('landing.nav_faq') ?></a>
+                <a href="<?= $appUrl ?>/login.php"    class="text-forest/80 hover:text-forest font-medium transition-colors"><?= t('landing.nav_login') ?></a>
+                <a href="<?= $appUrl ?>/register.php" class="bg-terracotta hover:bg-terracotta-hover text-white px-6 py-2.5 rounded-full font-medium transition-colors shadow-sm"><?= t('landing.nav_cta') ?></a>
             </div>
             <button id="nav-toggle" class="md:hidden text-forest p-2">
                 <svg id="nav-icon-menu" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
@@ -87,11 +88,11 @@ function initialMonthly(array $d): string {
     </div>
     <div id="nav-mobile" class="md:hidden bg-cream border-b border-sage-light" style="display:none">
         <div class="px-4 pt-2 pb-6 flex flex-col space-y-4">
-            <a href="#features" class="text-forest font-medium py-2" onclick="closeMobileNav()">Funkcionalnosti</a>
-            <a href="#pricing"  class="text-forest font-medium py-2" onclick="closeMobileNav()">Cenik</a>
-            <a href="#faq"      class="text-forest font-medium py-2" onclick="closeMobileNav()">FAQ</a>
-            <a href="<?= $appUrl ?>/login.php"    class="text-forest font-medium py-2">Prijava za uporabnike</a>
-            <a href="<?= $appUrl ?>/register.php" class="bg-terracotta text-white px-6 py-3 rounded-full font-medium text-center mt-4" onclick="closeMobileNav()">Začni brezplačno</a>
+            <a href="#features" class="text-forest font-medium py-2" onclick="closeMobileNav()"><?= t('landing.nav_features') ?></a>
+            <a href="#pricing"  class="text-forest font-medium py-2" onclick="closeMobileNav()"><?= t('landing.nav_pricing') ?></a>
+            <a href="#faq"      class="text-forest font-medium py-2" onclick="closeMobileNav()"><?= t('landing.nav_faq') ?></a>
+            <a href="<?= $appUrl ?>/login.php"    class="text-forest font-medium py-2"><?= t('landing.nav_login_full') ?></a>
+            <a href="<?= $appUrl ?>/register.php" class="bg-terracotta text-white px-6 py-3 rounded-full font-medium text-center mt-4" onclick="closeMobileNav()"><?= t('landing.nav_cta') ?></a>
         </div>
     </div>
 </nav>
@@ -103,21 +104,20 @@ function initialMonthly(array $d): string {
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center max-w-3xl mx-auto mb-16">
             <h1 class="text-4xl md:text-6xl font-bold text-forest leading-tight mb-6">
-                Upravljanje rezervacij, ki ga vaša restavracija dejansko potrebuje
+                <?= t('landing.hero_title') ?>
             </h1>
             <p class="text-lg md:text-xl text-forest/70 mb-10 leading-relaxed">
-                Nadomestite papirne beležke in zmedo s preglednim, sprotnim sistemom za rezervacije,
-                ki ga celotna ekipa uporablja – iz katerekoli naprave, brez namestititve.
+                <?= t('landing.hero_subtitle') ?>
             </p>
             <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
                 <a href="<?= $appUrl ?>/register.php"
                    class="w-full sm:w-auto bg-terracotta hover:bg-terracotta-hover text-white px-8 py-4 rounded-full font-semibold text-lg transition-colors shadow-lg flex items-center justify-center gap-2">
-                    Začnite 30-dnevni brezplačni preizkus
+                    <?= t('landing.hero_cta') ?>
                     <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 18 6-6-6-6"/></svg>
                 </a>
                 <span class="text-sm text-forest/60 flex items-center gap-1.5">
                     <svg width="16" height="16" fill="none" stroke="#A3B18A" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                    Brez kreditne kartice
+                    <?= t('landing.hero_no_cc') ?>
                 </span>
             </div>
         </div>
@@ -211,7 +211,7 @@ function initialMonthly(array $d): string {
 ════════════════════════════════════════════════════════════ -->
 <section class="py-12 border-y border-sage-light bg-cream-dark/30">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-        <p class="text-sm font-medium text-forest/50 uppercase tracking-wider mb-8">Zaupajo nam restavracije po vsej Evropi</p>
+        <p class="text-sm font-medium text-forest/50 uppercase tracking-wider mb-8"><?= t('landing.social_proof') ?></p>
         <div class="flex flex-wrap justify-center items-center gap-8 md:gap-16 opacity-60 hover:opacity-100 transition-opacity duration-500">
             <?php foreach (['Bistro Milano','Café Central','The Green Table','Sakura Kitchen','La Piazza'] as $name): ?>
             <span class="text-xl md:text-2xl font-bold font-serif text-forest"><?= htmlspecialchars($name) ?></span>
@@ -227,14 +227,9 @@ function initialMonthly(array $d): string {
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
             <div class="bg-cream p-8 md:p-12 rounded-3xl border border-sage-light">
-                <h2 class="text-3xl font-bold text-forest mb-8">Še vedno vodite rezervacije na papirju?</h2>
+                <h2 class="text-3xl font-bold text-forest mb-8"><?= t('landing.problem_title') ?></h2>
                 <ul class="space-y-6">
-                    <?php foreach ([
-                        'Napačni telefonski zapisi in neberljiva pisava',
-                        'Ekipa nima vpogleda v rezervacije v realnem času',
-                        'Nemogoče upravljati več lokacij hkrati',
-                        'Zmeda med osebjem v konicah',
-                    ] as $item): ?>
+                    <?php foreach ([t('landing.problem_1'), t('landing.problem_2'), t('landing.problem_3'), t('landing.problem_4')] as $item): ?>
                     <li class="flex items-start gap-4">
                         <svg class="shrink-0 mt-1 text-terracotta" width="24" height="24" fill="none" stroke="#C4704B" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg>
                         <span class="text-lg text-forest/80"><?= htmlspecialchars($item) ?></span>
@@ -243,14 +238,9 @@ function initialMonthly(array $d): string {
                 </ul>
             </div>
             <div class="bg-forest p-8 md:p-12 rounded-3xl shadow-xl">
-                <h2 class="text-3xl font-bold text-cream mb-8">Spoznajte Rezervacije</h2>
+                <h2 class="text-3xl font-bold text-cream mb-8"><?= t('landing.solution_title') ?></h2>
                 <ul class="space-y-6">
-                    <?php foreach ([
-                        'Pregleden vizualni koledar, ki ga vsi razumejo',
-                        'Sočasna sinhronizacija na vseh napravah',
-                        'Upravljajte vse restavracije z enega računa',
-                        'Vgrajene vloge osebja in preprost vmesnik',
-                    ] as $item): ?>
+                    <?php foreach ([t('landing.solution_1'), t('landing.solution_2'), t('landing.solution_3'), t('landing.solution_4')] as $item): ?>
                     <li class="flex items-start gap-4">
                         <svg class="shrink-0 mt-1" width="24" height="24" fill="none" stroke="#A3B18A" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                         <span class="text-lg text-cream/90"><?= htmlspecialchars($item) ?></span>
@@ -268,20 +258,20 @@ function initialMonthly(array $d): string {
 <section id="features" class="py-24 bg-cream">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center max-w-3xl mx-auto mb-16">
-            <h2 class="text-3xl md:text-4xl font-bold text-forest mb-4">Vse, kar potrebujete za upravljanje rezervacij</h2>
-            <p class="text-lg text-forest/70">Vključeno v vseh paketih. Brez skritih stroškov, brez zapletene nastavitve.</p>
+            <h2 class="text-3xl md:text-4xl font-bold text-forest mb-4"><?= t('landing.features_title') ?></h2>
+            <p class="text-lg text-forest/70"><?= t('landing.features_subtitle') ?></p>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             <?php
             $coreFeatures = [
                 ['icon' => '<path d="M8 2v4M16 2v4M3 10h18M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/>',
-                 'title' => 'Vizualni koledar', 'desc' => 'Mesečni pregled z dnevnimi štetji in podrobna urna časovnica za vsak dan.'],
+                 'title' => t('landing.feat_calendar_title'), 'desc' => t('landing.feat_calendar_desc')],
                 ['icon' => '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
-                 'title' => 'Več restavracij', 'desc' => 'Upravljajte vse lokacije z enega administratorskega računa in preklapljajte med njimi.'],
+                 'title' => t('landing.feat_multi_title'), 'desc' => t('landing.feat_multi_desc')],
                 ['icon' => '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-                 'title' => 'Upravljanje osebja', 'desc' => 'Dodajte neomejeno računov osebja z dostopom glede na vlogo. Nastavitve ostanejo zaščitene.'],
+                 'title' => t('landing.feat_staff_title'), 'desc' => t('landing.feat_staff_desc')],
                 ['icon' => '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
-                 'title' => 'Posodobitve v realnem času', 'desc' => 'Spremembe se samodejno sinhronizirajo na vseh napravah. Brez osvežitve strani.'],
+                 'title' => t('landing.feat_realtime_title'), 'desc' => t('landing.feat_realtime_desc')],
             ];
             foreach ($coreFeatures as $f): ?>
             <div class="bg-white p-8 rounded-2xl border border-sage-light shadow-sm hover:shadow-md transition-shadow">
@@ -302,19 +292,19 @@ function initialMonthly(array $d): string {
 <section class="py-24 bg-white border-t border-sage-light/50">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="mb-16">
-            <span class="inline-block px-4 py-1.5 bg-forest/10 text-forest font-semibold rounded-full text-sm mb-4">Napredni paket</span>
-            <h2 class="text-3xl md:text-4xl font-bold text-forest mb-4">Obveščajte svoje goste</h2>
-            <p class="text-lg text-forest/70 max-w-2xl">Avtomatizirajte komunikacijo in gostom omogočite spletno rezervacijo.</p>
+            <span class="inline-block px-4 py-1.5 bg-forest/10 text-forest font-semibold rounded-full text-sm mb-4"><?= t('landing.adv_badge') ?></span>
+            <h2 class="text-3xl md:text-4xl font-bold text-forest mb-4"><?= t('landing.adv_title') ?></h2>
+            <p class="text-lg text-forest/70 max-w-2xl"><?= t('landing.adv_subtitle') ?></p>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
             <?php
             $advFeatures = [
                 ['icon' => '<path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>',
-                 'title' => 'E-poštna obvestila gostom', 'desc' => 'Samodejni potrditveni e-maili in opomniki 24 ur pred rezervacijo, poslani neposredno gostom.', 'soon' => false],
+                 'title' => t('landing.adv_email_title'), 'desc' => t('landing.adv_email_desc'), 'soon' => false],
                 ['icon' => '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>',
-                 'title' => 'Javna rezervacijska povezava', 'desc' => 'Gostom dajte edinstveno URL za direktno rezervacijo brez klicanja. Brez zamujenih rezervacij.', 'soon' => true],
+                 'title' => t('landing.adv_link_title'), 'desc' => t('landing.adv_link_desc'), 'soon' => true],
                 ['icon' => '<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
-                 'title' => 'Potrjevanje rezervacij', 'desc' => 'Preglejte prispele zahteve in jih ročno potrdite ali zavrnite, preden gost dobi potrdilo.', 'soon' => true],
+                 'title' => t('landing.adv_confirm_title'), 'desc' => t('landing.adv_confirm_desc'), 'soon' => true],
             ];
             foreach ($advFeatures as $f): ?>
             <div class="bg-cream p-8 rounded-2xl border border-sage-light relative overflow-hidden">
@@ -324,7 +314,7 @@ function initialMonthly(array $d): string {
                 <h3 class="text-xl font-bold text-forest mb-3"><?= htmlspecialchars($f['title']) ?></h3>
                 <p class="text-forest/70 leading-relaxed mb-4"><?= htmlspecialchars($f['desc']) ?></p>
                 <?php if ($f['soon']): ?>
-                <span class="inline-block px-3 py-1 bg-sage/30 text-forest/80 text-xs font-bold rounded-md uppercase tracking-wider">Kmalu na voljo</span>
+                <span class="inline-block px-3 py-1 bg-sage/30 text-forest/80 text-xs font-bold rounded-md uppercase tracking-wider"><?= t('landing.soon') ?></span>
                 <?php endif; ?>
             </div>
             <?php endforeach; ?>
@@ -338,21 +328,21 @@ function initialMonthly(array $d): string {
 <section class="py-24 bg-forest text-cream">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="mb-16">
-            <span class="inline-block px-4 py-1.5 bg-terracotta text-white font-semibold rounded-full text-sm mb-4">Premium paket</span>
-            <h2 class="text-3xl md:text-4xl font-bold mb-4">Profesionalna orodja za resne gostince</h2>
-            <p class="text-lg text-cream/70 max-w-2xl">Popolnoma personalizirane rezervacijske izkušnje in napredna avtomatizacija.</p>
+            <span class="inline-block px-4 py-1.5 bg-terracotta text-white font-semibold rounded-full text-sm mb-4"><?= t('landing.prem_badge') ?></span>
+            <h2 class="text-3xl md:text-4xl font-bold mb-4"><?= t('landing.prem_title') ?></h2>
+            <p class="text-lg text-cream/70 max-w-2xl"><?= t('landing.prem_subtitle') ?></p>
         </div>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
             <?php
             $premFeatures = [
                 ['icon' => '<polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>',
-                 'title' => 'Vgradljivi widget', 'desc' => 'Ena vrstica JavaScripta za vgradnjo rezervacijskega obrazca neposredno na vašo spletno stran.', 'soon' => true],
+                 'title' => t('landing.prem_widget_title'), 'desc' => t('landing.prem_widget_desc'), 'soon' => true],
                 ['icon' => '<circle cx="13.5" cy="6.5" r=".5"/><circle cx="17.5" cy="10.5" r=".5"/><circle cx="8.5" cy="7.5" r=".5"/><circle cx="6.5" cy="12.5" r=".5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
-                 'title' => 'Branding restavracije', 'desc' => 'Naložite logotip in nastavite barve blagovne znamke za strani in e-maile gostom.', 'soon' => false],
+                 'title' => t('landing.prem_branding_title'), 'desc' => t('landing.prem_branding_desc'), 'soon' => false],
                 ['icon' => '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
-                 'title' => 'Samodejno potrjevanje', 'desc' => 'Samodejno potrdite manjše skupinice, večje pa preglejte ročno.', 'soon' => true],
+                 'title' => t('landing.prem_auto_title'), 'desc' => t('landing.prem_auto_desc'), 'soon' => true],
                 ['icon' => '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
-                 'title' => 'SMS obvestila', 'desc' => 'SMS potrdila in opomniki gostom za zmanjšanje izostankov.', 'soon' => true],
+                 'title' => t('landing.prem_sms_title'), 'desc' => t('landing.prem_sms_desc'), 'soon' => true],
             ];
             foreach ($premFeatures as $f): ?>
             <div class="bg-forest-light/30 p-8 rounded-2xl border border-forest-light relative">
@@ -362,7 +352,7 @@ function initialMonthly(array $d): string {
                 <h3 class="text-xl font-bold mb-3"><?= htmlspecialchars($f['title']) ?></h3>
                 <p class="text-cream/70 leading-relaxed mb-4"><?= htmlspecialchars($f['desc']) ?></p>
                 <?php if ($f['soon']): ?>
-                <span class="inline-block px-3 py-1 bg-forest text-cream/60 text-xs font-bold rounded-md uppercase tracking-wider border border-forest-light">Kmalu na voljo</span>
+                <span class="inline-block px-3 py-1 bg-forest text-cream/60 text-xs font-bold rounded-md uppercase tracking-wider border border-forest-light"><?= t('landing.soon') ?></span>
                 <?php endif; ?>
             </div>
             <?php endforeach; ?>
@@ -376,16 +366,16 @@ function initialMonthly(array $d): string {
 <section class="py-24 bg-cream">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-20">
-            <h2 class="text-3xl md:text-4xl font-bold text-forest mb-4">Pripravljeni v minutah</h2>
-            <p class="text-lg text-forest/70">Brez tehnične nastavitve, brez namestitve aplikacije.</p>
+            <h2 class="text-3xl md:text-4xl font-bold text-forest mb-4"><?= t('landing.howitworks_title') ?></h2>
+            <p class="text-lg text-forest/70"><?= t('landing.howitworks_subtitle') ?></p>
         </div>
         <div class="relative">
             <div class="hidden md:block absolute top-8 left-[10%] right-[10%] h-0.5 bg-sage-light z-0"></div>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-12 relative z-10">
                 <?php foreach ([
-                    ['1', 'Registracija',             'Ustvarite račun v sekundi. Za 30-dnevni preizkus ni potrebna kreditna kartica.'],
-                    ['2', 'Nastavite restavracijo',   'Dodajte lokacije, nastavite delovni čas in povabite člane osebja.'],
-                    ['3', 'Začnite sprejemati rezervacije', 'Upravljajte rezervacije z vsake naprave, v realnem času. Poslovite se od papirja.'],
+                    ['1', t('landing.step1_title'), t('landing.step1_desc')],
+                    ['2', t('landing.step2_title'), t('landing.step2_desc')],
+                    ['3', t('landing.step3_title'), t('landing.step3_desc')],
                 ] as [$num, $title, $desc]): ?>
                 <div class="text-center flex flex-col items-center">
                     <div class="w-16 h-16 bg-forest text-cream rounded-full flex items-center justify-center text-2xl font-bold mb-6 shadow-lg border-4 border-cream"><?= $num ?></div>
@@ -404,16 +394,16 @@ function initialMonthly(array $d): string {
 <section id="pricing" class="py-24 bg-white">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-16">
-            <h2 class="text-3xl md:text-4xl font-bold text-forest mb-6">Preprosta, pregledna cena</h2>
+            <h2 class="text-3xl md:text-4xl font-bold text-forest mb-6"><?= t('landing.pricing_title') ?></h2>
             <div class="flex items-center justify-center gap-4">
-                <span id="lbl-monthly" class="text-sm font-medium text-forest">Mesečno</span>
+                <span id="lbl-monthly" class="text-sm font-medium text-forest"><?= t('landing.pricing_monthly') ?></span>
                 <button id="billing-toggle" onclick="toggleBilling()"
                     class="relative w-14 h-8 bg-forest rounded-full p-1 transition-colors">
                     <div id="toggle-knob" class="w-6 h-6 bg-white rounded-full shadow-sm transition-transform duration-200" style="transform:translateX(0)"></div>
                 </button>
                 <span id="lbl-yearly" class="text-sm font-medium text-forest/50 flex items-center gap-2">
-                    Letno
-                    <span class="bg-terracotta/10 text-terracotta text-xs px-2 py-0.5 rounded-full font-bold">~17% ugodneje</span>
+                    <?= t('landing.pricing_yearly') ?>
+                    <span class="bg-terracotta/10 text-terracotta text-xs px-2 py-0.5 rounded-full font-bold"><?= t('landing.pricing_yearly_discount') ?></span>
                 </span>
             </div>
         </div>
@@ -422,14 +412,14 @@ function initialMonthly(array $d): string {
 
             <?php
             $planCards = [
-                ['basic',    false, 'Idealno za posamezne lokacije, ki prehajajo s papirja.',
-                    ['Upravljanje rezervacij', 'Več restavracij', 'Neomejeno računov osebja', 'Koledar v realnem času', 'E-poštna podpora']],
-                ['advanced', true,  'Za restavracije, ki želijo spletne rezervacije in orodja za goste.',
-                    ['Vse iz Osnovnega', 'E-poštna obvestila gostom', 'Opomniki 24h pred rezervacijo', 'Javna rezervacijska povezava', 'Potrjevanje/zavračanje rezervacij', 'Baza gostov', 'Čakalna lista', 'Upravljanje miz']],
-                ['premium',  false, 'Profesionalna orodja in polni branding.',
-                    ['Vse iz Naprednega', 'Branding restavracije', 'Vgradljivi widget', 'Samodejno potrjevanje', 'SMS obvestila', 'Ankete + CSV izvoz']],
+                ['basic',    false, t('landing.plan_basic_desc'),
+                    [t('landing.feat_basic_1'), t('landing.feat_basic_2'), t('landing.feat_basic_3'), t('landing.feat_basic_4'), t('landing.feat_basic_5')]],
+                ['advanced', true,  t('landing.plan_advanced_desc'),
+                    [t('landing.feat_adv_1'), t('landing.feat_adv_2'), t('landing.feat_adv_3'), t('landing.feat_adv_4'), t('landing.feat_adv_5'), t('landing.feat_adv_6'), t('landing.feat_adv_7'), t('landing.feat_adv_8')]],
+                ['premium',  false, t('landing.plan_premium_desc'),
+                    [t('landing.feat_prem_1'), t('landing.feat_prem_2'), t('landing.feat_prem_3'), t('landing.feat_prem_4'), t('landing.feat_prem_5'), t('landing.feat_prem_6')]],
             ];
-            $planNames = ['basic' => 'Osnovni', 'advanced' => 'Napredni', 'premium' => 'Premium'];
+            $planNames = ['basic' => t('landing.plan_basic'), 'advanced' => t('landing.plan_advanced'), 'premium' => t('landing.plan_premium')];
             foreach ($planCards as [$slug, $highlighted, $desc, $features]):
                 $d = $pricingData[$slug];
                 $showDisc = $d['discM'] !== null;
@@ -438,13 +428,13 @@ function initialMonthly(array $d): string {
             ?>
             <div class="relative flex flex-col p-8 rounded-3xl border <?= $highlighted ? 'border-terracotta shadow-xl bg-cream' : 'border-sage-light bg-white' ?>">
                 <?php if ($highlighted): ?>
-                <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-terracotta text-white px-4 py-1 rounded-full text-sm font-bold shadow-sm">Priljubljen</div>
+                <div class="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-terracotta text-white px-4 py-1 rounded-full text-sm font-bold shadow-sm"><?= t('landing.pricing_popular') ?></div>
                 <?php endif; ?>
 
                 <!-- 30-day trial badge -->
                 <div class="inline-flex items-center gap-1.5 bg-sage/15 text-forest text-xs font-semibold px-3 py-1 rounded-full mb-4 self-start border border-sage/30">
                     <svg width="11" height="11" fill="none" stroke="#A3B18A" stroke-width="2.5"><polyline points="10 3 4.5 8.5 2 6"/></svg>
-                    30 dni brezplačno
+                    <?= t('landing.pricing_trial_badge') ?>
                 </div>
 
                 <div class="mb-6">
@@ -456,7 +446,7 @@ function initialMonthly(array $d): string {
                     <span class="price-orig-<?= $slug ?> text-lg text-forest/40 line-through"
                           style="<?= $showDisc ? '' : 'display:none' ?>"><?= $origPrice ?></span>
                     <span class="price-amount-<?= $slug ?> text-4xl font-bold text-forest"><?= $mainPrice ?></span>
-                    <span class="price-period-<?= $slug ?> text-forest/60 font-medium">/mesec</span>
+                    <span class="price-period-<?= $slug ?> text-forest/60 font-medium"><?= t('common.per_month') ?></span>
                 </div>
                 <div class="disc-label-<?= $slug ?> mb-4 text-xs text-terracotta font-semibold"
                      style="<?= ($showDisc) ? '' : 'display:none' ?>">
@@ -476,12 +466,12 @@ function initialMonthly(array $d): string {
                 </ul>
                 <a href="<?= $appUrl ?>/register.php?plan=<?= $slug ?>"
                    class="w-full py-3 rounded-xl font-bold text-center transition-colors <?= $highlighted ? 'bg-terracotta hover:bg-terracotta-hover text-white' : 'bg-forest/10 hover:bg-forest/20 text-forest' ?>">
-                    Začni brezplačni preizkus
+                    <?= t('landing.pricing_cta') ?>
                 </a>
                 <a href="<?= $appUrl ?>/register.php?plan=<?= $slug ?>"
                    class="invoice-btn-<?= $slug ?> block w-full mt-3 py-2 border border-dashed border-sage text-center text-forest/60 hover:text-forest text-sm rounded-xl transition-colors"
                    style="display:none">
-                    ali po predračunu →
+                    <?= t('landing.pricing_invoice') ?>
                 </a>
             </div>
             <?php endforeach; ?>
@@ -489,9 +479,9 @@ function initialMonthly(array $d): string {
         </div>
 
         <div class="text-center text-forest/60 text-sm space-y-2">
-            <p class="font-medium text-forest/80">Vsi paketi vključujejo neomejeno računov osebja in podporo za več restavracij.</p>
-            <p>Po preteku 30-dnevnega triala izberite paket, ki vam ustreza. Nadgradnja kadarkoli – plačate samo sorazmerno razliko.</p>
-            <p>Letno plačilo je možno tudi po predračunu — <a href="<?= $appUrl ?>/register.php" class="underline hover:text-terracotta">kontaktirajte nas</a>.</p>
+            <p class="font-medium text-forest/80"><?= t('landing.pricing_footer_1') ?></p>
+            <p><?= t('landing.pricing_footer_2') ?></p>
+            <p><?= t_raw('landing.pricing_footer_3', ['contact_link' => '<a href="' . htmlspecialchars($appUrl . '/register.php') . '" class="underline hover:text-terracotta">' . t('landing.pricing_contact') . '</a>']) ?></p>
         </div>
     </div>
 </section>
@@ -502,34 +492,14 @@ function initialMonthly(array $d): string {
 <section id="faq" class="py-24 bg-cream">
     <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="text-center mb-16">
-            <h2 class="text-3xl md:text-4xl font-bold text-forest mb-4">Pogosta vprašanja</h2>
+            <h2 class="text-3xl md:text-4xl font-bold text-forest mb-4"><?= t('landing.faq_title') ?></h2>
         </div>
         <div class="space-y-4">
             <?php
-            $faqs = [
-                ['Ali moram kaj namestiti?',
-                 'Ne. Sistem je popolnoma spletni – odprite brskalnik in se prijavite iz katerekoli naprave.'],
-                ['Ali lahko upravljam več lokacij restavracije?',
-                 'Da. Vsi paketi podpirajo več restavracij pod enim administratorskim računom.'],
-                ['Koliko računov osebja lahko dodam?',
-                 'Število računov osebja ni omejeno.'],
-                ['Ali obstaja brezplačni preizkus?',
-                 'Da – katerikoli paket (Osnovni, Napredni, Premium) lahko preizkušate 30 dni brezplačno. Kreditna kartica ni potrebna. Med trialom lahko prosto preklapljate med paketi.'],
-                ['Ali lahko med trialom zamenjam paket?',
-                 'Da, brez omejitev in brez plačila. V nastavitvah zaračunavanja izberite drug paket in sprememba začne veljati takoj.'],
-                ['Ali lahko kadarkoli prekličem naročnino?',
-                 'Da. Prekličete kadarkoli v nastavitvah zaračunavanja.'],
-                ['Ali ponujate letno plačilo po predračunu?',
-                 'Da. Kontaktirajte nas za dogovor o letnem plačilu z bančnim nakazilom / predračunom.'],
-                ['Katere načine plačila sprejemate?',
-                 'Kreditne in debetne kartice prek Stripe. Letni paketi so plačljivi tudi po predračunu.'],
-                ['Ali so moji podatki varni?',
-                 'Podatki so ločeni po računih. Gesla so zgoščena (bcrypt). Seje potečejo po neaktivnosti. HTTPS je obvezen.'],
-                ['Kaj je javna rezervacijska povezava?',
-                 'Edinstvena URL, ki jo gosti obiščejo za direktno rezervacijo mize – brez klicanja. Na voljo v Naprednem in Premium paketu. (Kmalu na voljo)'],
-                ['Ali lahko vgradim obrazec za rezervacije na svojo spletno stran?',
-                 'Da, v Premium paketu. Kratka JavaScript koda omogoči vgradnjo rezervacijskega obrazca neposredno na katerokoli spletno stran. (Kmalu na voljo)'],
-            ];
+            $faqs = [];
+            for ($fi = 0; $fi <= 10; $fi++) {
+                $faqs[] = [t('landing.faq_' . $fi . '_q'), t('landing.faq_' . $fi . '_a')];
+            }
             foreach ($faqs as $i => [$q, $a]):
             ?>
             <div class="bg-white border border-sage-light rounded-2xl overflow-hidden">
@@ -555,11 +525,11 @@ function initialMonthly(array $d): string {
         <div class="absolute -bottom-24 -left-24 w-96 h-96 bg-terracotta rounded-full blur-3xl"></div>
     </div>
     <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
-        <h2 class="text-4xl md:text-5xl font-bold text-cream mb-6">Pripravljeni na modernizacijo rezervacij?</h2>
-        <p class="text-xl text-cream/80 mb-10">Začnite 30-dnevni brezplačni preizkus – brez kreditne kartice.</p>
+        <h2 class="text-4xl md:text-5xl font-bold text-cream mb-6"><?= t('landing.cta_title') ?></h2>
+        <p class="text-xl text-cream/80 mb-10"><?= t('landing.cta_subtitle') ?></p>
         <a href="<?= $appUrl ?>/register.php"
            class="inline-block bg-terracotta hover:bg-terracotta-hover text-white px-10 py-4 rounded-full font-bold text-lg transition-colors shadow-xl">
-            Začni brezplačno
+            <?= t('landing.cta_btn') ?>
         </a>
     </div>
 </section>
@@ -577,24 +547,24 @@ function initialMonthly(array $d): string {
                 <p class="text-sm max-w-sm text-cream/60">Preprost, sodoben sistem za upravljanje rezervacij, zasnovan za restavracije – od posameznih lokacij do verig.</p>
             </div>
             <div>
-                <h4 class="text-cream font-semibold mb-4">Produkt</h4>
+                <h4 class="text-cream font-semibold mb-4"><?= t('landing.footer_product') ?></h4>
                 <ul class="space-y-2 text-sm">
-                    <li><a href="#features" class="hover:text-terracotta transition-colors">Funkcionalnosti</a></li>
-                    <li><a href="#pricing"  class="hover:text-terracotta transition-colors">Cenik</a></li>
-                    <li><a href="#faq"      class="hover:text-terracotta transition-colors">FAQ</a></li>
+                    <li><a href="#features" class="hover:text-terracotta transition-colors"><?= t('landing.footer_features') ?></a></li>
+                    <li><a href="#pricing"  class="hover:text-terracotta transition-colors"><?= t('landing.footer_pricing') ?></a></li>
+                    <li><a href="#faq"      class="hover:text-terracotta transition-colors"><?= t('landing.footer_faq') ?></a></li>
                 </ul>
             </div>
             <div>
-                <h4 class="text-cream font-semibold mb-4">Pravno</h4>
+                <h4 class="text-cream font-semibold mb-4"><?= t('landing.footer_legal') ?></h4>
                 <ul class="space-y-2 text-sm">
-                    <li><a href="#" class="hover:text-terracotta transition-colors">Kontakt</a></li>
-                    <li><a href="#" class="hover:text-terracotta transition-colors">Politika zasebnosti</a></li>
-                    <li><a href="#" class="hover:text-terracotta transition-colors">Pogoji uporabe</a></li>
+                    <li><a href="#" class="hover:text-terracotta transition-colors"><?= t('landing.footer_contact') ?></a></li>
+                    <li><a href="#" class="hover:text-terracotta transition-colors"><?= t('landing.footer_privacy') ?></a></li>
+                    <li><a href="#" class="hover:text-terracotta transition-colors"><?= t('landing.footer_terms') ?></a></li>
                 </ul>
             </div>
         </div>
         <div class="mt-12 pt-8 border-t border-forest-light/30 text-sm text-cream/50 text-center md:text-left">
-            &copy; <?= date('Y') ?> Rezervacije. Vse pravice pridržane.
+            <?= t('landing.footer_copyright', ['year' => date('Y')]) ?>
         </div>
     </div>
 </footer>
@@ -630,7 +600,7 @@ function toggleBilling() {
             : (d.discM  != null ? d.monthly : null);
 
         document.querySelector(`.price-amount-${slug}`).textContent = fmtEur(mainPrice);
-        document.querySelector(`.price-period-${slug}`).textContent = isYearly ? '/leto' : '/mesec';
+        document.querySelector(`.price-period-${slug}`).textContent = isYearly ? '<?= t('common.per_year') ?>' : '<?= t('common.per_month') ?>';
 
         const origEl  = document.querySelector(`.price-orig-${slug}`);
         const discEl  = document.querySelector(`.disc-label-${slug}`);

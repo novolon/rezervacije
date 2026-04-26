@@ -134,3 +134,18 @@ function is_blackout(PDO $pdo, int $restId, string $date): bool {
     return $b !== false && $b['full'];
 }
 
+function card_head($above, $title, $btn = false, $package = false) {
+    $packageDisp = '';
+    if($package == 'premium') {
+        $packageDisp = '<span style="background:#FEF3C7;color:#92400E;font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:4px">Premium+</span>';
+    } else if($package == 'advanced') {
+        $packageDisp = '<span style="background:#FEF3C7;color:#92400E;font-size:.68rem;font-weight:700;padding:1px 7px;border-radius:20px;margin-left:4px">Advanced+</span>';
+    }
+    return '<div class="rz-card-head">
+                        <div>
+                            <div class="rz-card-eyebrow">'. $above.' '.$packageDisp.'</div>
+                            <h2 class="rz-card-title">'.$title.'</h2>
+                        </div>
+                        '.$btn.'
+                    </div>';
+}

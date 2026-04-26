@@ -1,15 +1,16 @@
 <?php
 require_once 'config.php';
+require_once 'includes/lang.php';
 
 $token = trim($_GET['t'] ?? '');
 $apiBase = BASE_PATH . '/api/book.php';
 ?>
 <!DOCTYPE html>
-<html lang="sl">
+<html lang="<?= get_lang() ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Rezervacija</title>
+    <title><?= t('book.page_title') ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
@@ -56,8 +57,8 @@ $apiBase = BASE_PATH . '/api/book.php';
 <div class="min-h-screen flex items-center justify-center p-4">
     <div class="text-center">
         <div class="text-6xl mb-4">🔗</div>
-        <h1 class="text-2xl font-bold text-forest mb-2">Neveljavna povezava</h1>
-        <p class="text-forest/60">Ta rezervacijska stran ne obstaja.</p>
+        <h1 class="text-2xl font-bold text-forest mb-2"><?= t('book.invalid_link_title') ?></h1>
+        <p class="text-forest/60"><?= t('book.invalid_link_msg') ?></p>
     </div>
 </div>
 <?php else: ?>
@@ -70,8 +71,8 @@ $apiBase = BASE_PATH . '/api/book.php';
         <div class="max-w-lg mx-auto flex items-center gap-3">
             <div class="w-8 h-8 bg-forest rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0">R</div>
             <div>
-                <div id="rest-name" class="font-bold text-forest text-sm">Nalagam...</div>
-                <div class="text-xs text-forest/50">Spletna rezervacija</div>
+                <div id="rest-name" class="font-bold text-forest text-sm"><?= t('common.loading') ?></div>
+                <div class="text-xs text-forest/50"><?= t('book.subtitle') ?></div>
             </div>
         </div>
     </header>
@@ -80,8 +81,8 @@ $apiBase = BASE_PATH . '/api/book.php';
     <div id="load-error" class="hidden flex-1 flex items-center justify-center p-8">
         <div class="text-center max-w-sm">
             <div class="text-5xl mb-4">😔</div>
-            <h2 class="text-xl font-bold text-forest mb-2">Rezervacije niso na voljo</h2>
-            <p id="load-error-msg" class="text-forest/60 text-sm">Spletna rezervacija za to restavracijo trenutno ni omogočena.</p>
+            <h2 class="text-xl font-bold text-forest mb-2"><?= t('book.unavailable_title') ?></h2>
+            <p id="load-error-msg" class="text-forest/60 text-sm"><?= t('book.unavailable_msg') ?></p>
         </div>
     </div>
 
@@ -92,7 +93,7 @@ $apiBase = BASE_PATH . '/api/book.php';
         <div class="bg-white border-b border-sage-light px-4 py-3">
             <div class="max-w-lg mx-auto">
                 <div class="flex items-center gap-2">
-                    <?php foreach ([['1','Gostje'],['2','Datum'],['3','Termin'],['4','Podatki']] as [$n, $lbl]): ?>
+                    <?php foreach ([['1',t('book.step1_label')],['2',t('book.step2_label')],['3',t('book.step3_label')],['4',t('book.step4_label')]] as [$n, $lbl]): ?>
                     <div class="flex items-center gap-1 flex-1 last:flex-none">
                         <div class="progress-step-<?= $n ?> flex items-center gap-1.5">
                             <div class="step-num-<?= $n ?> w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
@@ -119,14 +120,14 @@ $apiBase = BASE_PATH . '/api/book.php';
 
             <!-- ── Korak 1: Število gostov ── -->
             <div id="step-1" class="step active">
-                <h2 class="text-2xl font-bold text-forest mb-2">Koliko gostov?</h2>
-                <p class="text-forest/60 text-sm mb-8">Izberite število gostov za rezervacijo.</p>
+                <h2 class="text-2xl font-bold text-forest mb-2"><?= t('book.step1_title') ?></h2>
+                <p class="text-forest/60 text-sm mb-8"><?= t('book.step1_subtitle') ?></p>
 
                 <div id="guest-btns" class="flex flex-wrap gap-3 mb-6"></div>
 
                 <!-- "Več" input -->
                 <div id="guest-more-wrap" class="hidden mb-6">
-                    <label class="block text-sm font-medium text-forest mb-2" id="guest-more-label">Vnesite število gostov</label>
+                    <label class="block text-sm font-medium text-forest mb-2" id="guest-more-label"><?= t('book.enter_guests_label') ?></label>
                     <input id="guest-more-input" type="number" min="11" step="1"
                         class="w-32 border border-sage-light rounded-xl px-4 py-2.5 text-forest font-medium text-lg focus:outline-none focus:border-forest">
                 </div>
@@ -134,7 +135,7 @@ $apiBase = BASE_PATH . '/api/book.php';
                 <button id="btn-guests-next" disabled
                     class="w-full bg-terracotta text-white py-4 rounded-2xl font-semibold text-lg transition-colors
                            disabled:opacity-40 disabled:cursor-not-allowed hover:enabled:bg-terracotta-hover">
-                    Naprej →
+                    <?= t('book.next') ?>
                 </button>
             </div>
 
@@ -144,7 +145,7 @@ $apiBase = BASE_PATH . '/api/book.php';
                     <button onclick="goStep(1)" class="text-forest/50 hover:text-forest transition-colors">
                         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
                     </button>
-                    <h2 class="text-2xl font-bold text-forest">Izberite datum</h2>
+                    <h2 class="text-2xl font-bold text-forest"><?= t('book.step2_title') ?></h2>
                 </div>
 
                 <!-- Koledar -->
@@ -162,14 +163,14 @@ $apiBase = BASE_PATH . '/api/book.php';
                     </div>
                     <div class="px-4 py-2">
                         <div class="grid grid-cols-7 mb-1">
-                            <?php foreach (['Po','To','Sr','Če','Pe','So','Ne'] as $d): ?>
+                            <?php foreach ([t('days_short.0'),t('days_short.1'),t('days_short.2'),t('days_short.3'),t('days_short.4'),t('days_short.5'),t('days_short.6')] as $d): ?>
                             <div class="text-center text-xs font-medium text-forest/40 py-2"><?= $d ?></div>
                             <?php endforeach; ?>
                         </div>
                         <div id="cal-grid" class="grid grid-cols-7 gap-y-1"></div>
                     </div>
                     <div class="px-5 py-3 border-t border-sage-light bg-cream/50">
-                        <p class="text-xs text-forest/50">Sivi dnevi niso na voljo za rezervacije.</p>
+                        <p class="text-xs text-forest/50"><?= t('book.calendar_note') ?></p>
                     </div>
                 </div>
             </div>
@@ -180,7 +181,7 @@ $apiBase = BASE_PATH . '/api/book.php';
                     <button onclick="goStep(2)" class="text-forest/50 hover:text-forest transition-colors">
                         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
                     </button>
-                    <h2 class="text-2xl font-bold text-forest">Izberite termin</h2>
+                    <h2 class="text-2xl font-bold text-forest"><?= t('book.step3_title') ?></h2>
                 </div>
                 <p id="step3-subtitle" class="text-sm text-forest/60 mb-6 ml-9"></p>
 
@@ -188,59 +189,59 @@ $apiBase = BASE_PATH . '/api/book.php';
                     <svg class="animate-spin mx-auto mb-3" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
                     </svg>
-                    Nalagam termine...
+                    <?= t('book.slots_loading') ?>
                 </div>
                 <div id="slots-empty" class="hidden text-center py-10">
                     <div class="text-4xl mb-3">😕</div>
-                    <p class="text-forest/60 font-medium">Za ta dan ni prostih terminov.</p>
-                    <button onclick="goStep(2)" class="mt-4 text-sm text-terracotta font-medium hover:underline">← Izberite drug datum</button>
+                    <p class="text-forest/60 font-medium"><?= t('book.no_slots') ?></p>
+                    <button onclick="goStep(2)" class="mt-4 text-sm text-terracotta font-medium hover:underline"><?= t('book.pick_other_date') ?></button>
 
                     <div id="waitlist-offer" class="hidden mt-6 bg-amber-50 border border-amber-200 rounded-2xl p-5 text-left">
-                        <p class="text-sm font-semibold text-amber-900 mb-1">Vpišite se na čakalno listo</p>
-                        <p class="text-xs text-amber-700 mb-4">Ko se sprosti termin, vas bomo takoj obvestili.</p>
+                        <p class="text-sm font-semibold text-amber-900 mb-1"><?= t('book.waitlist_offer_title') ?></p>
+                        <p class="text-xs text-amber-700 mb-4"><?= t('book.waitlist_offer_desc') ?></p>
                         <div class="space-y-3">
                             <div class="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label class="block text-xs font-medium text-forest mb-1">Ime <span class="text-terracotta">*</span></label>
+                                    <label class="block text-xs font-medium text-forest mb-1"><?= t('book.first_name') ?> <span class="text-terracotta">*</span></label>
                                     <input id="wl-first" type="text" placeholder="Janez"
                                         class="w-full border border-sage-light rounded-xl px-3 py-2.5 text-forest text-sm focus:outline-none focus:border-forest">
                                 </div>
                                 <div>
-                                    <label class="block text-xs font-medium text-forest mb-1">Priimek <span class="text-terracotta">*</span></label>
+                                    <label class="block text-xs font-medium text-forest mb-1"><?= t('book.last_name') ?> <span class="text-terracotta">*</span></label>
                                     <input id="wl-last" type="text" placeholder="Novak"
                                         class="w-full border border-sage-light rounded-xl px-3 py-2.5 text-forest text-sm focus:outline-none focus:border-forest">
                                 </div>
                             </div>
                             <div>
-                                <label class="block text-xs font-medium text-forest mb-1">Email <span class="text-terracotta">*</span></label>
+                                <label class="block text-xs font-medium text-forest mb-1"><?= t('book.email') ?> <span class="text-terracotta">*</span></label>
                                 <input id="wl-email" type="email" placeholder="janez@email.com"
                                     class="w-full border border-sage-light rounded-xl px-3 py-2.5 text-forest text-sm focus:outline-none focus:border-forest">
                             </div>
                             <div>
-                                <label class="block text-xs font-medium text-forest mb-1">Telefon <span class="text-forest/40 font-normal">(neobvezno)</span></label>
+                                <label class="block text-xs font-medium text-forest mb-1"><?= t('book.phone') ?> <span class="text-forest/40 font-normal"><?= t('common.optional') ?></span></label>
                                 <input id="wl-phone" type="tel" placeholder="041 123 456"
                                     class="w-full border border-sage-light rounded-xl px-3 py-2.5 text-forest text-sm focus:outline-none focus:border-forest">
                             </div>
                             <div>
-                                <label class="block text-xs font-medium text-forest mb-1">Prednostni čas <span class="text-forest/40 font-normal">(neobvezno)</span></label>
+                                <label class="block text-xs font-medium text-forest mb-1"><?= t('book.preferred_time') ?> <span class="text-forest/40 font-normal"><?= t('common.optional') ?></span></label>
                                 <input id="wl-time" type="time"
                                     class="w-full border border-sage-light rounded-xl px-3 py-2.5 text-forest text-sm focus:outline-none focus:border-forest">
                             </div>
                             <label class="flex gap-2 items-start cursor-pointer">
                                 <input id="wl-gdpr" type="checkbox" class="mt-0.5 accent-forest">
-                                <span class="text-xs text-forest/70">Strinjam se z obdelavo osebnih podatkov za namen obveščanja o prostih terminih.</span>
+                                <span class="text-xs text-forest/70"><?= t('book.gdpr_waitlist') ?></span>
                             </label>
                             <div id="wl-error" class="hidden text-xs text-red-600 bg-red-50 rounded-lg px-3 py-2"></div>
                             <button id="wl-submit" onclick="submitWaitlist()"
                                 class="w-full bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl py-3 text-sm transition-colors">
-                                Vpišem se na čakalno listo
+                                <?= t('book.waitlist_submit') ?>
                             </button>
                         </div>
                     </div>
                     <div id="waitlist-done" class="hidden mt-6 bg-green-50 border border-green-200 rounded-2xl p-5 text-center">
                         <div class="text-2xl mb-2">✓</div>
-                        <p class="text-sm font-semibold text-green-800">Vpisani ste na čakalno listo!</p>
-                        <p class="text-xs text-green-700 mt-1">Ko se sprosti termin, vas bomo obvestili po emailu.</p>
+                        <p class="text-sm font-semibold text-green-800"><?= t('book.waitlist_done_title') ?></p>
+                        <p class="text-xs text-green-700 mt-1"><?= t('book.waitlist_done_msg') ?></p>
                     </div>
                 </div>
                 <div id="slots-grid" class="hidden grid grid-cols-3 sm:grid-cols-4 gap-3"></div>
@@ -248,17 +249,17 @@ $apiBase = BASE_PATH . '/api/book.php';
                 <!-- Legenda -->
                 <div id="slots-legend" class="hidden mt-3 text-xs text-forest/50" style="display:none">
                     <span id="legend-waitlist" style="display:none;align-items:center;gap:6px">
-                        <span style="display:inline-block;width:12px;height:12px;border-radius:3px;border:2px solid #F59E0B;background:#FFFBEB"></span> Čakalna lista
+                        <span style="display:inline-block;width:12px;height:12px;border-radius:3px;border:2px solid #F59E0B;background:#FFFBEB"></span> <?= t('book.slots_legend_waitlist') ?>
                     </span>
                 </div>
 
                 <!-- Obvestilo ob kliku na waitlist termin (samo notice + Nadaljuj) -->
                 <div id="slot-waitlist-panel" class="hidden mt-4 bg-amber-50 border border-amber-200 rounded-2xl p-5">
-                    <p class="text-sm font-semibold text-amber-900 mb-1">Termin je zaseden – čakalna lista</p>
-                    <p class="text-xs text-amber-700 mb-4">Termin <strong id="swl-time-label"></strong> je zaseden. Vpišete se lahko na čakalno listo – ko se sprosti mesto, vas bomo obvestili po emailu. Lahko pa izberete drug prosti termin zgoraj.</p>
+                    <p class="text-sm font-semibold text-amber-900 mb-1"><?= t('book.waitlist_slot_title') ?></p>
+                    <p class="text-xs text-amber-700 mb-4" id="swl-desc-text"></p>
                     <button onclick="continueToWaitlist()"
                         class="w-full bg-amber-500 hover:bg-amber-600 text-white font-semibold rounded-xl py-3 text-sm transition-colors">
-                        Nadaljuj →
+                        <?= t('book.continue') ?>
                     </button>
                 </div>
             </div>
@@ -269,7 +270,7 @@ $apiBase = BASE_PATH . '/api/book.php';
                     <button onclick="goStep(3)" class="text-forest/50 hover:text-forest transition-colors">
                         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
                     </button>
-                    <h2 class="text-2xl font-bold text-forest">Izberite prostor</h2>
+                    <h2 class="text-2xl font-bold text-forest"><?= t('book.step3b_title') ?></h2>
                 </div>
                 <p id="step3b-subtitle" class="text-sm text-forest/60 mb-6 ml-9"></p>
 
@@ -277,7 +278,7 @@ $apiBase = BASE_PATH . '/api/book.php';
                     <svg class="animate-spin mx-auto mb-3" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
                     </svg>
-                    Nalagam razpoložljivost...
+                    <?= t('book.areas_loading') ?>
                 </div>
                 <div id="area-btns" class="hidden space-y-3"></div>
             </div>
@@ -288,41 +289,41 @@ $apiBase = BASE_PATH . '/api/book.php';
                     <button onclick="state.restaurant?.allow_area_choice ? goStep('3b') : goStep(3)" class="text-forest/50 hover:text-forest transition-colors">
                         <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
                     </button>
-                    <h2 class="text-2xl font-bold text-forest">Vaši podatki</h2>
+                    <h2 class="text-2xl font-bold text-forest"><?= t('book.step4_title') ?></h2>
                 </div>
                 <p id="step4-subtitle" class="text-sm text-forest/60 mb-6 ml-9"></p>
 
                 <!-- Obvestilo za čakalno listo (prikazano samo v waitlist načinu) -->
                 <div id="step4-waitlist-notice" class="hidden bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 text-sm text-amber-800 mb-4">
-                    <strong>Čakalna lista:</strong> Vpisujete se za termin <span id="step4-waitlist-time" class="font-semibold"></span>. Ko se sprosti mesto, vas bomo obvestili po emailu.
+                    <strong><?= t('book.waitlist_notice_prefix') ?></strong> <span id="step4-waitlist-time" class="font-semibold"></span> – <?= t('book.waitlist_notice_desc') ?>
                 </div>
 
                 <div id="form-error" class="hidden bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 text-sm mb-4"></div>
 
                 <div class="space-y-4">
                     <div>
-                        <label class="block text-sm font-medium text-forest mb-1.5">Ime in priimek <span class="text-terracotta">*</span></label>
+                        <label class="block text-sm font-medium text-forest mb-1.5"><?= t('book.full_name') ?> <span class="text-terracotta">*</span></label>
                         <input id="f-name" type="text" autocomplete="name"
                             class="w-full border border-sage-light rounded-xl px-4 py-3 text-forest focus:outline-none focus:border-forest transition-colors"
-                            placeholder="npr. Janez Novak">
+                            placeholder="<?= t('book.full_name_placeholder') ?>">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-forest mb-1.5">Email <span class="text-terracotta">*</span></label>
+                        <label class="block text-sm font-medium text-forest mb-1.5"><?= t('book.email') ?> <span class="text-terracotta">*</span></label>
                         <input id="f-email" type="email" autocomplete="email"
                             class="w-full border border-sage-light rounded-xl px-4 py-3 text-forest focus:outline-none focus:border-forest transition-colors"
-                            placeholder="janez@email.com">
+                            placeholder="<?= t('book.email_placeholder') ?>">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-forest mb-1.5">Telefon <span class="text-forest/40 font-normal">(neobvezno)</span></label>
+                        <label class="block text-sm font-medium text-forest mb-1.5"><?= t('book.phone') ?> <span class="text-forest/40 font-normal"><?= t('common.optional') ?></span></label>
                         <input id="f-phone" type="tel" autocomplete="tel"
                             class="w-full border border-sage-light rounded-xl px-4 py-3 text-forest focus:outline-none focus:border-forest transition-colors"
-                            placeholder="041 123 456">
+                            placeholder="<?= t('book.phone_placeholder') ?>">
                     </div>
                     <div>
-                        <label class="block text-sm font-medium text-forest mb-1.5">Opombe <span class="text-forest/40 font-normal">(neobvezno)</span></label>
+                        <label class="block text-sm font-medium text-forest mb-1.5"><?= t('book.notes') ?> <span class="text-forest/40 font-normal"><?= t('common.optional') ?></span></label>
                         <textarea id="f-notes" rows="3"
                             class="w-full border border-sage-light rounded-xl px-4 py-3 text-forest focus:outline-none focus:border-forest transition-colors resize-none"
-                            placeholder="Alergije, posebne želje..."></textarea>
+                            placeholder="<?= t('book.notes_placeholder') ?>"></textarea>
                     </div>
 
                     <!-- Polja po meri (dinamično vstavljeno) -->
@@ -335,17 +336,16 @@ $apiBase = BASE_PATH . '/api/book.php';
                                 class="mt-1 flex-shrink-0 w-4 h-4 accent-forest"
                                 onchange="updateSubmitBtn()">
                             <span class="text-xs text-forest/70 leading-relaxed">
-                                Strinjam se z obdelavo mojih osebnih podatkov za namen rezervacije.
-                                Prebral/a sem
+                                <?= t('book.gdpr_consent') ?>
                                 <a href="<?= BASE_PATH ?>/pages/privacy.php" target="_blank"
-                                   class="text-forest underline underline-offset-2 hover:text-forest/70">Politiko zasebnosti</a>. <span class="text-terracotta">*</span>
+                                   class="text-forest underline underline-offset-2 hover:text-forest/70"><?= t('common.privacy_policy') ?></a>. <span class="text-terracotta">*</span>
                             </span>
                         </label>
                         <label class="flex items-start gap-3 cursor-pointer">
                             <input type="checkbox" id="marketing-consent"
                                 class="mt-1 flex-shrink-0 w-4 h-4 accent-forest">
                             <span class="text-xs text-forest/70 leading-relaxed">
-                                Strinjam se s prejemanjem novic in ponudb restavracije (neobvezno).
+                                <?= t('book.marketing_consent') ?>
                             </span>
                         </label>
                     </div>
@@ -354,7 +354,7 @@ $apiBase = BASE_PATH . '/api/book.php';
                 <button id="btn-submit" disabled
                     class="w-full mt-6 bg-terracotta hover:bg-terracotta-hover text-white py-4 rounded-2xl font-semibold text-lg transition-colors
                            disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                    <span id="btn-submit-text">Potrdi rezervacijo</span>
+                    <span id="btn-submit-text"><?= t('book.submit') ?></span>
                     <svg id="btn-submit-spin" class="hidden animate-spin" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
                     </svg>
@@ -370,22 +370,22 @@ $apiBase = BASE_PATH . '/api/book.php';
 
                     <!-- Povzetek rezervacije -->
                     <div id="confirm-summary" class="bg-white border border-sage-light rounded-2xl p-5 mb-8 text-left">
-                        <div class="text-xs font-semibold text-forest/40 uppercase tracking-wider mb-3">Podrobnosti</div>
+                        <div class="text-xs font-semibold text-forest/40 uppercase tracking-wider mb-3"><?= t('book.summary_title') ?></div>
                         <div class="space-y-2 text-sm">
                             <div class="flex justify-between">
-                                <span class="text-forest/60">Restavracija</span>
+                                <span class="text-forest/60"><?= t('book.summary_restaurant') ?></span>
                                 <span id="cs-rest" class="font-medium text-forest"></span>
                             </div>
                             <div class="flex justify-between">
-                                <span class="text-forest/60">Datum</span>
+                                <span class="text-forest/60"><?= t('book.summary_date') ?></span>
                                 <span id="cs-date" class="font-medium text-forest"></span>
                             </div>
                             <div class="flex justify-between">
-                                <span class="text-forest/60">Ura</span>
+                                <span class="text-forest/60"><?= t('book.summary_time') ?></span>
                                 <span id="cs-time" class="font-medium text-forest"></span>
                             </div>
                             <div class="flex justify-between">
-                                <span class="text-forest/60">Število gostov</span>
+                                <span class="text-forest/60"><?= t('book.summary_guests') ?></span>
                                 <span id="cs-guests" class="font-medium text-forest"></span>
                             </div>
                         </div>
@@ -393,7 +393,7 @@ $apiBase = BASE_PATH . '/api/book.php';
 
                     <button onclick="resetBooking()"
                         class="w-full border-2 border-forest text-forest py-3.5 rounded-2xl font-semibold transition-colors hover:bg-forest hover:text-white">
-                        Naredi novo rezervacijo
+                        <?= t('book.new_booking') ?>
                     </button>
                 </div>
             </div>
@@ -406,6 +406,14 @@ $apiBase = BASE_PATH . '/api/book.php';
 <script>
 const TOKEN   = <?= json_encode($token) ?>;
 const API_URL = <?= json_encode(APP_URL . BASE_PATH . '/api/book.php') ?>;
+
+// ── i18n ──────────────────────────────────────────────────────
+const __T__ = <?= json_encode(get_lang_strings(), JSON_UNESCAPED_UNICODE) ?>;
+function t(key, p) {
+    var s = (__T__[key] != null) ? __T__[key] : key;
+    if (p) { for (var k in p) { s = s.replace(new RegExp('\\{'+k+'\\}','g'), p[k]); } }
+    return s;
+}
 
 // ── State ─────────────────────────────────────────────────────
 const state = {
@@ -420,15 +428,15 @@ const state = {
     _waitlistTime: null,
 };
 
-const MONTHS = ['Januar','Februar','Marec','April','Maj','Junij','Julij','Avgust','September','Oktober','November','December'];
-const DAYS_SL= ['Ponedeljek','Torek','Sreda','Četrtek','Petek','Sobota','Nedelja'];
+const MONTHS  = <?= lang_months_js() ?>;
+const DAYS_SL = <?= lang_days_js() ?>;
 
 // ── Init ──────────────────────────────────────────────────────
 (async () => {
     try {
         const res  = await fetch(`${API_URL}?t=${encodeURIComponent(TOKEN)}`);
         const json = await res.json();
-        if (!json.success) throw new Error(json.error || 'Napaka');
+        if (!json.success) throw new Error(json.error || t('common.error'));
         state.restaurant = json.data;
         document.getElementById('rest-name').textContent = json.data.name;
         document.getElementById('booking-main').classList.remove('hidden');
@@ -468,7 +476,7 @@ function buildGuestButtons() {
         const more = document.createElement('button');
         more.id = 'btn-guests-more';
         more.className = 'guest-btn px-4 h-14 rounded-2xl border-2 border-sage-light text-forest font-medium text-base';
-        more.textContent = 'Več →';
+        more.textContent = t('book.more_guests_btn');
         more.onclick = () => toggleMoreGuests();
         wrap.appendChild(more);
 
@@ -476,7 +484,7 @@ function buildGuestButtons() {
         inp.min = 11;
         inp.max = max_guests;
         const lbl = document.getElementById('guest-more-label');
-        if (lbl) lbl.textContent = `Vnesite število gostov (11–${max_guests})`;
+        if (lbl) lbl.textContent = t('book.enter_guests_range', { max: max_guests });
         inp.placeholder = '11';
         inp.addEventListener('input', () => {
             const v = parseInt(inp.value);
@@ -637,7 +645,7 @@ function selectDateWaitlist(dateStr) {
     const d = new Date(dateStr + 'T12:00:00');
     const dow = DAYS_SL[(d.getDay() + 6) % 7];
     document.getElementById('step3-subtitle').textContent =
-        `${dow}, ${d.getDate()}. ${MONTHS[d.getMonth()]} ${d.getFullYear()} · ni terminov`;
+        `${dow}, ${d.getDate()}. ${MONTHS[d.getMonth()]} ${d.getFullYear()} · ${t('book.no_slots_date_suffix')}`;
 
     goStep(3);
 }
@@ -698,12 +706,12 @@ async function loadSlots(date) {
                 btn.className = 'slot-btn full border-2 border-sage-light rounded-xl py-3 text-forest font-semibold text-sm';
                 btn.textContent = time;
                 btn.disabled = true;
-                btn.title = 'Termin je popolnoma zaseden';
+                btn.title = t('book.slot_full_title');
             } else if (status === 'waitlist') {
                 hasWaitlist = true;
                 btn.className = 'slot-btn waitlist border-2 rounded-xl py-3 font-semibold text-sm';
-                btn.title = 'Zasedeno – vpis na čakalno listo';
-                btn.innerHTML = time + ' <span style="font-size:.65rem;display:block;font-weight:500">čakalna lista</span>';
+                btn.title = t('book.slot_waitlist_title');
+                btn.innerHTML = time + ' <span style="font-size:.65rem;display:block;font-weight:500">' + t('book.slot_waitlist_badge') + '</span>';
                 btn.onclick = () => selectWaitlistSlot(time, btn);
             } else {
                 btn.className = 'slot-btn border-2 border-sage-light rounded-xl py-3 text-forest font-semibold text-sm hover:border-forest';
@@ -775,8 +783,8 @@ async function loadAreas(date, time) {
         // Gumb "Vseeno mi je" (vedno na vrhu)
         const anyBtn = document.createElement('button');
         anyBtn.className = 'w-full text-left border-2 border-sage-light rounded-2xl px-5 py-4 hover:border-forest transition-colors';
-        anyBtn.innerHTML = `<div class="font-semibold text-forest">Vseeno mi je</div>
-            <div class="text-sm text-forest/50 mt-0.5">Sistem samodejno izbere najboljši prostor</div>`;
+        anyBtn.innerHTML = `<div class="font-semibold text-forest">${t('book.area_any')}</div>
+            <div class="text-sm text-forest/50 mt-0.5">${t('book.area_any_desc')}</div>`;
         anyBtn.onclick = () => selectArea(null, anyBtn);
         areaBtns.appendChild(anyBtn);
 
@@ -788,7 +796,7 @@ async function loadAreas(date, time) {
             }`;
             btn.disabled = disabled;
             btn.innerHTML = `<div class="font-semibold text-forest">${escHtml(area.name)}</div>
-                ${disabled ? '<div class="text-sm text-forest/40 mt-0.5">Ni prostih miz za vaš termin</div>' : ''}`;
+                ${disabled ? '<div class="text-sm text-forest/40 mt-0.5">' + t('book.area_unavailable') + '</div>' : ''}`;
             if (!disabled) btn.onclick = () => selectArea(area.id, btn);
             areaBtns.appendChild(btn);
         });
@@ -821,6 +829,8 @@ function selectWaitlistSlot(time, btn) {
     state._waitlistTime = time;
     state._isWaitlist   = false; // še ni potrjeno, samo notice
 
+    const descEl = document.getElementById('swl-desc-text');
+    if (descEl) descEl.textContent = t('book.waitlist_slot_desc', { time });
     const label = document.getElementById('swl-time-label');
     if (label) label.textContent = time;
 
@@ -854,15 +864,15 @@ async function submitWaitlist() {
         errEl.classList.remove('hidden');
     };
 
-    if (!firstName) return showErr('Ime je obvezno.');
-    if (!lastName)  return showErr('Priimek je obvezen.');
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showErr('Vnesite veljaven email naslov.');
-    if (!gdpr)      return showErr('Soglasje je obvezno.');
+    if (!firstName) return showErr(t('book.err_first_name'));
+    if (!lastName)  return showErr(t('book.err_last_name'));
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return showErr(t('book.err_email_short'));
+    if (!gdpr)      return showErr(t('book.err_gdpr_short'));
 
     errEl.classList.add('hidden');
     const btn = document.getElementById('wl-submit');
     btn.disabled = true;
-    btn.textContent = 'Pošiljam...';
+    btn.textContent = t('common.sending');
 
     try {
         const res  = await fetch(`${WAITLIST_API}?t=${encodeURIComponent(TOKEN)}`, {
@@ -880,14 +890,14 @@ async function submitWaitlist() {
             }),
         });
         const json = await res.json();
-        if (!json.success) throw new Error(json.error || 'Napaka strežnika.');
+        if (!json.success) throw new Error(json.error || t('book.err_server'));
 
         document.getElementById('waitlist-offer').classList.add('hidden');
         document.getElementById('waitlist-done').classList.remove('hidden');
     } catch (e) {
         showErr(e.message);
         btn.disabled = false;
-        btn.textContent = 'Vpišem se na čakalno listo';
+        btn.textContent = t('book.waitlist_submit');
     }
 }
 
@@ -962,7 +972,7 @@ function validateCustomFields() {
         if (!el) continue;
         if (el.type === 'checkbox') continue;
         if (!el.value.trim()) {
-            showFormErr(`Polje "${f.label}" je obvezno.`);
+            showFormErr(t('book.err_field_required', { label: f.label }));
             el.focus();
             return false;
         }
@@ -985,10 +995,10 @@ document.getElementById('btn-submit').onclick = async () => {
     const gdprOk    = document.getElementById('gdpr-consent')?.checked;
     const marketing = document.getElementById('marketing-consent')?.checked;
 
-    if (!name)   { showFormErr('Ime in priimek sta obvezna.'); return; }
-    if (!email)  { showFormErr('Email naslov je obvezen.'); return; }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showFormErr('Vnesite veljaven email naslov.'); return; }
-    if (!gdprOk) { showFormErr('Strinjanje z obdelavo podatkov je obvezno.'); return; }
+    if (!name)   { showFormErr(t('book.err_name')); return; }
+    if (!email)  { showFormErr(t('book.err_email_required')); return; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showFormErr(t('book.err_email_invalid')); return; }
+    if (!gdprOk) { showFormErr(t('book.err_gdpr')); return; }
 
     document.getElementById('form-error').classList.add('hidden');
 
@@ -1013,7 +1023,7 @@ document.getElementById('btn-submit').onclick = async () => {
                 }),
             });
             const json = await res.json();
-            if (!json.success) throw new Error(json.error || 'Napaka strežnika.');
+            if (!json.success) throw new Error(json.error || t('book.err_server'));
             showWaitlistConfirmation();
         } catch (e) {
             showFormErr(e.message);
@@ -1043,7 +1053,7 @@ document.getElementById('btn-submit').onclick = async () => {
             }),
         });
         const json = await res.json();
-        if (!json.success) throw new Error(json.error || 'Napaka strežnika.');
+        if (!json.success) throw new Error(json.error || t('book.err_server'));
         showConfirmation(json.data.auto_confirm);
     } catch (e) {
         showFormErr(e.message);
@@ -1062,9 +1072,9 @@ function setSubmitting(loading) {
     const text = document.getElementById('btn-submit-text');
     btn.disabled = loading;
     if (loading) {
-        text.textContent = 'Pošiljam...';
+        text.textContent = t('common.sending');
     } else {
-        text.textContent = state._isWaitlist ? 'Vpis na čakalno listo' : 'Potrdi rezervacijo';
+        text.textContent = state._isWaitlist ? t('book.submit_waitlist') : t('book.submit');
     }
     document.getElementById('btn-submit-spin').classList.toggle('hidden', !loading);
 }
@@ -1074,9 +1084,9 @@ function showWaitlistConfirmation() {
     const dow = DAYS_SL[(d.getDay() + 6) % 7];
     const dateStr = `${dow}, ${d.getDate()}. ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 
-    document.getElementById('confirm-icon').textContent  = '✉️';
-    document.getElementById('confirm-title').textContent = 'Vpisani ste na čakalno listo!';
-    document.getElementById('confirm-msg').textContent   = 'Ko se sprosti termin, vas bomo obvestili po e-pošti. Imel/a boste 2 uri časa za potrditev.';
+    document.getElementById('confirm-icon').textContent  = t('book.waitlist_confirm_icon');
+    document.getElementById('confirm-title').textContent = t('book.waitlist_confirm_title');
+    document.getElementById('confirm-msg').textContent   = t('book.waitlist_confirm_msg');
 
     document.getElementById('cs-rest').textContent   = state.restaurant.name;
     document.getElementById('cs-date').textContent   = dateStr;
@@ -1092,11 +1102,9 @@ function showConfirmation(autoConfirm) {
     const dow = DAYS_SL[(d.getDay() + 6) % 7];
     const dateStr = `${dow}, ${d.getDate()}. ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
 
-    document.getElementById('confirm-icon').textContent  = autoConfirm ? '✅' : '📩';
-    document.getElementById('confirm-title').textContent = autoConfirm ? 'Rezervacija potrjena!' : 'Prošnja sprejeta!';
-    document.getElementById('confirm-msg').textContent   = autoConfirm
-        ? 'Vaša rezervacija je potrjena. Poslali smo vam potrditveni e-mail.'
-        : 'Vaša prošnja za rezervacijo je bila sprejeta. Ko jo potrdimo, vas obvestimo po e-pošti.';
+    document.getElementById('confirm-icon').textContent  = autoConfirm ? t('book.confirm_auto_icon') : t('book.confirm_pending_icon');
+    document.getElementById('confirm-title').textContent = autoConfirm ? t('book.confirm_auto_title') : t('book.confirm_pending_title');
+    document.getElementById('confirm-msg').textContent   = autoConfirm ? t('book.confirm_auto_msg') : t('book.confirm_pending_msg');
 
     document.getElementById('cs-rest').textContent   = state.restaurant.name;
     document.getElementById('cs-date').textContent   = dateStr;
@@ -1137,10 +1145,10 @@ function goStep(n) {
         if (state._isWaitlist) {
             if (notice)   notice.classList.remove('hidden');
             if (wlTime)   wlTime.textContent = state._waitlistTime || '';
-            if (submitText) submitText.textContent = 'Vpis na čakalno listo';
+            if (submitText) submitText.textContent = t('book.submit_waitlist');
         } else {
             if (notice)   notice.classList.add('hidden');
-            if (submitText) submitText.textContent = 'Potrdi rezervacijo';
+            if (submitText) submitText.textContent = t('book.submit');
         }
     }
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1166,9 +1174,9 @@ function resetBooking() {
 
 // ── Helpers ───────────────────────────────────────────────────
 function guestLabel(n) {
-    if (n === 1) return 'gost';
-    if (n < 5)   return 'gostje';
-    return 'gostov';
+    if (n === 1) return t('book.guest_label_1');
+    if (n < 5)   return t('book.guest_label_few');
+    return t('book.guest_label_many');
 }
 </script>
 

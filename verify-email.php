@@ -1,5 +1,6 @@
 <?php
 require_once 'includes/auth_check.php';
+require_once 'includes/lang.php';
 require_once 'includes/db.php';
 require_once 'includes/functions.php';
 
@@ -36,11 +37,11 @@ if ($token) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="sl">
+<html lang="<?= get_lang() ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Potrditev emaila – <?= APP_NAME ?></title>
+    <title><?= t('auth.verify_title') ?> – <?= APP_NAME ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/login.css">
@@ -60,23 +61,23 @@ if ($token) {
         <?php if ($state === 'success'): ?>
             <div class="register-success">
                 <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
-                <h2>Email potrjen!</h2>
-                <p>Vaš račun je aktiviran. Zdaj se lahko prijavite.</p>
-                <a href="<?= BASE_PATH ?>/login.php" class="btn-register-login">Prijava →</a>
+                <h2><?= t('auth.verify_success_title') ?></h2>
+                <p><?= t('auth.verify_success_text') ?></p>
+                <a href="<?= BASE_PATH ?>/login.php" class="btn-register-login"><?= t('auth.reset_login_btn') ?></a>
             </div>
         <?php elseif ($state === 'already'): ?>
             <div class="register-success">
                 <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
-                <h2>Že potrjeno</h2>
-                <p>Ta email naslov je že bil potrjen.</p>
-                <a href="<?= BASE_PATH ?>/login.php" class="btn-register-login">Prijava →</a>
+                <h2><?= t('auth.verify_already_title') ?></h2>
+                <p><?= t('auth.verify_already_text') ?></p>
+                <a href="<?= BASE_PATH ?>/login.php" class="btn-register-login"><?= t('auth.reset_login_btn') ?></a>
             </div>
         <?php else: ?>
             <div class="register-success">
                 <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
-                <h2>Neveljaven link</h2>
-                <p>Potrditveni link je neveljaven ali je že potekel.<br>Registrirajte se znova ali kontaktirajte podporo.</p>
-                <a href="<?= BASE_PATH ?>/register.php" class="btn-register-login">Registracija</a>
+                <h2><?= t('auth.verify_invalid_title') ?></h2>
+                <p><?= nl2br(t('auth.verify_invalid_text')) ?></p>
+                <a href="<?= BASE_PATH ?>/register.php" class="btn-register-login"><?= t('auth.register_title') ?></a>
             </div>
         <?php endif; ?>
     </div>

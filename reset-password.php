@@ -1,5 +1,6 @@
 <?php
 require_once 'includes/auth_check.php';
+require_once 'includes/lang.php';
 require_once 'includes/db.php';
 require_once 'includes/functions.php';
 
@@ -36,10 +37,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $user) {
     $confirm  = $_POST['password_confirm'] ?? '';
 
     if (strlen($password) < 8) {
-        $errors[] = 'Geslo mora imeti vsaj 8 znakov.';
+        $errors[] = t('auth.err_password_short');
     }
     if ($password !== $confirm) {
-        $errors[] = 'Gesli se ne ujemata.';
+        $errors[] = t('auth.err_passwords_mismatch');
     }
 
     if (empty($errors)) {
@@ -54,17 +55,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $user) {
             $done = true;
         } catch (PDOException $e) {
             error_log('Reset password update error: ' . $e->getMessage());
-            $errors[] = 'Napaka strežnika. Poskusite znova.';
+            $errors[] = t('auth.err_server');
         }
     }
 }
 ?>
 <!DOCTYPE html>
-<html lang="sl">
+<html lang="<?= get_lang() ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Novo geslo – <?= APP_NAME ?></title>
+    <title><?= t('auth.reset_title') ?> – <?= APP_NAME ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/login.css">
@@ -80,22 +81,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $user) {
             </svg>
         </div>
         <h1><?= APP_NAME ?></h1>
-        <p class="subtitle">Novo geslo</p>
+        <p class="subtitle"><?= t('auth.reset_title') ?></p>
 
         <?php if ($done): ?>
             <div class="register-success">
                 <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>
-                <h2>Geslo je nastavljeno!</h2>
-                <p>Vaše geslo je bilo uspešno posodobljeno.</p>
-                <a href="<?= BASE_PATH ?>/login.php" class="btn-register-login">Prijava →</a>
+                <h2><?= t('auth.reset_success_title') ?></h2>
+                <p><?= t('auth.reset_success_text') ?></p>
+                <a href="<?= BASE_PATH ?>/login.php" class="btn-register-login"><?= t('auth.reset_login_btn') ?></a>
             </div>
 
         <?php elseif (!$user): ?>
             <div class="register-success">
                 <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
-                <h2>Link je potekel</h2>
-                <p>Ta link za ponastavitev gesla je neveljaven ali je potekel (1 ura).</p>
-                <a href="<?= BASE_PATH ?>/forgot-password.php" class="btn-register-login">Zahtevaj novega</a>
+                <h2><?= t('auth.reset_expired_title') ?></h2>
+                <p><?= t('auth.reset_expired_text') ?></p>
+                <a href="<?= BASE_PATH ?>/forgot-password.php" class="btn-register-login"><?= t('auth.forgot_request_new') ?></a>
             </div>
 
         <?php else: ?>
@@ -109,14 +110,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $user) {
         <form method="POST" autocomplete="off">
             <input type="hidden" name="token" value="<?= h($token) ?>">
             <div class="form-group">
-                <label for="password">Novo geslo (min. 8 znakov)</label>
+                <label for="password"><?= t('auth.new_password_label') ?></label>
                 <input type="password" id="password" name="password" required autofocus autocomplete="new-password">
             </div>
             <div class="form-group">
-                <label for="password_confirm">Potrdi novo geslo</label>
+                <label for="password_confirm"><?= t('auth.confirm_new_password_label') ?></label>
                 <input type="password" id="password_confirm" name="password_confirm" required>
             </div>
-            <button type="submit">Nastavi geslo</button>
+            <button type="submit"><?= t('auth.set_password_btn') ?></button>
         </form>
 
         <?php endif; ?>

@@ -1,5 +1,6 @@
 <?php
 require_once 'includes/auth_check.php';
+require_once 'includes/lang.php';
 require_once 'includes/db.php';
 require_once 'includes/functions.php';
 require_once 'includes/mailer.php';
@@ -28,37 +29,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $confirm                   = $_POST['password_confirm']       ?? '';
 
     if (!$post['full_name']) {
-        $errors[] = 'Ime in priimek sta obvezna.';
+        $errors[] = t('auth.err_name_required');
     }
     if (!$post['email'] || !filter_var($post['email'], FILTER_VALIDATE_EMAIL)) {
-        $errors[] = 'Vnesite veljaven email naslov.';
+        $errors[] = t('auth.err_email_invalid');
     }
     if (strlen($password) < 8) {
-        $errors[] = 'Geslo mora imeti vsaj 8 znakov.';
+        $errors[] = t('auth.err_password_short');
     }
     if ($password !== $confirm) {
-        $errors[] = 'Gesli se ne ujemata.';
+        $errors[] = t('auth.err_passwords_mismatch');
     }
     if (!$post['company_name']) {
-        $errors[] = 'Naziv podjetja je obvezen.';
+        $errors[] = t('auth.err_company_name');
     }
     if (!$post['company_address']) {
-        $errors[] = 'Naslov podjetja je obvezen.';
+        $errors[] = t('auth.err_company_address');
     }
     if (empty($_POST['gdpr_consent'])) {
-        $errors[] = 'Strinjanje s pogoji uporabe in politiko zasebnosti je obvezno.';
+        $errors[] = t('auth.err_gdpr_required');
     }
     if ($post['is_vat_registered']) {
         if (!$post['vat_id']) {
-            $errors[] = 'ID za DDV je obvezen za davčne zavezance.';
+            $errors[] = t('auth.err_vat_id_required');
         } elseif (!preg_match('/^[A-Z]{2}[A-Z0-9]{2,15}$/', $post['vat_id'])) {
-            $errors[] = 'ID za DDV ni veljavne oblike (npr. SI12345678).';
+            $errors[] = t('auth.err_vat_id_format');
         }
     } else {
         if (!$post['tax_number']) {
-            $errors[] = 'Davčna številka je obvezna.';
+            $errors[] = t('auth.err_tax_number_required');
         } elseif (!preg_match('/^[A-Z0-9]{4,20}$/i', $post['tax_number'])) {
-            $errors[] = 'Davčna številka ni veljavna (4–20 alfanumeričnih znakov).';
+            $errors[] = t('auth.err_tax_number_format');
         }
     }
 
@@ -108,41 +109,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         } catch (PDOException $e) {
             if ($e->getCode() === '23000') {
-                $errors[] = 'Ta email naslov je že registriran.';
+                $errors[] = t('auth.err_email_taken');
             } else {
                 error_log('Register error: ' . $e->getMessage());
-                $errors[] = 'Napaka strežnika. Poskusite znova.';
+                $errors[] = t('auth.err_server');
             }
         }
     }
 }
 ?>
-<!DOCTYPE html>
-<html lang="sl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Registracija – <?= APP_NAME ?></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/login.css">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/register.css">
-</head>
+<?php
+$pageTitle = t('auth.register_title');
+$extraCss  = ['login.css', 'register.css'];
+require_once 'includes/html_head.php';
+?>
 <body>
-<div class="login-wrapper">
-    <div class="login-card register-card">
-        <div class="login-logo">
-            <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-                <rect width="40" height="40" rx="10" fill="#F59E0B"/>
-                <path d="M10 14h20M10 20h20M10 26h12" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+<div class="rz-auth">
+
+    <!-- Leva stran — branding -->
+    <div class="rz-auth-left">
+        <div class="rz-auth-brand">
+            <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
+                <rect width="32" height="32" rx="7" fill="#C4704B"/>
+                <path d="M9 8v16l4-4h5a5 5 0 0 0 5-5v-4a3 3 0 0 0-3-3H9Z" fill="#fff"/>
             </svg>
+            <?= h(APP_NAME) ?>
         </div>
-        <h1><?= APP_NAME ?></h1>
-        <p class="subtitle">Registracija</p>
+        <div class="rz-auth-quote">
+            <div class="rz-auth-eyebrow"><?= t('auth.register_start') ?></div>
+            <h1 class="rz-auth-h"><?= nl2br(t('auth.register_hero')) ?></h1>
+            <p class="rz-auth-p"><?= t('auth.register_hero_text') ?></p>
+            <div class="rz-auth-stats">
+                <div><span class="rz-auth-stat-val">30 dni</span><span class="rz-auth-stat-lbl"><?= t('auth.trial_stat_1') ?></span></div>
+                <div><span class="rz-auth-stat-val">0 €</span><span class="rz-auth-stat-lbl"><?= t('auth.trial_stat_2') ?></span></div>
+                <div><span class="rz-auth-stat-val">10 min</span><span class="rz-auth-stat-lbl"><?= t('auth.trial_stat_3') ?></span></div>
+            </div>
+        </div>
+        <div class="rz-auth-foot"><?= t('auth.footer', ['year' => date('Y')]) ?></div>
+    </div>
+
+    <!-- Desna stran — forma -->
+    <div class="rz-auth-right">
+        <div class="rz-auth-card">
+            <div class="rz-auth-switch">
+                <a href="<?= BASE_PATH ?>/login.php" class="rz-btn" style="flex:1;justify-content:center;border:0;font-size:13px;font-weight:600;color:var(--ink-mute);border-radius:7px"><?= t('auth.login_btn') ?></a>
+                <button class="is-sel" type="button"><?= t('auth.register_title') ?></button>
+            </div>
+
+            <h2 class="rz-auth-title"><?= t('auth.create_account_title') ?></h2>
+            <p class="rz-auth-sub"><?= t('auth.create_account_subtitle') ?></p>
 
         <!-- Plan selector -->
         <div style="margin-bottom:20px">
-            <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:#6B7280;font-weight:600;margin-bottom:8px">Izberite paket za preizkus</div>
+            <div style="font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:#6B7280;font-weight:600;margin-bottom:8px"><?= t('auth.plan_select_label') ?></div>
             <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
                 <?php foreach ($planNames as $slug => $name):
                     $active = $slug === $selectedPlan;
@@ -150,23 +169,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ?>
                 <a href="?plan=<?= $slug ?>" style="text-decoration:none;display:block;border:2px solid <?= $active ? '#F59E0B' : '#E5E7EB' ?>;border-radius:8px;padding:10px 8px;text-align:center;background:<?= $active ? '#FFFBEB' : '#fff' ?>;cursor:pointer;transition:border-color .15s">
                     <div style="font-size:.8rem;font-weight:700;color:<?= $active ? '#92400E' : '#374151' ?>"><?= h($name) ?></div>
-                    <div style="font-size:.7rem;color:#9CA3AF;margin-top:2px"><?= $prices[$slug] ?>/mes</div>
+                    <div style="font-size:.7rem;color:#9CA3AF;margin-top:2px"><?= $prices[$slug] ?><?= t('auth.per_month_short') ?></div>
                 </a>
                 <?php endforeach; ?>
             </div>
             <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:10px 14px;margin-top:10px;text-align:center;font-size:.82rem;color:#92400E">
                 Začnete z <strong>30-dnevnim brezplačnim trialom</strong> paketa <strong><?= h($planNames[$selectedPlan]) ?></strong>.<br>
-                <span style="color:#B45309;font-size:.75rem">Med trialom lahko kadar koli prosto preklapljate med paketi.</span>
+                <span style="color:#B45309;font-size:.75rem"><?= t('auth.trial_plan_info') ?></span>
             </div>
         </div>
 
         <?php if ($success): ?>
             <div class="register-success">
                 <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="1.8"><path d="M3 8l7.89 5.26a2 2 0 0 0 2.22 0L21 8M5 19h14a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2z"/></svg>
-                <h2>Preverite vaš email!</h2>
-                <p>Poslali smo potrditveno sporočilo na<br><strong><?= h($post['email']) ?></strong></p>
-                <p style="font-size:.8rem;color:#9CA3AF">Kliknite link v emailu, da aktivirate račun. Preverite tudi mapo Spam.</p>
-                <a href="<?= BASE_PATH ?>/login.php" class="btn-register-login">Nazaj na prijavo</a>
+                <h2><?= t('auth.email_confirmed_title') ?></h2>
+                <p><?= t('auth.email_confirmed_text') ?><br><strong><?= h($post['email']) ?></strong></p>
+                <p style="font-size:.8rem;color:#9CA3AF"><?= t('auth.email_spam_hint') ?></p>
+                <a href="<?= BASE_PATH ?>/login.php" class="btn-register-login"><?= t('auth.back_to_login_btn') ?></a>
             </div>
         <?php else: ?>
 
@@ -178,50 +197,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <form method="POST" autocomplete="off">
             <div class="form-group">
-                <label for="full_name">Ime in priimek</label>
+                <label for="full_name"><?= t('auth.name_label') ?></label>
                 <input type="text" id="full_name" name="full_name"
                        value="<?= h($post['full_name'] ?? '') ?>" required autofocus>
             </div>
             <div class="form-group">
-                <label for="email">Email naslov</label>
+                <label for="email"><?= t('auth.email_label') ?></label>
                 <input type="email" id="email" name="email"
                        value="<?= h($post['email'] ?? '') ?>" required autocomplete="email">
             </div>
             <div class="form-group">
-                <label for="password">Geslo (min. 8 znakov)</label>
+                <label for="password"><?= t('auth.new_password_label') ?></label>
                 <input type="password" id="password" name="password" required autocomplete="new-password">
             </div>
             <div class="form-group">
-                <label for="password_confirm">Potrdi geslo</label>
+                <label for="password_confirm"><?= t('auth.confirm_password_label') ?></label>
                 <input type="password" id="password_confirm" name="password_confirm" required>
             </div>
 
-            <div class="billing-section-title">Podatki o podjetju</div>
+            <div class="billing-section-title"><?= t('auth.company_data') ?></div>
 
             <div class="form-group">
-                <label for="company_name">Naziv podjetja / organizacije</label>
+                <label for="company_name"><?= t('auth.company_name_label') ?></label>
                 <input type="text" id="company_name" name="company_name"
                        value="<?= h($post['company_name'] ?? '') ?>" required>
             </div>
             <div class="form-group">
-                <label for="company_address">Naslov podjetja</label>
+                <label for="company_address"><?= t('auth.company_address_label') ?></label>
                 <input type="text" id="company_address" name="company_address"
                        value="<?= h($post['company_address'] ?? '') ?>"
-                       placeholder="Ulica 1, 1000 Ljubljana" required>
+                       placeholder="<?= t('auth.company_address_placeholder') ?>" required>
             </div>
             <div class="vat-checkbox-row">
                 <input type="checkbox" id="is_vat_registered" name="is_vat_registered"
                        <?= !empty($post['is_vat_registered']) ? 'checked' : '' ?>>
-                <label for="is_vat_registered">Sem zavezanec za DDV</label>
+                <label for="is_vat_registered"><?= t('auth.vat_checkbox') ?></label>
             </div>
             <div class="form-group" id="tax-number-group">
-                <label for="tax_number">Davčna številka</label>
+                <label for="tax_number"><?= t('auth.tax_number_label') ?></label>
                 <input type="text" id="tax_number" name="tax_number"
                        value="<?= h($post['tax_number'] ?? '') ?>"
                        inputmode="numeric" maxlength="20" placeholder="12345678" required>
             </div>
             <div class="form-group" id="vat-id-group" style="display:none">
-                <label for="vat_id">ID za DDV</label>
+                <label for="vat_id"><?= t('auth.vat_id_label') ?></label>
                 <input type="text" id="vat_id" name="vat_id"
                        value="<?= h($post['vat_id'] ?? '') ?>"
                        placeholder="SI12345678" maxlength="30"
@@ -235,8 +254,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                        <?= !empty($_POST['gdpr_consent']) ? 'checked' : '' ?> required
                        style="margin-top:3px;flex-shrink:0">
                 <label for="gdpr_consent" style="font-size:.83rem;color:#374151;cursor:pointer">
-                    Strinjam se s <a href="<?= BASE_PATH ?>/pages/terms.php" target="_blank" style="color:#F59E0B">Pogoji uporabe</a>,
-                    <a href="<?= BASE_PATH ?>/pages/privacy.php" target="_blank" style="color:#F59E0B">Politiko zasebnosti</a>
+                    Strinjam se s <a href="<?= BASE_PATH ?>/pages/terms.php" target="_blank" style="color:#F59E0B"><?= t('landing.footer_terms') ?></a>,
+                    <a href="<?= BASE_PATH ?>/pages/privacy.php" target="_blank" style="color:#F59E0B"><?= t('common.privacy_policy') ?></a>
                     in Pogodbo o obdelavi podatkov (DPA). <span style="color:#EF4444">*</span>
                 </label>
             </div>
@@ -246,20 +265,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                        <?= !empty($_POST['marketing_consent']) ? 'checked' : '' ?>
                        style="margin-top:3px;flex-shrink:0">
                 <label for="marketing_consent" style="font-size:.83rem;color:#374151;cursor:pointer">
-                    Strinjam se s prejemanjem novic, nasvetov in ponudb (neobvezno).
+                    <?= t('auth.marketing_agree') ?>
                 </label>
             </div>
 
-            <button type="submit">Ustvari brezplačen račun</button>
+            <button type="submit"><?= t('auth.create_btn') ?></button>
         </form>
 
-        <p style="text-align:center;margin-top:20px;font-size:.875rem;color:#6B7280">
-            Že imaš račun?
-            <a href="<?= BASE_PATH ?>/login.php" style="color:#F59E0B;font-weight:600;text-decoration:none">Prijava</a>
+        <p style="text-align:center;margin-top:20px;font-size:.875rem;color:var(--ink-mute)">
+            <?= t('auth.already_have_account') ?>
+            <a href="<?= BASE_PATH ?>/login.php" class="rz-link"><?= t('auth.login_link') ?></a>
         </p>
 
         <?php endif; ?>
+        </div>
     </div>
+
 </div>
 <script>
 (function () {

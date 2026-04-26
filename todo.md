@@ -43,6 +43,12 @@ Superadmin naj ima moznost rocno dolociti paket uporabniku brez placila, z omeji
 - ✅ V urnik dodaj toggle, da admin dovoli zaposlenim rezervacije na zaprte/blokirane dni
 - ✅ če zaposleni želi dodati rezervacijo na blokiran/zaprt datum in override ni vklopljen, javi sporočilo z navodilom
 
+- pri custom poljih dodaj moznost, da spremenim vrstni red, dodaj tudi moznost urejanja polja
+- pri basic paketu se "Velja za" odstrani, saj nima moznosti spletnih rezervacij
 
 
-- 
+
+je prisel/ni prisel flag za no-show userja 3x no-show brez obvestila - blokiraj rezervacije na to telefonsko in email. Dodaj obvestilo, naj poklice restavracijo.
+Adminu dodaj moznost, da doloci stevilo no-show in ce to sploh upostevamo
+
+affiliate program!

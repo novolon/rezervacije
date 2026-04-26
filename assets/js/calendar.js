@@ -2,30 +2,19 @@
  * Mesečni koledar – render in podatkovni load.
  */
 const Calendar = (() => {
-  const DAYS_SL = ["Pon", "Tor", "Sre", "Čet", "Pet", "Sob", "Ned"];
   const MONTHS_SL = [
-    "Januar",
-    "Februar",
-    "Marec",
-    "April",
-    "Maj",
-    "Junij",
-    "Julij",
-    "Avgust",
-    "September",
-    "Oktober",
-    "November",
-    "December",
+    "Januar", "Februar", "Marec", "April", "Maj", "Junij",
+    "Julij", "Avgust", "September", "Oktober", "November", "December",
   ];
+  const DAYS_FULL_SL = ["nedelja","ponedeljek","torek","sreda","četrtek","petek","sobota"];
+  const MONTHS_GEN_SL = ["jan","feb","mar","apr","maj","jun","jul","avg","sep","okt","nov","dec"];
 
   let calendarData = {}; // { 'YYYY-MM-DD': { count, guests } }
   let selectedDate = APP_STATE.today;
   let currentYear = 0;
   let currentMonth = 0;
 
-  function getEl(id) {
-    return document.getElementById(id);
-  }
+  function getEl(id) { return document.getElementById(id); }
 
   // ── Render mreže ─────────────────────────────────────────────
   function render(year, month) {
@@ -33,32 +22,25 @@ const Calendar = (() => {
     currentMonth = month;
 
     const title = getEl("cal-title");
-    if (title) title.textContent = `${MONTHS_SL[month]} ${year}`;
+    if (title) title.textContent = `${MONTHS_SL[month].toUpperCase()} ${year}`;
 
     const grid = getEl("cal-grid");
     if (!grid) return;
     grid.innerHTML = "";
 
-    // Glave dni
-    DAYS_SL.forEach((d) => {
-      const el = document.createElement("div");
-      el.className = "calendar-day-header";
-      el.textContent = d;
-      grid.appendChild(el);
-    });
-
-    // Začetni dan meseca (1 = ponedeljek, ..., 7 = nedelja v SL formatu)
     const firstDay = new Date(year, month, 1);
-    // getDay(): 0=ned, 1=pon... prilagodimo na pon=0
     let startOffset = (firstDay.getDay() + 6) % 7;
-
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const today = APP_STATE.today;
+
+    const appState = window.APP_STATE;
+    const restId2 = (window.App ? App.getState().restaurantId : null) || (appState.restaurants[0] || {}).id;
+    const rest = (appState.restaurants || []).find(r => r.id === restId2) || (appState.restaurants || [])[0];
 
     // Prazne celice pred 1.
     for (let i = 0; i < startOffset; i++) {
       const empty = document.createElement("div");
-      empty.className = "calendar-cell empty";
+      empty.className = "rz-mc-cell rz-mc-empty";
       grid.appendChild(empty);
     }
 
@@ -66,62 +48,69 @@ const Calendar = (() => {
     for (let d = 1; d <= daysInMonth; d++) {
       const dateObj = new Date(year, month, d);
       const ds = dateStr(dateObj);
-      const cell = buildCell(d, ds, today);
-      grid.appendChild(cell);
+      grid.appendChild(buildCell(d, ds, today, getDayCapacity(rest, dateObj)));
     }
+
+    updateSummary(selectedDate);
   }
 
-  function buildCell(dayNum, ds, today) {
-    const cell = document.createElement("div");
-    const classes = ["calendar-cell"];
+  // Izračuna dnevno kapaciteto: koliko gostov lahko restavracija sprejme v enem dnevu.
+  // Formula: floor(odprto_okno_min / trajanje_rezervacije) * skupaj_sedežev
+  function getDayCapacity(rest, dateObj) {
+    if (!rest) return 0;
+    const totalSeats = (rest.tables || []).reduce((s, t) => s + (t.capacity || 0), 0);
+    if (!totalSeats) return 0;
+    const duration = parseInt(rest.reservation_duration) || 60;
 
-    if (ds < today) classes.push("past");
-    else if (ds === today) classes.push("today");
-    if (ds === selectedDate) classes.push("selected");
+    const dow = (dateObj.getDay() + 6) % 7; // 0=Pon, 6=Ned
+    const dsDay = (rest.day_schedules || []).find(d => d.day_of_week === dow);
+    if (dsDay && !dsDay.is_open) return 0;
 
+    const start = dsDay ? dsDay.start_time : (rest.schedule_start || 0);
+    const end   = dsDay ? dsDay.end_time   : (rest.schedule_end   || 0);
+    const windowMin = end - start;
+    if (windowMin <= 0) return 0;
+
+    const slots = Math.floor(windowMin / duration);
+    return slots * totalSeats;
+  }
+
+  function buildCell(dayNum, ds, today, totalCapacity) {
+    const cell = document.createElement("button");
+    const classes = ["rz-mc-cell"];
+    if (ds < today) classes.push("is-past");
+    else if (ds === today) classes.push("is-today");
+    if (ds === selectedDate) classes.push("is-sel");
     cell.className = classes.join(" ");
     cell.dataset.date = ds;
 
-    // Vsebina celice
-    const top = document.createElement("div");
-    top.className = "cell-top";
-
-    const num = document.createElement("div");
-    num.className = "cell-day-num";
+    const num = document.createElement("span");
+    num.className = "rz-mc-num";
     num.textContent = dayNum;
-    top.appendChild(num);
+    cell.appendChild(num);
 
     const data = calendarData[ds];
-    if (data && data.count > 0) {
-      const badge = document.createElement("div");
-      badge.className = "cell-badge";
-      badge.textContent = data.count;
-      top.appendChild(badge);
-    }
+    const count = data ? data.count : 0;
 
-    cell.appendChild(top);
+    const cnt = document.createElement("span");
+    cnt.className = "rz-mc-count mono";
+    cnt.textContent = count > 0 ? count : "";
+    cell.appendChild(cnt);
 
-    if (data && data.count > 0) {
-      // const cnt = document.createElement('div');
-      // cnt.className = 'cell-count';
-      // cnt.textContent = `${data.count} rezervacij`;
-
-      const guests = document.createElement("div");
-      guests.className = "cell-guests";
-      guests.textContent = `👥 ${data.guests} oseb`;
-
-      // cell.appendChild(cnt);
-      cell.appendChild(guests);
-    }
+    const bar = document.createElement("span");
+    bar.className = "rz-mc-bar";
+    const fill = document.createElement("span");
+    fill.className = "rz-mc-bar-fill";
+    const cap = totalCapacity || 1;
+    fill.style.width = data && data.guests > 0 ? `${Math.min(100, Math.round((data.guests / cap) * 100))}%` : "0%";
+    bar.appendChild(fill);
+    cell.appendChild(bar);
 
     cell.addEventListener("click", () => {
       selectedDate = ds;
-      // Posodobi selected razred
-      document
-        .querySelectorAll(".calendar-cell.selected")
-        .forEach((c) => c.classList.remove("selected"));
-      cell.classList.add("selected");
-      // Obvesti app
+      document.querySelectorAll(".rz-mc-cell.is-sel").forEach(c => c.classList.remove("is-sel"));
+      cell.classList.add("is-sel");
+      updateSummary(ds);
       if (window.App) App.onDayClick(new Date(ds + "T00:00:00"));
     });
 
@@ -135,13 +124,11 @@ const Calendar = (() => {
     const restId = state ? state.restaurantId : null;
 
     const url =
-      `/api/dashboard.php?month=${monthStr}` +
+      `/api/reservations.php?month=${monthStr}` +
       (restId ? `&restaurant_id=${restId}` : "");
     try {
       calendarData = (await API.get(url)) || {};
-      // Re-render s novimi podatki
       render(year, month);
-      // Povrni selected
       setSelected(selectedDate);
     } catch (e) {
       if (window.App) App.showToast(e.message, "error");
@@ -151,13 +138,30 @@ const Calendar = (() => {
   // ── Označi izbran dan ─────────────────────────────────────────
   function setSelected(ds) {
     selectedDate = ds;
-    document.querySelectorAll(".calendar-cell").forEach((c) => {
-      if (c.dataset.date === ds) {
-        c.classList.add("selected");
-      } else {
-        c.classList.remove("selected");
-      }
+    document.querySelectorAll(".rz-mc-cell").forEach(c => {
+      if (c.dataset.date === ds) c.classList.add("is-sel");
+      else c.classList.remove("is-sel");
     });
+    updateSummary(ds);
+  }
+
+  // ── Posodobi vrstico s povzetkom ─────────────────────────────
+  function updateSummary(ds) {
+    const labelEl = getEl("cal-sel-label");
+    const statsEl = getEl("cal-sel-stats");
+    if (!labelEl || !statsEl) return;
+
+    if (!ds) { labelEl.textContent = "–"; statsEl.textContent = ""; return; }
+
+    const d = new Date(ds + "T00:00:00");
+    labelEl.textContent = `${DAYS_FULL_SL[d.getDay()]}, ${d.getDate()}. ${MONTHS_GEN_SL[d.getMonth()]}`;
+
+    const data = calendarData[ds];
+    if (data && data.count > 0) {
+      statsEl.textContent = `${data.count} rezervacij · ${data.guests} oseb`;
+    } else {
+      statsEl.textContent = "Ni rezervacij";
+    }
   }
 
   // ── Pomožna ───────────────────────────────────────────────────

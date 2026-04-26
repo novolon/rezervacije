@@ -8,6 +8,7 @@ if (is_logged_in()) {
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/plans.php';
+require_once '../includes/lang.php';
 
 if (!is_logged_in()) redirect_to_login();
 if ($_SESSION['role'] === 'superadmin') {
@@ -40,16 +41,16 @@ if ($isAdmin) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="sl">
+<html lang="<?= get_lang() ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Odgovori ankete – <?= h(APP_NAME) ?></title>
+    <title><?= t('survey_results.page_title') ?> – <?= h(APP_NAME) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css?v=4">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/admin.css?v=3">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/modal.css?v=2">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/modal.css?v=3">
     <style>
         .results-wrap{max-width:960px;margin:0 auto;padding:28px 16px 60px}
         .results-filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:22px}
@@ -92,6 +93,10 @@ if ($isAdmin) {
         .stars-display svg{display:block}
         @media(max-width:640px){.results-table th:nth-child(3),.results-table td:nth-child(3){display:none}}
     </style>
+    <script>
+    window.__T__ = <?= json_encode(get_lang_strings(), JSON_UNESCAPED_UNICODE) ?>;
+    window.t = function(k, p) { var s = window.__T__[k] || k; if (p) { for (var x in p) s = s.split('{'+x+'}').join(p[x]); } return s; };
+    </script>
 </head>
 <body>
 
@@ -106,20 +111,20 @@ if ($isAdmin) {
         <?php if ($isAdmin): ?><?= plan_badge($_SESSION['plan_slug'] ?? 'trial') ?><?php endif; ?>
     </a>
     <div class="header-restaurant">
-        <span style="color:rgba(255,255,255,.5);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;font-weight:600">Odgovori ankete</span>
+        <span style="color:rgba(255,255,255,.5);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;font-weight:600"><?= t('survey_results.header_label') ?></span>
     </div>
     <div class="header-actions">
         <span class="header-user">👤 <?= h($fullName) ?></span>
         <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-            Razpored
+            <?= t('survey_results.schedule_link') ?>
         </a>
         <?php if ($isAdmin): ?>
-        <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">Admin</a>
-        <a href="<?= BASE_PATH ?>/pages/survey_builder.php" class="btn-header">Uredi anketo</a>
+        <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin"><?= t('survey_results.admin_link') ?></a>
+        <a href="<?= BASE_PATH ?>/pages/survey_builder.php" class="btn-header"><?= t('survey_results.builder_link') ?></a>
         <?php endif; ?>
-        <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header">Profil</a>
-        <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
+        <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header"><?= t('survey_results.profile_link') ?></a>
+        <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout"><?= t('survey_results.logout') ?></a>
     </div>
     <button class="hamburger-btn" id="hamburger-btn" onclick="document.getElementById('mobile-nav').classList.toggle('open')">
         <span></span><span></span><span></span>
@@ -128,13 +133,13 @@ if ($isAdmin) {
 
 <div class="mobile-nav" id="mobile-nav">
     <div class="mobile-nav-user">👤 <?= h($fullName) ?></div>
-    <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin">Razpored</a>
+    <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin"><?= t('survey_results.schedule_link') ?></a>
     <?php if ($isAdmin): ?>
-    <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">Admin</a>
-    <a href="<?= BASE_PATH ?>/pages/survey_builder.php" class="btn-header">Uredi anketo</a>
+    <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin"><?= t('survey_results.admin_link') ?></a>
+    <a href="<?= BASE_PATH ?>/pages/survey_builder.php" class="btn-header"><?= t('survey_results.builder_link') ?></a>
     <?php endif; ?>
-    <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header">Profil</a>
-    <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
+    <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header"><?= t('survey_results.profile_link') ?></a>
+    <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout"><?= t('survey_results.logout') ?></a>
 </div>
 
 <?php require_once '../includes/trial_banner.php'; ?>
@@ -143,8 +148,8 @@ if ($isAdmin) {
 
     <?php if (!$hasSurvey): ?>
     <div class="gate-notice">
-        Ta funkcionalnost je na voljo v paketu <strong>Advanced</strong> ali višjem.
-        <a href="<?= BASE_PATH ?>/pages/billing.php">Nadgradi paket →</a>
+        <?= t_raw('survey_results.gate_notice') ?>
+        <a href="<?= BASE_PATH ?>/pages/billing.php"><?= t('survey_results.gate_upgrade') ?></a>
     </div>
     <?php else: ?>
 
@@ -152,9 +157,9 @@ if ($isAdmin) {
     <div class="results-filters">
         <?php if ($isAdmin && count($restaurants) > 1): ?>
         <div>
-            <label>Restavracija</label>
+            <label><?= t('survey_results.label_restaurant') ?></label>
             <select id="f-restaurant">
-                <option value="">Vse restavracije</option>
+                <option value=""><?= t('survey_results.all_restaurants') ?></option>
                 <?php foreach ($restaurants as $r): ?>
                 <option value="<?= $r['id'] ?>"><?= h($r['name']) ?></option>
                 <?php endforeach; ?>
@@ -165,38 +170,38 @@ if ($isAdmin) {
         <?php endif; ?>
 
         <div>
-            <label>Od datuma</label>
+            <label><?= t('survey_results.label_date_from') ?></label>
             <input type="date" id="f-from">
         </div>
         <div>
-            <label>Do datuma</label>
+            <label><?= t('survey_results.label_date_to') ?></label>
             <input type="date" id="f-to">
         </div>
         <div>
-            <label>Soglasje</label>
+            <label><?= t('survey_results.label_consent') ?></label>
             <select id="f-consent">
-                <option value="">Vse</option>
-                <option value="public">Javno</option>
-                <option value="anonymous">Anonimno</option>
-                <option value="private">Zasebno</option>
+                <option value=""><?= t('survey_results.consent_all') ?></option>
+                <option value="public"><?= t('survey_results.consent_public') ?></option>
+                <option value="anonymous"><?= t('survey_results.consent_anonymous') ?></option>
+                <option value="private"><?= t('survey_results.consent_private') ?></option>
             </select>
         </div>
-        <button class="btn-filter" onclick="loadResults()">Prikaži</button>
+        <button class="btn-filter" onclick="loadResults()"><?= t('survey_results.btn_show') ?></button>
         <?php if ($hasExport): ?>
         <a href="#" class="btn-export" id="btn-export" onclick="exportCsv(event)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Izvozi CSV
+            <?= t('survey_results.btn_export') ?>
         </a>
         <?php else: ?>
-        <span class="btn-export disabled" title="Na voljo v paketu Premium">
+        <span class="btn-export disabled" title="<?= t('survey_results.btn_export_premium') ?>">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Izvozi CSV (Premium)
+            <?= t('survey_results.btn_export_premium') ?>
         </span>
         <?php endif; ?>
     </div>
 
     <div id="results-container">
-        <div class="empty-state">Izberite filter in kliknite Prikaži.</div>
+        <div class="empty-state"><?= t('survey_results.empty_initial') ?></div>
     </div>
 
     <?php endif; ?>
@@ -219,49 +224,53 @@ function loadResults() {
     const to       = document.getElementById('f-to')?.value       || '';
     const consent  = document.getElementById('f-consent')?.value  || '';
 
-    if (!restId) { alert('Izberite restavracijo.'); return; }
+    if (!restId) { alert(window.t('survey_results.err_no_restaurant')); return; }
 
     const params = new URLSearchParams({ action: 'get_results', restaurant_id: restId });
     if (from)    params.set('date_from', from);
     if (to)      params.set('date_to',   to);
     if (consent) params.set('consent',   consent);
 
-    document.getElementById('results-container').innerHTML = '<div class="empty-state">Nalagam...</div>';
+    document.getElementById('results-container').innerHTML = `<div class="empty-state">${window.t('survey_results.loading')}</div>`;
 
     fetch(`${BASE}/api/survey.php?${params}`)
         .then(r => r.json())
         .then(res => {
-            if (!res.success) { alert(res.error || 'Napaka'); return; }
+            if (!res.success) { alert(res.error || window.t('common.error')); return; }
             renderTable(res.data || []);
         })
-        .catch(() => alert('Napaka pri nalaganju.'));
+        .catch(() => alert(window.t('survey_results.err_load')));
 }
 
-const CONSENT_LABELS = { public:'Javno', anonymous:'Anonimno', private:'Zasebno' };
+const CONSENT_LABELS = {
+    public:    window.t('survey_results.consent_public'),
+    anonymous: window.t('survey_results.consent_anonymous'),
+    private:   window.t('survey_results.consent_private'),
+};
 const CONSENT_BADGES = { public:'badge-public', anonymous:'badge-anonymous', private:'badge-private' };
 
 function renderTable(rows) {
     const cont = document.getElementById('results-container');
     if (!rows.length) {
-        cont.innerHTML = '<div class="empty-state">Ni odgovorov za izbrani filter.</div>';
+        cont.innerHTML = `<div class="empty-state">${window.t('survey_results.empty_results')}</div>`;
         return;
     }
     let html = `
     <table class="results-table">
         <thead><tr>
-            <th>Datum oddaje</th>
-            <th>Gost</th>
-            <th>Datum rezervacije</th>
-            <th>Soglasje</th>
-            <th>Status</th>
+            <th>${window.t('survey_results.col_submitted')}</th>
+            <th>${window.t('survey_results.col_guest')}</th>
+            <th>${window.t('survey_results.col_date')}</th>
+            <th>${window.t('survey_results.col_consent')}</th>
+            <th>${window.t('survey_results.col_status')}</th>
         </tr></thead>
         <tbody>`;
     rows.forEach(r => {
         const status = r.submitted_at
-            ? `<span class="badge badge-submitted">Izpolnjena</span>`
+            ? `<span class="badge badge-submitted">${window.t('survey_results.status_submitted')}</span>`
             : r.email_sent_at
-                ? `<span class="badge badge-sent">Email poslan</span>`
-                : `<span class="badge badge-pending">Čaka pošiljanje</span>`;
+                ? `<span class="badge badge-sent">${window.t('survey_results.status_sent')}</span>`
+                : `<span class="badge badge-pending">${window.t('survey_results.status_pending')}</span>`;
         const consent = r.consent
             ? `<span class="badge ${CONSENT_BADGES[r.consent] || ''}">${CONSENT_LABELS[r.consent] || r.consent}</span>`
             : '–';
@@ -283,8 +292,9 @@ function fmtDate(s) {
     if (!s) return '–';
     const d = new Date(s.replace(' ', 'T'));
     if (isNaN(d)) return s;
-    return d.toLocaleDateString('sl-SI', { day:'2-digit', month:'2-digit', year:'numeric' })
-        + (s.includes(':') ? ' ' + d.toLocaleTimeString('sl-SI', { hour:'2-digit', minute:'2-digit' }) : '');
+    const loc = (window.__T__ && window.__T__['common.locale']) || 'sl-SI';
+    return d.toLocaleDateString(loc, { day:'2-digit', month:'2-digit', year:'numeric' })
+        + (s.includes(':') ? ' ' + d.toLocaleTimeString(loc, { hour:'2-digit', minute:'2-digit' }) : '');
 }
 
 function hesc(s) {
@@ -293,7 +303,7 @@ function hesc(s) {
 
 function openDetail(id) {
     const mc = document.getElementById('modal-content');
-    mc.innerHTML = '<div style="text-align:center;padding:30px;color:#9CA3AF">Nalagam...</div>';
+    mc.innerHTML = `<div style="text-align:center;padding:30px;color:#9CA3AF">${window.t('survey_results.loading')}</div>`;
     document.getElementById('detail-modal').classList.add('open');
 
     fetch(`${BASE}/api/survey.php?action=get_response_detail&id=${id}`)
@@ -302,21 +312,25 @@ function openDetail(id) {
             if (!res.success) { mc.innerHTML = '<p style="color:#EF4444">' + hesc(res.error) + '</p>'; return; }
             renderDetail(res.data);
         })
-        .catch(() => mc.innerHTML = '<p style="color:#EF4444">Napaka pri nalaganju.</p>');
+        .catch(() => mc.innerHTML = `<p style="color:#EF4444">${window.t('survey_results.err_load')}</p>`);
 }
 
 function renderDetail(data) {
     const { response: sr, answers } = data;
-    const consentMap = { public:'Javno z imenom', anonymous:'Anonimno', private:'Ne strinja se z objavo' };
+    const consentMap = {
+        public:    window.t('survey_results.consent_public_full'),
+        anonymous: window.t('survey_results.consent_anonymous_full'),
+        private:   window.t('survey_results.consent_private_full'),
+    };
     const submitted = sr.submitted_at ? fmtDate(sr.submitted_at) : '–';
 
     let html = `
-        <div class="modal-title">Odgovor ankete</div>
-        <div class="modal-sub">Oddano: ${submitted} · Soglasje: ${consentMap[sr.consent] || '–'}</div>
+        <div class="modal-title">${window.t('survey_results.detail_title')}</div>
+        <div class="modal-sub">${window.t('survey_results.detail_submitted_label')}: ${submitted} · ${window.t('survey_results.detail_consent_label')}: ${consentMap[sr.consent] || '–'}</div>
     `;
 
     if (!answers || !answers.length) {
-        html += '<p style="color:#9CA3AF;font-size:.88rem">Ni odgovorov.</p>';
+        html += `<p style="color:#9CA3AF;font-size:.88rem">${window.t('survey_results.detail_no_answers')}</p>`;
     } else {
         answers.forEach(a => {
             html += '<div class="answer-block">';
@@ -353,7 +367,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal()
 function exportCsv(e) {
     e.preventDefault();
     const restId = document.getElementById('f-restaurant')?.value || '';
-    if (!restId) { alert('Izberite restavracijo.'); return; }
+    if (!restId) { alert(window.t('survey_results.err_no_restaurant')); return; }
     const from   = document.getElementById('f-from')?.value || '';
     const to     = document.getElementById('f-to')?.value   || '';
     const params = new URLSearchParams({ action: 'export_csv', restaurant_id: restId });

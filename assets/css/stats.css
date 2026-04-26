@@ -2,11 +2,6 @@
    Statistika – stats.css
    ============================================= */
 
-.stats-wrap {
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: calc(var(--header-h) + 24px) 20px 40px;
-}
 
 /* ── Filter vrstica ─────────────────────────────── */
 .stats-filters {

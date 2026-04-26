@@ -245,29 +245,18 @@ if ($method === 'GET') {
         ]);
     }
 
-    // Čakajoče rezervacije (?pending=1)
+    // Čakajoče rezervacije (?pending=1&restaurant_id=X)
+    // $rest_id je že resolvan zgoraj (spoštuje session restaurant_id za user, ?restaurant_id za admin)
     if (isset($_GET['pending'])) {
-        if ($session['role'] === 'user') {
-            $rid  = (int)$session['restaurant_id'];
-            $stmt = $pdo->prepare("
-                SELECT r.*, res.name AS restaurant_name, res.color AS restaurant_color
-                FROM reservations r
-                JOIN restaurants res ON r.restaurant_id = res.id
-                WHERE r.status = 'pending' AND r.restaurant_id = ? AND res.is_active = 1
-                ORDER BY r.reservation_date, r.reservation_time, r.guest_name
-            ");
-            $stmt->execute([$rid]);
-        } else {
-            $f = admin_rest_filter($pdo, $session, null, 'r', 'res');
-            $stmt = $pdo->prepare("
-                SELECT r.*, res.name AS restaurant_name, res.color AS restaurant_color
-                FROM reservations r
-                JOIN restaurants res ON r.restaurant_id = res.id
-                WHERE r.status = 'pending' AND {$f['where']} AND res.is_active = 1
-                ORDER BY r.reservation_date, r.reservation_time, r.guest_name
-            ");
-            $stmt->execute($f['params']);
-        }
+        $f = admin_rest_filter($pdo, $session, $rest_id, 'r', 'res');
+        $stmt = $pdo->prepare("
+            SELECT r.*, res.name AS restaurant_name, res.color AS restaurant_color
+            FROM reservations r
+            JOIN restaurants res ON r.restaurant_id = res.id
+            WHERE r.status = 'pending' AND {$f['where']} AND res.is_active = 1
+            ORDER BY r.reservation_date, r.reservation_time, r.guest_name
+        ");
+        $stmt->execute($f['params']);
         json_response(true, $stmt->fetchAll());
     }
 
@@ -606,10 +595,11 @@ if ($method === 'POST') {
 
         // Posodobi bazo gostov (Advanced/Premium)
         $guestEmail = trim($body['email'] ?? '');
-        if ($guestEmail) {
+        $guestPhone = trim($body['phone'] ?? '');
+        if ($guestEmail || $guestPhone) {
             upsert_guest($pdo, $rest_id, $guestEmail, [
                 'guest_name'       => $name,
-                'phone'            => trim($body['phone'] ?? ''),
+                'phone'            => $guestPhone,
                 'reservation_date' => $date,
                 'guest_count'      => $count,
             ]);

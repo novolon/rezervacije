@@ -2,20 +2,25 @@
 require_once '../config.php';
 require_once '../includes/functions.php';
 require_once '../includes/db.php';
+require_once '../includes/lang.php';
 
 // Pridobi seznam restavracij za dropdown
 $pdo          = getDB();
 $restaurants  = $pdo->query("SELECT id, name FROM restaurants WHERE is_active = 1 ORDER BY name")->fetchAll();
 ?>
 <!DOCTYPE html>
-<html lang="sl">
+<html lang="<?= get_lang() ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GDPR zahtevek – <?= h(APP_NAME) ?></title>
+    <title><?= t('gdpr_request.title') ?> – <?= h(APP_NAME) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/login.css">
+    <script>
+    window.__T__ = <?= json_encode(get_lang_strings(), JSON_UNESCAPED_UNICODE) ?>;
+    window.t = function(k, p) { var s = window.__T__[k] || k; if (p) { for (var x in p) s = s.split('{'+x+'}').join(p[x]); } return s; };
+    </script>
     <style>
         body { background: #F9FAFB; }
         .legal-wrap { max-width: 580px; margin: 40px auto; padding: 0 20px 60px; }
@@ -44,36 +49,34 @@ $restaurants  = $pdo->query("SELECT id, name FROM restaurants WHERE is_active = 
 
     <div class="legal-card">
         <div id="form-section">
-            <h1>Uveljavljanje pravic GDPR</h1>
+            <h1><?= t('gdpr_request.heading') ?></h1>
             <p class="subtitle">
-                V skladu z Uredbo EU 2016/679 (GDPR) imate pravico do dostopa, popravka, izbrisa
-                in prenosljivosti vaših osebnih podatkov. Izpolnite spodnji obrazec – odgovorili bomo
-                v <strong>30 dneh</strong>.<br>
-                Preberite tudi našo <a href="<?= BASE_PATH ?>/pages/privacy.php" target="_blank">Politiko zasebnosti</a>.
+                <?= t('gdpr_request.subtitle') ?><br>
+                Preberite tudi našo <a href="<?= BASE_PATH ?>/pages/privacy.php" target="_blank"><?= t('gdpr_request.privacy_link') ?></a>.
             </p>
 
             <div id="req-error" class="error-msg" style="display:none"></div>
 
             <div class="form-group">
-                <label for="req-email">Vaš email naslov <span style="color:#EF4444">*</span></label>
+                <label for="req-email"><?= t('gdpr_request.email_label') ?> <span style="color:#EF4444">*</span></label>
                 <input type="email" id="req-email" placeholder="janez@email.com" required autocomplete="email">
             </div>
 
             <div class="form-group">
-                <label for="req-type">Vrsta zahtevka <span style="color:#EF4444">*</span></label>
+                <label for="req-type"><?= t('gdpr_request.type_label') ?> <span style="color:#EF4444">*</span></label>
                 <select id="req-type" required style="width:100%;padding:10px 14px;border:1px solid #E5E7EB;border-radius:10px;font-size:.9rem;color:#374151;background:#fff;appearance:none">
-                    <option value="">– Izberite –</option>
-                    <option value="access">Dostop do mojih podatkov</option>
-                    <option value="rectification">Popravek netočnih podatkov</option>
-                    <option value="erasure">Izbris podatkov (pravica do pozabe)</option>
-                    <option value="portability">Prenosljivost podatkov (izvoz JSON)</option>
+                    <option value=""><?= t('gdpr_request.type_placeholder') ?></option>
+                    <option value="access"><?= t('gdpr_request.type_access') ?></option>
+                    <option value="rectification"><?= t('gdpr_request.type_rectification') ?></option>
+                    <option value="erasure"><?= t('gdpr_request.type_erasure') ?></option>
+                    <option value="portability"><?= t('gdpr_request.type_portability') ?></option>
                 </select>
             </div>
 
             <div class="form-group">
-                <label for="req-restaurant">Restavracija <span style="color:#6B7280;font-weight:400">(neobvezno – če se zahtevek nanaša na konkretno restavracijo)</span></label>
+                <label for="req-restaurant"><?= t('gdpr_request.restaurant_label') ?> <span style="color:#6B7280;font-weight:400"><?= t('gdpr_request.restaurant_optional') ?></span></label>
                 <select id="req-restaurant" style="width:100%;padding:10px 14px;border:1px solid #E5E7EB;border-radius:10px;font-size:.9rem;color:#374151;background:#fff;appearance:none">
-                    <option value="">– Vse / Splošno –</option>
+                    <option value=""><?= t('gdpr_request.restaurant_all') ?></option>
                     <?php foreach ($restaurants as $r): ?>
                     <option value="<?= (int)$r['id'] ?>"><?= h($r['name']) ?></option>
                     <?php endforeach; ?>
@@ -82,11 +85,11 @@ $restaurants  = $pdo->query("SELECT id, name FROM restaurants WHERE is_active = 
 
             <button id="req-btn" onclick="submitRequest()"
                 style="width:100%;padding:13px;background:#F59E0B;color:#fff;border:none;border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer;margin-top:8px;transition:opacity .15s">
-                Oddaj zahtevek
+                <?= t('gdpr_request.submit_btn') ?>
             </button>
 
             <p style="font-size:.78rem;color:#9CA3AF;text-align:center;margin-top:14px;line-height:1.5">
-                Po oddaji prejmete potrditveni email. Zahtevki se obravnavajo v 30 dneh.
+                <?= t('gdpr_request.footer_note') ?>
             </p>
         </div>
 
@@ -94,10 +97,9 @@ $restaurants  = $pdo->query("SELECT id, name FROM restaurants WHERE is_active = 
             <svg width="48" height="48" fill="none" stroke="#22C55E" stroke-width="1.8" viewBox="0 0 24 24">
                 <circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>
             </svg>
-            <h2>Zahtevek oddan!</h2>
-            <p>Poslali smo potrditveni email na vaš naslov.<br>
-               Odgovorili bomo v <strong>30 dneh</strong>.</p>
-            <a href="<?= BASE_PATH ?>/" style="display:inline-block;margin-top:20px;font-size:.85rem;color:#6B7280">← Nazaj</a>
+            <h2><?= t('gdpr_request.success_title') ?></h2>
+            <p><?= t('gdpr_request.success_desc') ?></p>
+            <a href="<?= BASE_PATH ?>/" style="display:inline-block;margin-top:20px;font-size:.85rem;color:#6B7280"><?= t('gdpr_request.back_link') ?></a>
         </div>
     </div>
 </div>
@@ -110,11 +112,11 @@ async function submitRequest() {
     const btn        = document.getElementById('req-btn');
 
     errEl.style.display = 'none';
-    if (!email) { showErr('Vnesite email naslov.'); return; }
-    if (!type)  { showErr('Izberite vrsto zahtevka.'); return; }
+    if (!email) { showErr(window.t('gdpr_request.err_email')); return; }
+    if (!type)  { showErr(window.t('gdpr_request.err_type')); return; }
 
     btn.disabled = true;
-    btn.textContent = 'Pošiljam...';
+    btn.textContent = window.t('gdpr_request.submitting');
 
     try {
         const res  = await fetch('<?= BASE_PATH ?>/api/gdpr.php?action=submit_request', {
@@ -123,13 +125,13 @@ async function submitRequest() {
             body:    JSON.stringify({ email, type, restaurant_id: restaurant ? parseInt(restaurant) : null }),
         });
         const json = await res.json();
-        if (!json.success) throw new Error(json.error || 'Napaka strežnika.');
+        if (!json.success) throw new Error(json.error || window.t('gdpr_request.err_server'));
         document.getElementById('form-section').style.display    = 'none';
         document.getElementById('success-section').style.display = 'block';
     } catch (e) {
         showErr(e.message);
         btn.disabled    = false;
-        btn.textContent = 'Oddaj zahtevek';
+        btn.textContent = window.t('gdpr_request.submit_btn');
     }
 
     function showErr(msg) {

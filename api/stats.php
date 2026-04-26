@@ -239,34 +239,40 @@ if ($section === 'guests_dist') {
 
 // ─── Sekcija: returning ───────────────────────────────────────
 if ($section === 'returning') {
-    // Vsi unikatni gosti z emailom v obdobju
+    // Gosta identificiramo po emailu ali (če emaila ni) po telefonu
+    $identExpr = "CASE
+        WHEN email IS NOT NULL AND email != '' THEN CONCAT('e:', email)
+        WHEN phone IS NOT NULL AND phone != '' THEN CONCAT('p:', phone)
+        ELSE NULL
+    END";
+    $identFilter = "(email IS NOT NULL AND email != '' OR phone IS NOT NULL AND phone != '')";
+
     $stmt = $pdo->prepare("
-        SELECT COUNT(DISTINCT email) AS unique_guests
+        SELECT COUNT(DISTINCT {$identExpr}) AS unique_guests
         FROM reservations r
         WHERE {$rf['where']} AND r.reservation_date BETWEEN ? AND ?
-          AND r.status = 'confirmed' AND email IS NOT NULL AND email != ''
+          AND r.status = 'confirmed' AND {$identFilter}
     ");
     $stmt->execute(array_merge($rf['params'], [$from, $to]));
     $unique = (int)$stmt->fetchColumn();
 
-    // Vrnili se vsaj 2x (v celotni zgodovini, ne samo v obdobju)
+    // Vrnili se vsaj 2x (v celotni zgodovini)
     $stmt2 = $pdo->prepare("
         SELECT COUNT(*) AS returning_guests FROM (
-            SELECT email
+            SELECT {$identExpr} AS ident
             FROM reservations r
-            WHERE {$rf['where']} AND r.status = 'confirmed'
-              AND email IS NOT NULL AND email != ''
-              AND email IN (
-                  SELECT DISTINCT email FROM reservations r2
+            WHERE {$rf['where']} AND r.status = 'confirmed' AND {$identFilter}
+              AND ({$identExpr}) IN (
+                  SELECT DISTINCT {$identExpr}
+                  FROM reservations r2
                   WHERE {$rf['where']} AND r2.reservation_date BETWEEN ? AND ?
-                    AND r2.status = 'confirmed' AND r2.email IS NOT NULL AND r2.email != ''
+                    AND r2.status = 'confirmed' AND {$identFilter}
               )
-            GROUP BY email
+            GROUP BY ident
             HAVING COUNT(*) >= 2
         ) sub
     ");
-    $params2 = array_merge($rf['params'], $rf['params'], [$from, $to]);
-    $stmt2->execute($params2);
+    $stmt2->execute(array_merge($rf['params'], $rf['params'], [$from, $to]));
     $returning = (int)$stmt2->fetchColumn();
 
     json_response(true, [
@@ -281,9 +287,18 @@ if ($section === 'top_customers') {
     $only_returning = isset($_GET['returning']) && $_GET['returning'] == '1';
     $having = $only_returning ? 'HAVING COUNT(*) >= 2' : '';
 
+    // Identifikator: email ima prednost, nato telefon
+    $identExpr   = "CASE
+        WHEN email IS NOT NULL AND email != '' THEN CONCAT('e:', email)
+        WHEN phone IS NOT NULL AND phone != '' THEN CONCAT('p:', phone)
+        ELSE NULL
+    END";
+    $identFilter = "(email IS NOT NULL AND email != '' OR phone IS NOT NULL AND phone != '')";
+
     $stmt = $pdo->prepare("
         SELECT
-            email,
+            MAX(email)            AS email,
+            MAX(phone)            AS phone,
             MAX(guest_name)       AS guest_name,
             COUNT(*)              AS visits,
             SUM(guest_count)      AS total_guests,
@@ -292,14 +307,21 @@ if ($section === 'top_customers') {
         FROM reservations r
         WHERE {$rf['where']}
           AND r.status = 'confirmed'
-          AND email IS NOT NULL AND email != ''
-        GROUP BY email
+          AND {$identFilter}
+        GROUP BY {$identExpr}
         {$having}
         ORDER BY visits DESC
         LIMIT 50
     ");
     $stmt->execute($rf['params']);
-    json_response(true, $stmt->fetchAll());
+    $rows = $stmt->fetchAll();
+
+    // Počisti: gostje brez emaila imajo phone kot kontakt
+    foreach ($rows as &$row) {
+        if (empty($row['email'])) $row['email'] = null;
+        if (empty($row['phone'])) $row['phone'] = null;
+    }
+    json_response(true, $rows);
 }
 
 // ─── Sekcija: export (CSV) ────────────────────────────────────

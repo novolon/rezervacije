@@ -3,6 +3,7 @@ require_once '../includes/auth_check.php';
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/plans.php';
+require_once '../includes/lang.php';
 
 if (!is_logged_in()) {
     redirect_to_login();
@@ -26,7 +27,7 @@ if (!empty($_SESSION['payment_failed'])) {
 if ($_SESSION['role'] === 'admin') {
     $stmt = $pdo->prepare("
         SELECT r.id, r.name, r.reservation_duration, r.allow_custom_duration, r.schedule_start, r.schedule_end, r.color,
-               r.booking_token, r.booking_enabled
+               r.booking_token, r.booking_enabled, r.employees_can_override_schedule
         FROM restaurants r
         JOIN restaurant_admins ra ON r.id = ra.restaurant_id
         WHERE ra.user_id = ? AND r.is_active = 1
@@ -37,7 +38,7 @@ if ($_SESSION['role'] === 'admin') {
 } else {
     $stmt = $pdo->prepare("
         SELECT id, name, reservation_duration, allow_custom_duration, schedule_start, schedule_end, color,
-               booking_token, booking_enabled
+               booking_token, booking_enabled, employees_can_override_schedule
         FROM restaurants WHERE id = ? AND is_active = 1
     ");
     $stmt->execute([$_SESSION['restaurant_id']]);
@@ -48,6 +49,12 @@ $isAdmin  = $_SESSION['role'] === 'admin';
 $today    = date('Y-m-d');
 $fullName = $_SESSION['full_name'];
 $restId   = $_SESSION['restaurant_id'];
+
+// Admin: če session nima restaurant_id, nastavi prvo restavracijo
+if ($isAdmin && empty($restId) && !empty($restaurants)) {
+    $restId = $restaurants[0]['id'];
+    $_SESSION['restaurant_id'] = $restId;
+}
 
 // Za hasTableMgmt: admin preverimo po user_id, user vloga po owner_id restavracije
 $hasTableMgmt = false;
@@ -64,9 +71,13 @@ if ($_SESSION['role'] === 'superadmin') {
     } catch (PDOException $e) { /* tiho */ }
 }
 
-// Pending count (admin in user)
+// Pending count – spoštuje izbrano restavracijo ($restId je vedno aktiven)
 $pendingCount = 0;
-if ($isAdmin) {
+if ($restId) {
+    $stmt = $pdo->prepare("SELECT COUNT(*) FROM reservations WHERE restaurant_id = ? AND status = 'pending'");
+    $stmt->execute([$restId]);
+    $pendingCount = (int) $stmt->fetchColumn();
+} elseif ($isAdmin) {
     $stmt = $pdo->prepare("
         SELECT COUNT(*) FROM reservations r
         JOIN restaurant_admins ra ON r.restaurant_id = ra.restaurant_id
@@ -74,10 +85,27 @@ if ($isAdmin) {
     ");
     $stmt->execute([$_SESSION['user_id']]);
     $pendingCount = (int) $stmt->fetchColumn();
-} elseif ($restId) {
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM reservations WHERE restaurant_id = ? AND status = 'pending'");
-    $stmt->execute([$restId]);
-    $pendingCount = (int) $stmt->fetchColumn();
+}
+
+// Topbar stats za današnji dan (prva restavracija za admin, sicer trenutna)
+$topbarRestId = $restId ? (int)$restId : (isset($restaurants[0]['id']) ? (int)$restaurants[0]['id'] : null);
+$todayConfirmed = 0;
+$todayPending   = 0;
+$todayGuests    = 0;
+if ($topbarRestId) {
+    $stmt = $pdo->prepare("
+        SELECT
+            SUM(CASE WHEN status = 'confirmed' THEN 1 ELSE 0 END) AS cnt_confirmed,
+            SUM(CASE WHEN status = 'pending'   THEN 1 ELSE 0 END) AS cnt_pending,
+            COALESCE(SUM(CASE WHEN status IN ('confirmed','pending','arrived') THEN guest_count ELSE 0 END), 0) AS sum_guests
+        FROM reservations
+        WHERE restaurant_id = ? AND reservation_date = ?
+    ");
+    $stmt->execute([$topbarRestId, $today]);
+    $row = $stmt->fetch();
+    $todayConfirmed = (int)($row['cnt_confirmed'] ?? 0);
+    $todayPending   = (int)($row['cnt_pending']   ?? 0);
+    $todayGuests    = (int)($row['sum_guests']    ?? 0);
 }
 
 // Naloži day_schedules + blackouts za vse restavracije
@@ -174,114 +202,16 @@ if ($restaurants) {
     } catch (PDOException $e) { /* tabela še ne obstaja */ }
 }
 ?>
-<!DOCTYPE html>
-<html lang="sl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= h(APP_NAME) ?></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css?v=4">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/calendar.css?v=2">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/schedule.css?v=7">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/modal.css?v=2">
-</head>
+<?php
+$pageTitle = t('nav.today');
+$extraCss  = ['main.css?v=4', 'calendar.css?v=2', 'schedule.css?v=7', 'modal.css?v=3', 'design.css?v=1'];
+require_once '../includes/html_head.php';
+?>
 <body>
 
-<!-- ── Header ──────────────────────────────────────────────── -->
-<header class="app-header">
-    <a href="<?= BASE_PATH ?>/pages/main.php" class="header-logo" style="flex-shrink:0">
-        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <rect width="28" height="28" rx="7" fill="#F59E0B"/>
-            <path d="M7 10h14M7 14h14M7 18h9" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <?= h(APP_NAME) ?>
-        <?php if ($isAdmin): ?><?= plan_badge($_SESSION['plan_slug'] ?? 'trial') ?><?php endif; ?>
-    </a>
-
-    <div class="header-restaurant">
-        <?php if ($isAdmin && count($restaurants) > 1): ?>
-            <span class="restaurant-label">Restavracija:</span>
-            <select id="restaurant-select">
-                <?php foreach ($restaurants as $r): ?>
-                    <option value="<?= $r['id'] ?>"><?= h($r['name']) ?></option>
-                <?php endforeach; ?>
-            </select>
-        <?php elseif (count($restaurants) === 1): ?>
-            <span class="restaurant-name-static"><?= h($restaurants[0]['name']) ?></span>
-        <?php endif; ?>
-    </div>
-
-    <div class="header-actions">
-        <?php if ($pendingCount > 0): ?>
-        <button id="btn-pending" class="btn-header btn-header-admin" onclick="PendingSection.loadAndScroll()" style="position:relative;gap:6px">
-            ⏳ Čakajoče
-            <span id="pending-badge" style="background:#EF4444;color:#fff;border-radius:999px;font-size:.7rem;font-weight:700;padding:1px 7px;min-width:20px;display:inline-flex;align-items:center;justify-content:center"><?= $pendingCount ?></span>
-        </button>
-        <?php endif; ?>
-        <span class="header-user">👤 <?= h($fullName) ?></span>
-        <a href="<?= BASE_PATH ?>/pages/stats.php" class="btn-header btn-header-admin">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-            Statistika
-        </a>
-        <?php if ($isAdmin && user_has_feature($pdo, (int)$_SESSION['user_id'], 'guest_database')): ?>
-        <a href="<?= BASE_PATH ?>/pages/guests.php" class="btn-header btn-header-admin">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            Gostje
-        </a>
-        <?php endif; ?>
-        <?php if ($isAdmin && user_has_feature($pdo, (int)$_SESSION['user_id'], 'waitlist')): ?>
-        <a href="<?= BASE_PATH ?>/pages/waitlist.php" class="btn-header btn-header-admin">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
-            Čakalna lista
-        </a>
-        <?php endif; ?>
-        <?php if ($isAdmin): ?>
-            <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
-                Admin
-            </a>
-            <a href="<?= BASE_PATH ?>/pages/billing.php" class="btn-header btn-header-admin">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-                Paketi
-            </a>
-        <?php endif; ?>
-        <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header" title="Nastavitve profila">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
-            Profil
-        </a>
-        <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
-    </div>
-
-    <!-- Hamburger (mobile) -->
-    <button class="hamburger-btn" id="hamburger-btn" onclick="document.getElementById('mobile-nav').classList.toggle('open')">
-        <span></span><span></span><span></span>
-    </button>
-</header>
-
-<!-- Mobile nav -->
-<div class="mobile-nav" id="mobile-nav">
-    <div class="mobile-nav-user">👤 <?= h($fullName) ?></div>
-    <?php if ($pendingCount > 0): ?>
-    <a href="#" class="btn-header btn-header-admin" onclick="document.getElementById('mobile-nav').classList.remove('open');setTimeout(()=>PendingSection.loadAndScroll(),200)">
-        ⏳ Čakajoče <span style="background:#EF4444;color:#fff;border-radius:999px;font-size:.7rem;font-weight:700;padding:1px 7px;margin-left:4px"><?= $pendingCount ?></span>
-    </a>
-    <?php endif; ?>
-    <a href="<?= BASE_PATH ?>/pages/stats.php" class="btn-header btn-header-admin">Statistika</a>
-    <?php if ($isAdmin): ?>
-    <?php if (user_has_feature($pdo, (int)$_SESSION['user_id'], 'guest_database')): ?>
-    <a href="<?= BASE_PATH ?>/pages/guests.php" class="btn-header btn-header-admin">Gostje</a>
-    <?php endif; ?>
-    <?php if (user_has_feature($pdo, (int)$_SESSION['user_id'], 'waitlist')): ?>
-    <a href="<?= BASE_PATH ?>/pages/waitlist.php" class="btn-header btn-header-admin">Čakalna lista</a>
-    <?php endif; ?>
-    <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">Admin</a>
-    <a href="<?= BASE_PATH ?>/pages/billing.php" class="btn-header btn-header-admin">Paketi</a>
-    <?php endif; ?>
-    <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header">Profil</a>
-    <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
-</div>
+<div id="rz-app" class="rz-app">
+<?php require_once '../includes/sidebar.php'; ?>
+<main class="rz-main">
 
 <?php require_once '../includes/trial_banner.php'; ?>
 
@@ -290,72 +220,141 @@ if ($restaurants) {
 <div style="display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 64px);padding:24px">
     <div style="text-align:center;max-width:400px">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="1.5" style="margin-bottom:20px"><path d="M3 2h18v4H3zM3 10h18v4H3zM3 18h18v4H3z"/></svg>
-        <h2 style="font-size:1.25rem;font-weight:700;color:#111827;margin:0 0 10px">Nimate še nobene restavracije</h2>
-        <p style="color:#6B7280;font-size:.9rem;margin:0 0 24px;line-height:1.5">Dodajte svojo prvo restavracijo in začnite sprejemati rezervacije.</p>
+        <h2 style="font-size:1.25rem;font-weight:700;color:#111827;margin:0 0 10px"><?= t('main.no_restaurants') ?></h2>
+        <p style="color:#6B7280;font-size:.9rem;margin:0 0 24px;line-height:1.5"><?= t('main.no_restaurants_desc') ?></p>
         <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:8px;text-decoration:none">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-            Dodaj restavracijo
+            <?= t('main.add_restaurant') ?>
         </a>
     </div>
 </div>
 <?php else: ?>
+<?php
+    $_mainRest = $restaurants[0] ?? null;
+    $_slDays   = [t('days.6'),t('days.0'),t('days.1'),t('days.2'),t('days.3'),t('days.4'),t('days.5')];
+    $_slMonths = array_map(fn($i) => mb_strtolower(t('months.'.$i)), range(1,12));
+    $_ts       = strtotime($today);
+    $topbarTitle = $_slDays[(int)date('w', $_ts)] . ', ' . (int)date('j', $_ts) . '. ' . $_slMonths[(int)date('n', $_ts) - 1];
+    $topbarSubtitle =
+          '<span id="topbar-stat-confirmed">' . $todayConfirmed . '</span> ' . t('main.topbar_confirmed') . ' · '
+        . '<span id="topbar-stat-pending">'   . $todayPending   . '</span> ' . t('main.topbar_pending') . ' · '
+        . '<span id="topbar-stat-guests">'    . $todayGuests    . '</span> ' . t('main.topbar_guests');
+    ob_start(); ?>
+    <button id="btn-daily-report" type="button" class="rz-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+        <span><?= t('main.daily_report') ?></span>
+    </button>
+    <button id="btn-add-reservation" type="button" class="rz-btn rz-btn-primary" style="display:none">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+        <span><?= t('main.new_reservation') ?></span>
+    </button>
+<?php $topbarActions = ob_get_clean(); require_once '../includes/topbar.php'; ?>
+
+<!-- ── KPI strip TODO: Skrijemo za enkrat ──────────────────────────────────────────── -->
+<!-- <div class="rz-kpis">
+    <div class="rz-kpi">
+        <div class="rz-kpi-label">Rezervacije danes</div>
+        <div class="rz-kpi-value"><span id="stat-count">0</span></div>
+        <div class="rz-kpi-hint">Skupaj vnosov za današnji dan</div>
+    </div>
+    <div class="rz-kpi">
+        <div class="rz-kpi-label">Gostje</div>
+        <div class="rz-kpi-value"><span id="stat-guests">0</span></div>
+        <div class="rz-kpi-hint">Pričakovano število oseb</div>
+    </div>
+    <div class="rz-kpi<?= $pendingCount > 0 ? ' is-accent' : '' ?>">
+        <div class="rz-kpi-label">Čakajoče</div>
+        <div class="rz-kpi-value"><?= $pendingCount ?></div>
+        <div class="rz-kpi-hint">Potrebujejo potrditev</div>
+    </div>
+    <div class="rz-kpi">
+        <div class="rz-kpi-label">Zasedenost</div>
+        <div class="rz-kpi-value"><span id="stat-occupancy">—</span></div>
+        <div class="rz-kpi-hint">Rezerviranih od razpoložljivih mest</div>
+    </div>
+</div> -->
+
 <!-- ── Nova postavitev: razpored zgoraj, koledar spodaj ─────── -->
 <div class="app-layout-v2">
 
-    <!-- ── Zgornja vrstica: datum, stats, gumb ────────────────── -->
-    <div class="schedule-top-bar">
-        <div class="schedule-top-bar-left">
-            <div class="schedule-date-label-wrap">
-                <div id="schedule-date-label" class="schedule-date-label">&nbsp;</div>
-                <button id="btn-today" style="display:none">Na današnji dan</button>
+    <!-- ── Gantt timeline ─────────────────────────────────────── -->
+    <div class="rz-card rz-tl-card">
+        <div class="rz-card-head">
+            <div>
+                <div class="rz-card-eyebrow mono">
+                    <span id="sched-eyebrow-view">TIMELINE</span> · <span id="sched-eyebrow-date"></span>
+                </div>
+                <h2 class="rz-card-title display"><?= t('main.schedule_title') ?></h2>
             </div>
-            <div class="schedule-stats">
-                <div class="stat-pill">Rezervacije: <span id="stat-count">0</span></div>
-                <div class="stat-pill">Osebe: <span id="stat-guests">0</span></div>
+            <div class="rz-card-tools">
+                <div class="rz-seg" id="sched-view-seg">
+                    <button data-view="timeline" class="is-sel"><?= t('main.view_timeline') ?></button>
+                    <button data-view="list"><?= t('main.view_list') ?></button>
+                </div>
+                <!-- <button class="rz-iconbtn" id="sched-refresh-btn" title="Osveži">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+                </button> -->
             </div>
         </div>
-        <div class="schedule-top-bar-right">
-            <button id="btn-add-reservation" class="btn-add-reservation" style="display:none">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
-                Dodaj rezervacijo
-            </button>
+        <div id="schedule-body" class="schedule-body"></div>
+        <div class="rz-tl-legend">
+            <span><i class="rz-leg-dot rz-leg-past"></i> <?= t('main.legend_past') ?></span>
+            <span><i class="rz-leg-dot rz-leg-now"></i> <?= t('main.legend_now') ?></span>
+            <span><i class="rz-leg-dot rz-leg-next"></i> <?= t('main.legend_confirmed') ?></span>
+            <span><i class="rz-leg-dot rz-leg-pending"></i> <?= t('main.legend_pending') ?></span>
+            <span style="margin-left:auto;font-family:var(--font-mono)" id="tl-legend-now"></span>
         </div>
     </div>
 
-    <!-- ── Gantt timeline ─────────────────────────────────────── -->
-    <div id="schedule-body" class="schedule-body"></div>
+    <!-- ── Spodnja vrstica: kdo prihaja + koledar ────────────── -->
+    <div class="rz-grid-2">
 
-    <!-- ── Spodnja vrstica: koledar + čakajoče ───────────────── -->
-    <div class="schedule-bottom-row">
-        <div class="calendar-wrapper">
-            <div class="calendar-nav">
-                <button id="cal-prev" class="cal-nav-btn" title="Prejšnji mesec">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m15 18-6-6 6-6"/></svg>
-                </button>
-                <div id="cal-title" class="calendar-title"></div>
-                <button id="cal-next" class="cal-nav-btn" title="Naslednji mesec">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
-                </button>
-            </div>
-            <div id="cal-grid" class="calendar-grid">
-                <!-- Dinamično generirano z JS -->
-            </div>
-        </div>
-
-        <!-- ── Čakajoče rezervacije ──────────────────────── -->
-        <div id="pending-section" class="pending-section" style="display:none">
-            <div class="pending-section-header">
-                <div class="pending-section-title">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                    Čakajoče rezervacije
-                    <span id="pending-section-badge" class="pending-section-badge">0</span>
+        <!-- ── Kdo prihaja ────────────────────────────────────── -->
+        <div class="rz-card">
+            <div class="rz-card-head">
+                <div>
+                    <div id="upnext-eyebrow" class="rz-card-eyebrow mono"><?= t('main.upnext_eyebrow') ?></div>
+                    <h2 class="rz-card-title display"><?= t('main.upnext_title') ?>
+                        <span id="upnext-count" class="rz-upnext-count"></span>
+                    </h2>
                 </div>
-                <button class="btn btn-ghost btn-sm" onclick="PendingSection.load()" title="Osveži seznam">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
-                </button>
+                <!-- <button class="rz-btn rz-btn-ghost" onclick="document.querySelector('.rz-tl-card')?.scrollIntoView({behavior:'smooth'})">
+                    Vse
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
+                </button> -->
             </div>
-            <div id="pending-list"></div>
+            <div id="upnext-list" class="rz-upnext"></div>
         </div>
+
+        <!-- ── Koledar zasedenosti ────────────────────────────── -->
+        <div class="rz-card">
+            <div class="rz-card-head">
+                <div>
+                    <div id="cal-title" class="rz-card-eyebrow mono"></div>
+                    <h2 class="rz-card-title display"><?= t('main.calendar_title') ?></h2>
+                </div>
+                <div class="rz-card-tools">
+                    <button id="cal-prev" class="rz-iconbtn" title="Prejšnji mesec">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m15 18-6-6 6-6"/></svg>
+                    </button>
+                    <button id="cal-next" class="rz-iconbtn" title="Naslednji mesec">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="m9 18 6-6-6-6"/></svg>
+                    </button>
+                </div>
+            </div>
+            <div class="rz-mc">
+                <div class="rz-mc-dow">
+                    <span><?= t('days_short.0') ?></span><span><?= t('days_short.1') ?></span><span><?= t('days_short.2') ?></span><span><?= t('days_short.3') ?></span><span><?= t('days_short.4') ?></span><span><?= t('days_short.5') ?></span><span><?= t('days_short.6') ?></span>
+                </div>
+                <div id="cal-grid" class="rz-mc-grid"></div>
+            </div>
+            <div class="rz-card-sep"></div>
+            <div class="rz-cal-summary">
+                <span><?= t('main.cal_selected') ?>: <strong id="cal-sel-label">–</strong></span>
+                <span id="cal-sel-stats"></span>
+            </div>
+        </div>
+
     </div>
 
 </div>
@@ -407,12 +406,34 @@ window.APP_STATE = <?= json_encode([
 
 <!-- ── JavaScript ─────────────────────────────────────────── -->
 <?php $cv = time(); ?>
+<script>
+// Per-page command-palette items
+window.RZ_CMD_ITEMS = [
+    { group: t('main.cmd_group_actions'), label: t('main.new_reservation'), hint: t('main.cmd_new_reservation_hint'),
+      icon: 'plus', action: 'newReservation' },
+    { group: t('main.cmd_group_actions'), label: t('main.cmd_go_today'),   hint: t('main.cmd_go_today_hint'),
+      icon: 'calendar', action: 'goToday' },
+];
+window.rz_newReservation = function() {
+    var btn = document.getElementById('btn-add-reservation');
+    if (btn) btn.click();
+};
+window.rz_goToday = function() {
+    var btn = document.getElementById('btn-today');
+    if (btn) btn.click();
+};
+</script>
 <script src="<?= BASE_PATH ?>/assets/js/api.js?v=<?= $cv ?>"></script>
 <script src="<?= BASE_PATH ?>/assets/js/calendar.js?v=<?= $cv ?>"></script>
+<script src="<?= BASE_PATH ?>/assets/js/upnext.js?v=<?= $cv ?>"></script>
 <script src="<?= BASE_PATH ?>/assets/js/schedule.js?v=<?= $cv ?>"></script>
 <script src="<?= BASE_PATH ?>/assets/js/modal.js?v=<?= $cv ?>"></script>
+<script src="<?= BASE_PATH ?>/assets/js/daily-report.js?v=<?= $cv ?>"></script>
 <script src="<?= BASE_PATH ?>/assets/js/app.js?v=<?= $cv ?>"></script>
+<script src="<?= BASE_PATH ?>/assets/js/rezble-shell.js?v=<?= $cv ?>"></script>
 
+</main>
+</div><!-- /rz-app -->
 </body>
 </html>
 <?php endif; ?>

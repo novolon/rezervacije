@@ -8,6 +8,7 @@ if (is_logged_in()) {
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/plans.php';
+require_once '../includes/lang.php';
 
 if (!is_logged_in()) redirect_to_login();
 if ($_SESSION['role'] === 'superadmin') {
@@ -40,11 +41,11 @@ if ($isAdmin) {
 }
 ?>
 <!DOCTYPE html>
-<html lang="sl">
+<html lang="<?= get_lang() ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Uredi anketo – <?= h(APP_NAME) ?></title>
+    <title><?= t('survey_builder.page_title') ?> – <?= h(APP_NAME) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css?v=4">
@@ -111,6 +112,10 @@ if ($isAdmin) {
         .gate-notice a{color:#B45309;font-weight:600}
         @media(max-width:600px){.form-row{grid-template-columns:1fr}}
     </style>
+    <script>
+    window.__T__ = <?= json_encode(get_lang_strings(), JSON_UNESCAPED_UNICODE) ?>;
+    window.t = function(k, p) { var s = window.__T__[k] || k; if (p) { for (var x in p) s = s.split('{'+x+'}').join(p[x]); } return s; };
+    </script>
 </head>
 <body>
 
@@ -125,26 +130,26 @@ if ($isAdmin) {
         <?php if ($isAdmin): ?><?= plan_badge($_SESSION['plan_slug'] ?? 'trial') ?><?php endif; ?>
     </a>
     <div class="header-restaurant">
-        <span style="color:rgba(255,255,255,.5);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;font-weight:600">Anketa</span>
+        <span style="color:rgba(255,255,255,.5);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;font-weight:600"><?= t('survey_builder.header_label') ?></span>
     </div>
     <div class="header-actions">
         <span class="header-user">👤 <?= h($fullName) ?></span>
         <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-            Razpored
+            <?= t('survey_builder.schedule_link') ?>
         </a>
         <?php if ($isAdmin): ?>
         <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
-            Admin
+            <?= t('survey_builder.admin_link') ?>
         </a>
         <a href="<?= BASE_PATH ?>/pages/survey_results.php" class="btn-header">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
-            Odgovori
+            <?= t('survey_builder.responses_link') ?>
         </a>
         <?php endif; ?>
-        <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header" title="Profil">Profil</a>
-        <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
+        <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header" title="<?= t('survey_builder.profile_link') ?>"><?= t('survey_builder.profile_link') ?></a>
+        <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout"><?= t('survey_builder.logout') ?></a>
     </div>
     <button class="hamburger-btn" id="hamburger-btn" onclick="document.getElementById('mobile-nav').classList.toggle('open')">
         <span></span><span></span><span></span>
@@ -153,13 +158,13 @@ if ($isAdmin) {
 
 <div class="mobile-nav" id="mobile-nav">
     <div class="mobile-nav-user">👤 <?= h($fullName) ?></div>
-    <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin">Razpored</a>
+    <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin"><?= t('survey_builder.schedule_link') ?></a>
     <?php if ($isAdmin): ?>
-    <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">Admin</a>
-    <a href="<?= BASE_PATH ?>/pages/survey_results.php" class="btn-header">Odgovori ankete</a>
+    <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin"><?= t('survey_builder.admin_link') ?></a>
+    <a href="<?= BASE_PATH ?>/pages/survey_results.php" class="btn-header"><?= t('survey_builder.mobile_responses') ?></a>
     <?php endif; ?>
-    <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header">Profil</a>
-    <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
+    <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header"><?= t('survey_builder.profile_link') ?></a>
+    <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout"><?= t('survey_builder.logout') ?></a>
 </div>
 
 <?php require_once '../includes/trial_banner.php'; ?>
@@ -168,17 +173,17 @@ if ($isAdmin) {
 
     <?php if (!$hasSurvey): ?>
     <div class="gate-notice">
-        Ta funkcionalnost je na voljo v paketu <strong>Advanced</strong> ali višjem.
-        <a href="<?= BASE_PATH ?>/pages/billing.php">Nadgradi paket →</a>
+        <?= t_raw('survey_builder.gate_notice') ?>
+        <a href="<?= BASE_PATH ?>/pages/billing.php"><?= t('survey_builder.gate_upgrade') ?></a>
     </div>
     <?php else: ?>
 
     <!-- Dropdown za restavracijo -->
     <?php if ($isAdmin && count($restaurants) > 1): ?>
     <div style="margin-bottom:20px">
-        <label style="font-size:.85rem;font-weight:500;color:#374151;display:block;margin-bottom:6px">Restavracija</label>
+        <label style="font-size:.85rem;font-weight:500;color:#374151;display:block;margin-bottom:6px"><?= t('survey_builder.restaurant_label') ?></label>
         <select id="restaurant-select" style="border:1px solid #D1D5DB;border-radius:8px;padding:9px 12px;font-size:.9rem;font-family:inherit;min-width:220px;background:#fff">
-            <option value="">Izberite restavracijo...</option>
+            <option value=""><?= t('survey_builder.restaurant_placeholder') ?></option>
             <?php foreach ($restaurants as $r): ?>
             <option value="<?= $r['id'] ?>"><?= h($r['name']) ?></option>
             <?php endforeach; ?>
@@ -194,23 +199,23 @@ if ($isAdmin) {
         <div class="survey-section">
             <h3>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
-                Nastavitve ankete
+                <?= t('survey_builder.settings_title') ?>
             </h3>
             <div class="form-row full">
                 <div class="form-group">
-                    <label>Naslov ankete</label>
+                    <label><?= t('survey_builder.field_title') ?></label>
                     <input type="text" id="sf-title" maxlength="255">
                 </div>
             </div>
             <div class="form-row full">
                 <div class="form-group">
-                    <label>Opis (opcionalno)</label>
+                    <label><?= t('survey_builder.field_description') ?></label>
                     <textarea id="sf-description" rows="2"></textarea>
                 </div>
             </div>
             <div class="form-row full">
                 <div class="form-group">
-                    <label>Besedilo zahvalnega emaila</label>
+                    <label><?= t('survey_builder.field_thankyou') ?></label>
                     <textarea id="sf-thankyou" rows="3"></textarea>
                 </div>
             </div>
@@ -220,12 +225,12 @@ if ($isAdmin) {
         <div class="survey-section">
             <h3>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-                Samodejno pošiljanje emaila
+                <?= t('survey_builder.send_title') ?>
             </h3>
             <div class="toggle-row">
                 <div class="toggle-label">
-                    Vklopljeno
-                    <small>Po obisku bo sistemu samodejno poslal email gostu</small>
+                    <?= t('survey_builder.send_enabled') ?>
+                    <small><?= t('survey_builder.send_enabled_hint') ?></small>
                 </div>
                 <label class="toggle-switch">
                     <input type="checkbox" id="sf-send-enabled" onchange="toggleDelay()">
@@ -233,19 +238,19 @@ if ($isAdmin) {
                 </label>
             </div>
             <div class="delay-field" id="delay-field">
-                <label style="font-size:.85rem;color:#374151">Pošlji po</label>
+                <label style="font-size:.85rem;color:#374151"><?= t('survey_builder.send_after') ?></label>
                 <input type="number" id="sf-delay" min="0" max="168" value="2" style="width:70px;border:1px solid #D1D5DB;border-radius:7px;padding:7px 10px;font-size:.9rem;font-family:inherit">
-                <span>urah po prihodu gosta</span>
+                <span><?= t('survey_builder.send_hours') ?></span>
             </div>
             <div class="toggle-row" style="margin-top:10px">
-                <div class="toggle-label">Vključi zahvalo v email</div>
+                <div class="toggle-label"><?= t('survey_builder.incl_thankyou') ?></div>
                 <label class="toggle-switch">
                     <input type="checkbox" id="sf-incl-thankyou" checked>
                     <span class="toggle-slider"></span>
                 </label>
             </div>
             <div class="toggle-row">
-                <div class="toggle-label">Vključi povezavo do ankete</div>
+                <div class="toggle-label"><?= t('survey_builder.incl_survey') ?></div>
                 <label class="toggle-switch">
                     <input type="checkbox" id="sf-incl-survey" checked>
                     <span class="toggle-slider"></span>
@@ -257,14 +262,14 @@ if ($isAdmin) {
         <div class="survey-section">
             <h3>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3M12 17h.01"/></svg>
-                Vprašanja
+                <?= t('survey_builder.questions_title') ?>
             </h3>
             <div class="question-list" id="question-list"></div>
-            <button class="btn-add-q" onclick="addQuestion()">+ Dodaj vprašanje</button>
+            <button class="btn-add-q" onclick="addQuestion()"><?= t('survey_builder.add_question') ?></button>
         </div>
 
         <div style="display:flex;align-items:center;gap:0">
-            <button class="btn-save-survey" id="btn-save" onclick="saveForm()">Shrani anketo</button>
+            <button class="btn-save-survey" id="btn-save" onclick="saveForm()"><?= t('survey_builder.save_btn') ?></button>
             <span class="save-status" id="save-status"></span>
         </div>
 
@@ -272,7 +277,7 @@ if ($isAdmin) {
 
     <div id="no-restaurant-msg" style="color:#9CA3AF;font-size:.9rem;padding:20px 0">
         <?php if (empty($restaurants)): ?>
-        Najprej dodajte restavracijo v <a href="<?= BASE_PATH ?>/pages/admin.php" style="color:#F59E0B">Admin panelu</a>.
+        <?= t('survey_builder.no_restaurant') ?> <a href="<?= BASE_PATH ?>/pages/admin.php" style="color:#F59E0B">Admin</a>.
         <?php endif; ?>
     </div>
 
@@ -286,11 +291,11 @@ let questionCounter = 0;
 
 // Tip labels
 const TYPE_LABELS = {
-    rating:   'Zvezdičasta ocena (1–5)',
-    radio:    'Izbirni gumb (radio)',
-    checkbox: 'Potrditvena polja',
-    text:     'Kratko besedilno polje',
-    textarea: 'Dolgo besedilno polje',
+    rating:   window.t('survey_builder.type_rating'),
+    radio:    window.t('survey_builder.type_radio'),
+    checkbox: window.t('survey_builder.type_checkbox'),
+    text:     window.t('survey_builder.type_text'),
+    textarea: window.t('survey_builder.type_textarea'),
 };
 
 function h(s) {
@@ -319,7 +324,7 @@ function loadForm(restId) {
     fetch(`${BASE}/api/survey.php?action=get_form&restaurant_id=${restId}`)
         .then(r => r.json())
         .then(res => {
-            if (!res.success) { alert(res.error || 'Napaka pri nalaganju.'); return; }
+            if (!res.success) { alert(res.error || window.t('survey_builder.err_load')); return; }
             document.getElementById('survey-editor').style.display = 'block';
             document.getElementById('no-restaurant-msg').style.display = 'none';
             if (res.data) {
@@ -347,7 +352,7 @@ function fillForm(d) {
 }
 
 function resetForm() {
-    document.getElementById('sf-title').value        = 'Anketa o zadovoljstvu';
+    document.getElementById('sf-title').value        = window.t('survey_builder.default_title');
     document.getElementById('sf-description').value  = '';
     document.getElementById('sf-thankyou').value     = '';
     document.getElementById('sf-send-enabled').checked  = false;
@@ -375,26 +380,26 @@ function addQuestion(data = null) {
     card.innerHTML = `
         <div class="question-card-top">
             <div class="question-card-order">
-                <button title="Gor" onclick="moveQuestion('${id}', -1)">▲</button>
-                <button title="Dol" onclick="moveQuestion('${id}', 1)">▼</button>
+                <button title="${window.t('survey_builder.btn_up')}" onclick="moveQuestion('${id}', -1)">▲</button>
+                <button title="${window.t('survey_builder.btn_down')}" onclick="moveQuestion('${id}', 1)">▼</button>
             </div>
             <div class="question-card-body">
-                <input type="text" placeholder="Besedilo vprašanja..." value="${h(text)}" id="qt-${id}">
+                <input type="text" placeholder="${window.t('survey_builder.q_placeholder')}" value="${h(text)}" id="qt-${id}">
                 <div class="question-meta">
                     <select id="qtype-${id}" onchange="onTypeChange('${id}')">
                         ${Object.entries(TYPE_LABELS).map(([v,l]) => `<option value="${v}"${v===type?' selected':''}>${l}</option>`).join('')}
                     </select>
                     <label>
-                        <input type="checkbox" id="qreq-${id}"${req?' checked':''}> Obvezno
+                        <input type="checkbox" id="qreq-${id}"${req?' checked':''}> ${window.t('survey_builder.q_required')}
                     </label>
                 </div>
                 <div class="options-list" id="opts-${id}"></div>
-                <button class="btn-add-opt" id="btn-addopt-${id}" onclick="addOption('${id}')" style="display:none">+ Dodaj možnost</button>
+                <button class="btn-add-opt" id="btn-addopt-${id}" onclick="addOption('${id}')" style="display:none">${window.t('survey_builder.btn_add_option')}</button>
             </div>
             <div class="question-actions" style="flex-shrink:0">
                 <button class="btn-delete-q" onclick="removeQuestion('${id}')">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
-                    Briši
+                    ${window.t('survey_builder.btn_delete')}
                 </button>
             </div>
         </div>
@@ -430,7 +435,7 @@ function addOption(qid, value = '') {
     row.className = 'option-row';
     row.id = `optrow-${oid}`;
     row.innerHTML = `
-        <input type="text" placeholder="Možnost..." value="${h(value)}" id="${oid}">
+        <input type="text" placeholder="${window.t('survey_builder.opt_placeholder')}" value="${h(value)}" id="${oid}">
         <button class="btn-remove-opt" onclick="document.getElementById('optrow-${oid}').remove()" title="Odstrani">×</button>
     `;
     document.getElementById(`opts-${qid}`).appendChild(row);
@@ -470,12 +475,12 @@ function collectQuestions() {
 }
 
 function saveForm() {
-    if (!currentRestaurantId) { alert('Izberite restavracijo.'); return; }
+    if (!currentRestaurantId) { alert(window.t('survey_builder.err_no_restaurant')); return; }
     const btn = document.getElementById('btn-save');
     const status = document.getElementById('save-status');
     btn.disabled = true;
     status.className = 'save-status';
-    status.textContent = 'Shranjujem...';
+    status.textContent = window.t('survey_builder.saving');
 
     const payload = {
         restaurant_id:    currentRestaurantId,
@@ -499,17 +504,17 @@ function saveForm() {
         btn.disabled = false;
         if (res.success) {
             status.className = 'save-status ok';
-            status.textContent = 'Shranjeno!';
+            status.textContent = window.t('survey_builder.saved');
             setTimeout(() => status.textContent = '', 3000);
         } else {
             status.className = 'save-status err';
-            status.textContent = res.error || 'Napaka pri shranjevanju.';
+            status.textContent = res.error || window.t('survey_builder.err_save');
         }
     })
     .catch(() => {
         btn.disabled = false;
         status.className = 'save-status err';
-        status.textContent = 'Napaka pri povezavi.';
+        status.textContent = window.t('survey_builder.err_connection');
     });
 }
 </script>

@@ -2,12 +2,195 @@
  * Rezervacije Embed Widget
  * Uporaba:
  *   <div id="rez-widget"></div>
- *   <script src=".../widget.js" data-token="TOKEN" data-container="#rez-widget"></script>
+ *   <script src=".../widget.js" data-token="TOKEN" data-container="#rez-widget" data-lang="sl"></script>
  *
+ * Podprti jeziki: sl (privzeto), en
  * Brez data-container: widget se vstavi tik pred <script> tag.
  */
 (function () {
     'use strict';
+
+    // ── i18n ──────────────────────────────────────────────────────
+    const WIDGET_STRINGS = {
+        sl: {
+            loading:           'Nalagam...',
+            subtitle:          'Spletna rezervacija',
+            step1:             'Gostje',
+            step2:             'Datum',
+            step3:             'Termin',
+            step4:             'Podatki',
+            step1_title:       'Koliko gostov?',
+            step1_sub:         'Izberite število gostov.',
+            more_btn:          'Več →',
+            enter_guests:      'Vnesite število gostov ({min}–{max})',
+            next:              'Naprej →',
+            step2_title:       'Izberite datum',
+            cal_note:          'Sivi dnevi niso na voljo.',
+            step3_title:       'Izberite termin',
+            slots_loading:     'Nalagam termine...',
+            no_slots:          'Za ta dan ni prostih terminov.',
+            other_date:        '← Drug datum',
+            wl_offer_title:    'Vpišite se na čakalno listo',
+            wl_offer_desc:     'Ko se sprosti termin, vas bomo takoj obvestili.',
+            first_name:        'Ime',
+            last_name:         'Priimek',
+            email:             'Email',
+            phone:             'Telefon',
+            pref_time:         'Prednostni čas',
+            optional:          '(neobvezno)',
+            gdpr_wl:           'Strinjam se z obdelavo podatkov za namen obveščanja o prostih terminih.',
+            wl_submit:         'Vpišem se na čakalno listo',
+            wl_slot_title:     'Termin je zaseden – čakalna lista',
+            wl_slot_desc:      'Termin {time} je zaseden. Vpišete se na čakalno listo ali izberite drug termin zgoraj.',
+            continue:          'Nadaljuj →',
+            wl_done_title:     'Vpisani ste!',
+            wl_done_msg:       'Ko se sprosti termin, vas bomo obvestili po emailu.',
+            wl_legend:         'čakalna lista',
+            areas_loading:     'Nalagam razpoložljivost...',
+            step3b_title:      'Izberite prostor',
+            area_any:          'Vseeno mi je',
+            area_any_desc:     'Sistem samodejno izbere najboljši prostor',
+            area_unavail:      'Ni prostih miz za vaš termin',
+            step4_title:       'Vaši podatki',
+            wl_notice:         'Čakalna lista:',
+            wl_notice_desc:    'Ko se sprosti mesto, vas bomo obvestili po emailu.',
+            full_name:         'Ime in priimek',
+            full_name_ph:      'npr. Janez Novak',
+            email_ph:          'janez@email.com',
+            phone_ph:          '041 123 456',
+            notes:             'Opombe',
+            notes_ph:          'Alergije, posebne želje...',
+            gdpr:              'Strinjam se z obdelavo osebnih podatkov za namen rezervacije. Prebral/a sem',
+            privacy:           'Politiko zasebnosti',
+            marketing:         'Strinjam se s prejemanjem novic (neobvezno).',
+            submit:            'Potrdi rezervacijo',
+            submit_wl:         'Vpis na čakalno listo',
+            sending:           'Pošiljam...',
+            summary_title:     'Podrobnosti',
+            sum_rest:          'Restavracija',
+            sum_date:          'Datum',
+            sum_time:          'Ura',
+            sum_guests:        'Število gostov',
+            new_booking:       'Naredi novo rezervacijo',
+            slot_full:         'Termin je popolnoma zaseden',
+            slot_wl:           'Zasedeno – vpis na čakalno listo',
+            no_slots_sfx:      'ni terminov',
+            confirm_auto_ico:  '✅',
+            confirm_pend_ico:  '📩',
+            confirm_auto_ttl:  'Rezervacija potrjena!',
+            confirm_pend_ttl:  'Prošnja sprejeta!',
+            confirm_auto_msg:  'Vaša rezervacija je potrjena. Poslali smo vam potrditveni e-mail.',
+            confirm_pend_msg:  'Vaša prošnja za rezervacijo je bila sprejeta. Ko jo potrdimo, vas obvestimo po e-pošti.',
+            wl_confirm_ico:    '✉️',
+            wl_confirm_ttl:    'Vpisani ste na čakalno listo!',
+            wl_confirm_msg:    'Ko se sprosti termin, vas bomo obvestili po e-pošti. Imel/a boste 2 uri časa za potrditev.',
+            guest_1:           'gost',
+            guest_few:         'gostje',
+            guest_many:        'gostov',
+            select_ph:         '— Izberite —',
+            err_name:          'Ime in priimek sta obvezna.',
+            err_email_req:     'Email naslov je obvezen.',
+            err_email_inv:     'Vnesite veljaven email naslov.',
+            err_gdpr:          'Strinjanje z obdelavo podatkov je obvezno.',
+            err_fn:            'Ime je obvezno.',
+            err_ln:            'Priimek je obvezen.',
+            err_email_short:   'Vnesite veljaven email.',
+            err_gdpr_short:    'Soglasje je obvezno.',
+            err_server:        'Napaka strežnika.',
+            err_field:         'Polje "{label}" je obvezno.',
+            months:            ['Januar','Februar','Marec','April','Maj','Junij','Julij','Avgust','September','Oktober','November','December'],
+            days:              ['Ponedeljek','Torek','Sreda','Četrtek','Petek','Sobota','Nedelja'],
+        },
+        en: {
+            loading:           'Loading...',
+            subtitle:          'Online reservation',
+            step1:             'Guests',
+            step2:             'Date',
+            step3:             'Time',
+            step4:             'Details',
+            step1_title:       'How many guests?',
+            step1_sub:         'Select number of guests.',
+            more_btn:          'More →',
+            enter_guests:      'Enter number of guests ({min}–{max})',
+            next:              'Next →',
+            step2_title:       'Select date',
+            cal_note:          'Grey days are not available.',
+            step3_title:       'Select time',
+            slots_loading:     'Loading times...',
+            no_slots:          'No available times for this day.',
+            other_date:        '← Other date',
+            wl_offer_title:    'Join the waitlist',
+            wl_offer_desc:     'We will notify you as soon as a slot opens.',
+            first_name:        'First name',
+            last_name:         'Last name',
+            email:             'Email',
+            phone:             'Phone',
+            pref_time:         'Preferred time',
+            optional:          '(optional)',
+            gdpr_wl:           'I agree to the processing of my data for the purpose of waitlist notifications.',
+            wl_submit:         'Join waitlist',
+            wl_slot_title:     'Slot taken – waitlist',
+            wl_slot_desc:      'Slot {time} is taken. You can join the waitlist or choose another time above.',
+            continue:          'Continue →',
+            wl_done_title:     'You\'re on the waitlist!',
+            wl_done_msg:       'We\'ll notify you by email when a slot opens.',
+            wl_legend:         'waitlist',
+            areas_loading:     'Loading availability...',
+            step3b_title:      'Select area',
+            area_any:          'No preference',
+            area_any_desc:     'System will automatically select the best area',
+            area_unavail:      'No available tables for your slot',
+            step4_title:       'Your details',
+            wl_notice:         'Waitlist:',
+            wl_notice_desc:    'We will notify you by email when a slot opens.',
+            full_name:         'Full name',
+            full_name_ph:      'e.g. John Smith',
+            email_ph:          'john@example.com',
+            phone_ph:          '+1 555 123 456',
+            notes:             'Notes',
+            notes_ph:          'Allergies, special requests...',
+            gdpr:              'I agree to the processing of my personal data for reservation purposes. I have read the',
+            privacy:           'Privacy Policy',
+            marketing:         'I agree to receive news and offers (optional).',
+            submit:            'Confirm reservation',
+            submit_wl:         'Join waitlist',
+            sending:           'Sending...',
+            summary_title:     'Details',
+            sum_rest:          'Restaurant',
+            sum_date:          'Date',
+            sum_time:          'Time',
+            sum_guests:        'Guests',
+            new_booking:       'Make a new reservation',
+            slot_full:         'Slot is fully booked',
+            slot_wl:           'Taken – join waitlist',
+            no_slots_sfx:      'no times available',
+            confirm_auto_ico:  '✅',
+            confirm_pend_ico:  '📩',
+            confirm_auto_ttl:  'Reservation confirmed!',
+            confirm_pend_ttl:  'Request received!',
+            confirm_auto_msg:  'Your reservation is confirmed. We sent you a confirmation email.',
+            confirm_pend_msg:  'Your reservation request was received. We will notify you by email once confirmed.',
+            wl_confirm_ico:    '✉️',
+            wl_confirm_ttl:    'You\'re on the waitlist!',
+            wl_confirm_msg:    'We will notify you by email when a slot opens. You\'ll have 2 hours to confirm.',
+            guest_1:           'guest',
+            guest_few:         'guests',
+            guest_many:        'guests',
+            select_ph:         '— Select —',
+            err_name:          'Full name is required.',
+            err_email_req:     'Email address is required.',
+            err_email_inv:     'Please enter a valid email address.',
+            err_gdpr:          'Consent to data processing is required.',
+            err_fn:            'First name is required.',
+            err_ln:            'Last name is required.',
+            err_email_short:   'Please enter a valid email.',
+            err_gdpr_short:    'Consent is required.',
+            err_server:        'Server error.',
+            err_field:         'Field "{label}" is required.',
+            months:            ['January','February','March','April','May','June','July','August','September','October','November','December'],
+            days:              ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'],
+        }
+    };
 
     // ── Config ────────────────────────────────────────────────────
     const scriptEl = document.currentScript
@@ -15,7 +198,15 @@
     if (!scriptEl) return;
 
     const token = scriptEl.getAttribute('data-token');
-    if (!token) { console.warn('[RezWidget] Manjka atribut data-token.'); return; }
+    if (!token) { console.warn('[RezWidget] Missing data-token attribute.'); return; }
+
+    const _wLang = (scriptEl.getAttribute('data-lang') || 'sl').toLowerCase();
+    const WS = WIDGET_STRINGS[_wLang] || WIDGET_STRINGS['sl'];
+    function wt(key, p) {
+        var s = (WS[key] != null) ? WS[key] : key;
+        if (p) { for (var k in p) { s = s.replace(new RegExp('\\{'+k+'\\}','g'), p[k]); } }
+        return s;
+    }
 
     const apiUrl     = scriptEl.src.replace(/\/widget\.js(\?.*)?$/, '') + '/api/book.php';
     const privacyUrl = scriptEl.src.replace(/\/widget\.js(\?.*)?$/, '') + '/pages/privacy.php';
@@ -202,50 +393,49 @@ input,textarea{font-family:inherit}
 
     // ── HTML ──────────────────────────────────────────────────────
     const wrap = document.createElement('div');
+    const _days_hdr = WS.days ? WS.days.map(d => d.substring(0,2)) : ['Po','To','Sr','Če','Pe','So','Ne'];
     wrap.innerHTML = `
 <div class="root">
-  <div id="wloading" class="loading">Nalagam...</div>
+  <div id="wloading" class="loading">${wt('loading')}</div>
   <div id="werr" class="errpanel" style="display:none">
     <div class="eico">😔</div>
-    <h3>Rezervacije niso na voljo</h3>
-    <p id="werrmsg">Spletna rezervacija za to restavracijo ni omogočena.</p>
+    <h3>${wt('unavailable_title') || 'Rezervacije niso na voljo'}</h3>
+    <p id="werrmsg">${wt('unavailable_msg') || ''}</p>
   </div>
   <div id="wmain" style="display:none">
     <div class="hdr">
       <div class="logo" id="wlogo">R</div>
       <div>
         <div class="rname" id="wname">...</div>
-        <div class="rsub">Spletna rezervacija</div>
+        <div class="rsub">${wt('subtitle')}</div>
       </div>
     </div>
     <div class="prog">
-      <div class="pi active" id="wp1"><div class="n">1</div></div>
+      <div class="pi active" id="wp1"><div class="n">1</div><span class="pi-lbl">${wt('step1')}</span></div>
       <div class="ps"></div>
-      <div class="pi" id="wp2"><div class="n">2</div></div>
+      <div class="pi" id="wp2"><div class="n">2</div><span class="pi-lbl">${wt('step2')}</span></div>
       <div class="ps"></div>
-      <div class="pi" id="wp3"><div class="n">3</div></div>
+      <div class="pi" id="wp3"><div class="n">3</div><span class="pi-lbl">${wt('step3')}</span></div>
       <div class="ps"></div>
-      <div class="pi" id="wp4"><div class="n">4</div></div>
+      <div class="pi" id="wp4"><div class="n">4</div><span class="pi-lbl">${wt('step4')}</span></div>
     </div>
     <div class="body">
 
-      <!-- Korak 1: Gostje -->
       <div class="step active" id="ws1">
-        <div class="ttl">Koliko gostov?</div>
-        <div class="sub">Izberite število gostov za rezervacijo.</div>
+        <div class="ttl">${wt('step1_title')}</div>
+        <div class="sub">${wt('step1_sub')}</div>
         <div class="gbtns" id="wgbtns"></div>
         <div class="gmore-wrap" id="wgmorewrap" style="display:none">
-          <label id="wgmorelbl">Vnesite število gostov</label>
+          <label id="wgmorelbl">${wt('enter_guests')}</label>
           <input class="gmore-inp" id="wgmoreinp" type="number" min="11" step="1">
         </div>
-        <button class="btn-p" id="wbtn1" style="display:none" disabled>Naprej →</button>
+        <button class="btn-p" id="wbtn1" style="display:none" disabled>${wt('next')}</button>
       </div>
 
-      <!-- Korak 2: Datum -->
       <div class="step" id="ws2">
         <div class="ttl">
           <button class="back" id="wb2"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="m13 18-6-6 6-6"/></svg></button>
-          Izberite datum
+          ${wt('step2_title')}
         </div>
         <div class="cal">
           <div class="cal-nav">
@@ -255,109 +445,102 @@ input,textarea{font-family:inherit}
           </div>
           <div class="cal-grid">
             <div class="cal-hdrs">
-              <div class="cal-dlbl">Po</div><div class="cal-dlbl">To</div><div class="cal-dlbl">Sr</div>
-              <div class="cal-dlbl">Če</div><div class="cal-dlbl">Pe</div><div class="cal-dlbl">So</div><div class="cal-dlbl">Ne</div>
+              ${_days_hdr.map(d => `<div class="cal-dlbl">${d}</div>`).join('')}
             </div>
             <div class="cal-days" id="wcaldays"></div>
           </div>
-          <div class="cal-note">Sivi dnevi niso na voljo za rezervacije.</div>
+          <div class="cal-note">${wt('cal_note')}</div>
         </div>
       </div>
 
-      <!-- Korak 3: Termin -->
       <div class="step" id="ws3">
         <div class="ttl">
           <button class="back" id="wb3"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="m13 18-6-6 6-6"/></svg></button>
-          Izberite termin
+          ${wt('step3_title')}
         </div>
         <div class="sub" id="ws3sub"></div>
-        <div class="empty" id="wsloading">Nalagam termine...</div>
+        <div class="empty" id="wsloading">${wt('slots_loading')}</div>
         <div id="wsempty" style="display:none">
-          <div class="empty"><div class="ico">😕</div><div>Za ta dan ni prostih terminov.</div></div>
+          <div class="empty"><div class="ico">😕</div><div>${wt('no_slots')}</div></div>
           <div class="wl-panel" id="wwl-panel" style="display:none">
-            <div class="wl-panel-ttl">Vpišite se na čakalno listo</div>
-            <div class="wl-panel-sub">Ko se sprosti termin, vas bomo takoj obvestili po emailu.</div>
+            <div class="wl-panel-ttl">${wt('wl_offer_title')}</div>
+            <div class="wl-panel-sub">${wt('wl_offer_desc')}</div>
             <div class="wl-row2" style="margin-bottom:8px">
-              <div><label class="wl-lbl">Ime <span style="color:#EF4444">*</span></label><input class="wl-inp" id="wwl-first" type="text" placeholder="Janez"></div>
-              <div><label class="wl-lbl">Priimek <span style="color:#EF4444">*</span></label><input class="wl-inp" id="wwl-last" type="text" placeholder="Novak"></div>
+              <div><label class="wl-lbl">${wt('first_name')} <span style="color:#EF4444">*</span></label><input class="wl-inp" id="wwl-first" type="text"></div>
+              <div><label class="wl-lbl">${wt('last_name')} <span style="color:#EF4444">*</span></label><input class="wl-inp" id="wwl-last" type="text"></div>
             </div>
-            <div style="margin-bottom:8px"><label class="wl-lbl">Email <span style="color:#EF4444">*</span></label><input class="wl-inp" id="wwl-email" type="email" placeholder="janez@email.com"></div>
-            <div style="margin-bottom:8px"><label class="wl-lbl">Telefon <span style="color:#92400E;font-weight:400">(neobvezno)</span></label><input class="wl-inp" id="wwl-phone" type="tel" placeholder="041 123 456"></div>
-            <div style="margin-bottom:10px"><label class="wl-lbl">Prednostni čas <span style="color:#92400E;font-weight:400">(neobvezno)</span></label><input class="wl-inp" id="wwl-time" type="time"></div>
-            <div class="wl-gdpr"><input type="checkbox" id="wwl-gdpr"><label for="wwl-gdpr">Strinjam se z obdelavo osebnih podatkov za namen obveščanja o prostih terminih.</label></div>
+            <div style="margin-bottom:8px"><label class="wl-lbl">${wt('email')} <span style="color:#EF4444">*</span></label><input class="wl-inp" id="wwl-email" type="email"></div>
+            <div style="margin-bottom:8px"><label class="wl-lbl">${wt('phone')} <span style="color:#92400E;font-weight:400">${wt('optional')}</span></label><input class="wl-inp" id="wwl-phone" type="tel"></div>
+            <div style="margin-bottom:10px"><label class="wl-lbl">${wt('pref_time')} <span style="color:#92400E;font-weight:400">${wt('optional')}</span></label><input class="wl-inp" id="wwl-time" type="time"></div>
+            <div class="wl-gdpr"><input type="checkbox" id="wwl-gdpr"><label for="wwl-gdpr">${wt('gdpr_wl')}</label></div>
             <div class="wl-err" id="wwl-err"></div>
-            <button class="wl-btn" id="wwl-submit">Vpišem se na čakalno listo</button>
+            <button class="wl-btn" id="wwl-submit">${wt('wl_submit')}</button>
           </div>
           <div class="wl-done" id="wwl-done" style="display:none">
-            <div class="wl-done-ttl">✓ Vpisani ste na čakalno listo!</div>
-            <div class="wl-done-sub">Ko se sprosti termin, vas bomo obvestili po emailu.</div>
+            <div class="wl-done-ttl">✓ ${wt('wl_done_title')}</div>
+            <div class="wl-done-sub">${wt('wl_done_msg')}</div>
           </div>
         </div>
         <div class="slots-grid" id="wsslots" style="display:none"></div>
         <div id="wsslots-legend" style="display:none;align-items:center;gap:6px;margin-top:8px;font-size:11px;color:#78350F">
-          <span style="display:inline-block;width:11px;height:11px;border-radius:3px;border:2px solid #F59E0B;background:#FFFBEB;flex-shrink:0"></span> Čakalna lista
+          <span style="display:inline-block;width:11px;height:11px;border-radius:3px;border:2px solid #F59E0B;background:#FFFBEB;flex-shrink:0"></span> ${wt('wl_legend')}
         </div>
-        <!-- Obvestilo ob kliku na waitlist termin (notice + Nadaljuj) -->
         <div id="wswl-notice" style="display:none;margin-top:14px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:13px;padding:16px">
-          <div style="font-size:13px;font-weight:700;color:#92400E;margin-bottom:4px">Termin je zaseden – čakalna lista</div>
-          <div style="font-size:12px;color:#B45309;margin-bottom:12px">Termin <strong id="wswl-time-label"></strong> je zaseden. Vpišete se lahko na čakalno listo – ko se sprosti mesto, vas bomo obvestili po emailu. Lahko pa izberete drug prosti termin zgoraj.</div>
-          <button class="wl-btn" id="wswl-continue">Nadaljuj →</button>
+          <div style="font-size:13px;font-weight:700;color:#92400E;margin-bottom:4px">${wt('wl_slot_title')}</div>
+          <div style="font-size:12px;color:#B45309;margin-bottom:12px" id="wswl-desc"></div>
+          <button class="wl-btn" id="wswl-continue">${wt('continue')}</button>
         </div>
       </div>
 
-      <!-- Korak 3b: Izbira cone (opcijsko) -->
       <div class="step" id="ws3b">
         <div class="ttl">
           <button class="back" id="wb3b"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="m13 18-6-6 6-6"/></svg></button>
-          Izberite prostor
+          ${wt('step3b_title')}
         </div>
         <div class="sub" id="ws3bsub"></div>
-        <div class="empty" id="ws3bloading">Nalagam razpoložljivost...</div>
+        <div class="empty" id="ws3bloading">${wt('areas_loading')}</div>
         <div id="ws3bbtns" style="display:none"></div>
       </div>
 
-      <!-- Korak 4: Podatki -->
       <div class="step" id="ws4">
         <div class="ttl">
           <button class="back" id="wb4"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2"><path d="m13 18-6-6 6-6"/></svg></button>
-          Vaši podatki
+          ${wt('step4_title')}
         </div>
         <div class="sub" id="ws4sub"></div>
-        <!-- Čakalna lista obvestilo (samo v waitlist načinu) -->
         <div id="ws4-wl-notice" style="display:none;background:#FFFBEB;border:1px solid #FDE68A;border-radius:11px;padding:10px 14px;font-size:12px;color:#92400E;margin-bottom:12px">
-          <strong>Čakalna lista:</strong> Vpisujete se za termin <span id="ws4-wl-time" style="font-weight:700"></span>. Ko se sprosti mesto, vas bomo obvestili po emailu.
+          <strong>${wt('wl_notice')}</strong> <span id="ws4-wl-time" style="font-weight:700"></span> – ${wt('wl_notice_desc')}
         </div>
         <div class="ferr" id="wferr"></div>
-        <div class="field"><label>Ime in priimek <span class="req">*</span></label><input class="inp" id="wfname" type="text" autocomplete="name" placeholder="npr. Janez Novak"></div>
-        <div class="field"><label>Email <span class="req">*</span></label><input class="inp" id="wfemail" type="email" autocomplete="email" placeholder="janez@email.com"></div>
-        <div class="field"><label>Telefon <span class="opt">(neobvezno)</span></label><input class="inp" id="wfphone" type="tel" autocomplete="tel" placeholder="041 123 456"></div>
-        <div class="field"><label>Opombe <span class="opt">(neobvezno)</span></label><textarea class="ta" id="wfnotes" placeholder="Alergije, posebne želje..."></textarea></div>
+        <div class="field"><label>${wt('full_name')} <span class="req">*</span></label><input class="inp" id="wfname" type="text" autocomplete="name" placeholder="${wt('full_name_ph')}"></div>
+        <div class="field"><label>${wt('email')} <span class="req">*</span></label><input class="inp" id="wfemail" type="email" autocomplete="email" placeholder="${wt('email_ph')}"></div>
+        <div class="field"><label>${wt('phone')} <span class="opt">${wt('optional')}</span></label><input class="inp" id="wfphone" type="tel" autocomplete="tel" placeholder="${wt('phone_ph')}"></div>
+        <div class="field"><label>${wt('notes')} <span class="opt">${wt('optional')}</span></label><textarea class="ta" id="wfnotes" placeholder="${wt('notes_ph')}"></textarea></div>
         <div id="wcf-wrap"></div>
         <div class="gdpr-row">
           <label><input class="gdpr-cb" type="checkbox" id="wgdpr">
-          <span>Strinjam se z obdelavo mojih osebnih podatkov za namen rezervacije. Prebral/a sem <a class="gdpr-lnk" id="wgdpr-link" href="#" target="_blank">Politiko zasebnosti</a>. <span class="gdpr-req">*</span></span></label>
+          <span>${wt('gdpr')} <a class="gdpr-lnk" id="wgdpr-link" href="#" target="_blank">${wt('privacy')}</a>. <span class="gdpr-req">*</span></span></label>
         </div>
         <div class="gdpr-row" style="margin-bottom:14px">
           <label><input class="gdpr-cb" type="checkbox" id="wmktg">
-          <span>Strinjam se s prejemanjem obvestil in posebnih ponudb po e-pošti. <span style="color:var(--f3)">(neobvezno)</span></span></label>
+          <span>${wt('marketing')}</span></label>
         </div>
-        <button class="btn-p" id="wbtnsubmit"><span id="wbtnlbl">Pošlji rezervacijo</span></button>
+        <button class="btn-p" id="wbtnsubmit"><span id="wbtnlbl">${wt('submit')}</span></button>
       </div>
 
-      <!-- Korak 5: Potrditev -->
       <div class="step" id="ws5">
         <div class="conf">
           <div class="cico" id="wcico"></div>
           <div class="cttl" id="wcttl"></div>
           <div class="cmsg" id="wcmsg"></div>
           <div class="sum">
-            <div class="sum-ttl">Podrobnosti rezervacije</div>
-            <div class="sum-row"><span>Restavracija</span><span id="wcsrest"></span></div>
-            <div class="sum-row"><span>Datum</span><span id="wcsdate"></span></div>
-            <div class="sum-row"><span>Ura</span><span id="wcstime"></span></div>
-            <div class="sum-row"><span>Gostje</span><span id="wcsgst"></span></div>
+            <div class="sum-ttl">${wt('summary_title')}</div>
+            <div class="sum-row"><span>${wt('sum_rest')}</span><span id="wcsrest"></span></div>
+            <div class="sum-row"><span>${wt('sum_date')}</span><span id="wcsdate"></span></div>
+            <div class="sum-row"><span>${wt('sum_time')}</span><span id="wcstime"></span></div>
+            <div class="sum-row"><span>${wt('sum_guests')}</span><span id="wcsgst"></span></div>
           </div>
-          <button class="btn-o" id="wbtnreset">Naredi novo rezervacijo</button>
+          <button class="btn-o" id="wbtnreset">${wt('new_booking')}</button>
         </div>
       </div>
 
@@ -370,11 +553,11 @@ input,textarea{font-family:inherit}
 
     // ── Pomožne ───────────────────────────────────────────────────
     const $ = (id) => shadow.getElementById(id);
-    const MONTHS  = ['Januar','Februar','Marec','April','Maj','Junij','Julij','Avgust','September','Oktober','November','December'];
-    const DAYS_SL = ['Ponedeljek','Torek','Sreda','Četrtek','Petek','Sobota','Nedelja'];
+    const MONTHS  = WS.months;
+    const DAYS_SL = WS.days;
 
     function guestLbl(n) {
-        return n === 1 ? 'gost' : n < 5 ? 'gostje' : 'gostov';
+        return n === 1 ? wt('guest_1') : n < 5 ? wt('guest_few') : wt('guest_many');
     }
 
     function fmtDate(ds) {
@@ -461,7 +644,7 @@ input,textarea{font-family:inherit}
             const inp = $('wgmoreinp');
             inp.min = 11;
             inp.max = max_guests;
-            $('wgmorelbl').textContent = `Vnesite število gostov (11–${max_guests})`;
+            $('wgmorelbl').textContent = wt('enter_guests', { min: 11, max: max_guests });
             inp.placeholder = '11';
             inp.addEventListener('input', () => {
                 const v = parseInt(inp.value);
@@ -582,7 +765,7 @@ input,textarea{font-family:inherit}
         $('wsempty').style.display   = '';
         showWaitlistPanel();
         const dt = new Date(ds + 'T12:00:00');
-        $('ws3sub').textContent = `${DAYS_SL[(dt.getDay() + 6) % 7]}, ${dt.getDate()}. ${MONTHS[dt.getMonth()]} ${dt.getFullYear()} · ni terminov`;
+        $('ws3sub').textContent = `${DAYS_SL[(dt.getDay() + 6) % 7]}, ${dt.getDate()}. ${MONTHS[dt.getMonth()]} ${dt.getFullYear()} · ${wt('no_slots_sfx')}`;
         setStep(3);
     }
 
@@ -631,7 +814,7 @@ input,textarea{font-family:inherit}
                 b.title = status === 'waitlist' ? 'Zasedeno – vpis na čakalno listo' : '';
                 if (status === 'waitlist') {
                     hasWaitlist = true;
-                    b.innerHTML = time + '<span style="font-size:.65rem;display:block;font-weight:500;line-height:1.2">čakalna lista</span>';
+                    b.innerHTML = time + `<span style="font-size:.65rem;display:block;font-weight:500;line-height:1.2">${wt('wl_legend')}</span>`;
                     b.addEventListener('click', () => selectWaitlistSlot(time, b));
                 } else {
                     b.textContent = time;
@@ -680,7 +863,7 @@ input,textarea{font-family:inherit}
         if (t4) t4.textContent = state._waitlistTime || '';
         // Posodobi label gumba
         const lbl = $('wbtnlbl');
-        if (lbl) lbl.textContent = 'Vpišem se na čakalno listo';
+        if (lbl) lbl.textContent = wt('wl_submit');
         setStep(4);
     }
 
@@ -720,7 +903,7 @@ input,textarea{font-family:inherit}
             const anyBtn = document.createElement('button');
             anyBtn.className = 'slot';
             anyBtn.style.cssText = 'width:100%;text-align:left;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:#fff;cursor:pointer;margin-bottom:8px';
-            anyBtn.innerHTML = '<strong style="font-size:.9rem">Vseeno mi je</strong><br><span style="font-size:.78rem;opacity:.6">Sistem samodejno izbere najboljši prostor</span>';
+            anyBtn.innerHTML = `<strong style="font-size:.9rem">${wt('area_any')}</strong><br><span style="font-size:.78rem;opacity:.6">${wt('area_any_desc')}</span>`;
             anyBtn.onclick = () => selectArea(null, anyBtn);
             $('ws3bbtns').appendChild(anyBtn);
 
@@ -729,7 +912,7 @@ input,textarea{font-family:inherit}
                 btn.className = 'slot';
                 btn.disabled = !area.available;
                 btn.style.cssText = `width:100%;text-align:left;padding:12px 14px;border-radius:10px;border:1.5px solid var(--border);background:#fff;margin-bottom:8px;cursor:${area.available?'pointer':'not-allowed'};opacity:${area.available?1:0.4}`;
-                btn.innerHTML = `<strong style="font-size:.9rem">${area.name}</strong>${!area.available?'<br><span style="font-size:.78rem;opacity:.6">Ni prostih miz za vaš termin</span>':''}`;
+                btn.innerHTML = `<strong style="font-size:.9rem">${area.name}</strong>${!area.available ? '<br><span style="font-size:.78rem;opacity:.6">' + wt('area_unavail') + '</span>' : ''}`;
                 if (area.available) btn.onclick = () => selectArea(area.id, btn);
                 $('ws3bbtns').appendChild(btn);
             });
@@ -787,13 +970,13 @@ input,textarea{font-family:inherit}
                 }),
             });
             const json = await res.json();
-            if (!json.success) throw new Error(json.error || 'Napaka strežnika.');
+            if (!json.success) throw new Error(json.error || wt('err_server'));
             $('wwl-panel').style.display = 'none';
             $('wwl-done').style.display  = '';
         } catch (e) {
             showErr(e.message);
             btn.disabled = false;
-            btn.textContent = 'Vpišem se na čakalno listo';
+            btn.textContent = wt('wl_submit');
         }
     });
 
@@ -834,7 +1017,7 @@ input,textarea{font-family:inherit}
                     sel.id = 'wcf-' + fid;
                     sel.dataset.cfid = fid;
                     const empty = document.createElement('option');
-                    empty.value = ''; empty.textContent = '— Izberite —';
+                    empty.value = ''; empty.textContent = wt('select_ph');
                     sel.appendChild(empty);
                     f.options.forEach(o => {
                         const opt = document.createElement('option');
@@ -922,7 +1105,7 @@ input,textarea{font-family:inherit}
                 body:    JSON.stringify({ date: state.date, time: state.time, guest_name: name, email, phone, notes, guest_count: state.guests, area_id: state.areaId, custom_fields: customFields, gdpr_consent: true, marketing_consent: mktg ? true : false }),
             });
             const json = await res.json();
-            if (!json.success) throw new Error(json.error || 'Napaka strežnika.');
+            if (!json.success) throw new Error(json.error || wt('err_server'));
             showConfirm(json.data.auto_confirm);
         } catch (e) {
             showErr(e.message);
@@ -963,11 +1146,11 @@ input,textarea{font-family:inherit}
                 }),
             });
             const json = await res.json();
-            if (!json.success) throw new Error(json.error || 'Napaka strežnika.');
+            if (!json.success) throw new Error(json.error || wt('err_server'));
             // Pokaži potrditev (isto kot book.php waitlist done)
-            $('wcico').textContent = '✅';
-            $('wcttl').textContent = 'Vpisani ste na čakalno listo!';
-            $('wcmsg').textContent = 'Ko se sprosti termin, vas bomo obvestili po emailu.';
+            $('wcico').textContent = wt('wl_confirm_ico');
+            $('wcttl').textContent = wt('wl_confirm_ttl');
+            $('wcmsg').textContent = wt('wl_confirm_msg');
             const dt = new Date(state.date + 'T12:00:00');
             $('wcsrest').textContent = state.rest.name;
             $('wcsdate').textContent = `${DAYS_SL[(dt.getDay() + 6) % 7]}, ${dt.getDate()}. ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
@@ -1005,11 +1188,9 @@ input,textarea{font-family:inherit}
     function showConfirm(auto) {
         const dt  = new Date(state.date + 'T12:00:00');
         const ds  = `${DAYS_SL[(dt.getDay() + 6) % 7]}, ${dt.getDate()}. ${MONTHS[dt.getMonth()]} ${dt.getFullYear()}`;
-        $('wcico').textContent = auto ? '✅' : '📩';
-        $('wcttl').textContent = auto ? 'Rezervacija potrjena!' : 'Prošnja sprejeta!';
-        $('wcmsg').textContent = auto
-            ? 'Vaša rezervacija je potrjena. Poslali smo vam potrditveni e-mail.'
-            : 'Vaša prošnja je bila sprejeta. Ko jo potrdimo, vas obvestimo po e-pošti.';
+        $('wcico').textContent = auto ? wt('confirm_auto_ico') : wt('confirm_pend_ico');
+        $('wcttl').textContent = auto ? wt('confirm_auto_ttl') : wt('confirm_pend_ttl');
+        $('wcmsg').textContent = auto ? wt('confirm_auto_msg') : wt('confirm_pend_msg');
         $('wcsrest').textContent  = state.rest.name;
         $('wcsdate').textContent  = ds;
         $('wcstime').textContent  = state.time;

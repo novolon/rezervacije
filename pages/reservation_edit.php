@@ -5,6 +5,7 @@
  * Brez prijave.
  */
 require_once '../config.php';
+require_once '../includes/lang.php';
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/mailer.php';
@@ -37,7 +38,7 @@ if ($token) {
     $reservation = $stmt->fetch();
 
     if (!$reservation) {
-        $error = 'Ta povezava ni veljavna ali je potekla. Prosimo, kontaktirajte restavracijo neposredno.';
+        $error = t('res_edit.err_invalid_link');
     }
 }
 
@@ -70,7 +71,7 @@ function _contact_inline(string $email, string $phone): string {
     $parts = [];
     if ($email) $parts[] = '<a href="mailto:' . htmlspecialchars($email) . '" style="color:#1B4332;font-weight:600">' . htmlspecialchars($email) . '</a>';
     if ($phone) $parts[] = '<a href="tel:' . htmlspecialchars(preg_replace('/\s+/', '', $phone)) . '" style="color:#1B4332;font-weight:600">' . htmlspecialchars($phone) . '</a>';
-    return '<div style="margin-top:8px;font-size:.875rem;color:#374151">Kontakt: ' . implode(' · ', $parts) . '</div>';
+    return '<div style="margin-top:8px;font-size:.875rem;color:#374151">' . t('res_edit.contact_label') . ': ' . implode(' · ', $parts) . '</div>';
 }
 
 // ── Naloži custom polja restavracije + obstoječe vrednosti ───
@@ -157,12 +158,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $reservation && !$error) {
                 notify_waitlist($pdo, (int)$reservation['restaurant_id'], $reservation['reservation_date']);
             } catch (Throwable $e) { error_log('notify_waitlist error: ' . $e->getMessage()); }
 
-            $done     = 'Vaša rezervacija je bila uspešno odpovedana.';
+            $done     = t('res_edit.done_cancelled');
             $doneType = 'cancelled';
             $reservation = null;
         } catch (PDOException $e) {
             error_log('Reservation cancel error: ' . $e->getMessage());
-            $error = 'Prišlo je do napake. Prosimo, poskusite znova.';
+            $error = t('res_edit.err_generic');
         }
 
     } elseif ($postAction === 'edit' && $canEdit) {
@@ -173,22 +174,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $reservation && !$error) {
 
         // Validacija
         if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $newDate)) {
-            $error = 'Neveljaven datum.';
+            $error = t('res_edit.err_invalid_date');
         } elseif ($newDate < date('Y-m-d')) {
-            $error = 'Rezervacije v preteklosti ni mogoče nastaviti.';
+            $error = t('res_edit.err_past_date');
         } elseif (!preg_match('/^\d{2}:\d{2}$/', $newTime)) {
-            $error = 'Neveljaven čas.';
+            $error = t('res_edit.err_invalid_time');
         } else {
             // Preveri cutoff za novi termin
             $newTs = strtotime("{$newDate} {$newTime}");
             if (($newTs - time()) / 3600 < $editCutoff) {
-                $error = "Rezervacijo je mogoče spremeniti le vsaj {$editCutoff} ur pred terminom.";
+                $error = t('res_edit.err_cutoff', ['hours' => $editCutoff]);
             } else {
                 // Blokiran datum?
                 $blStmt = $pdo->prepare("SELECT 1 FROM restaurant_blackouts WHERE restaurant_id = ? AND blackout_date = ?");
                 $blStmt->execute([(int)$reservation['restaurant_id'], $newDate]);
                 if ($blStmt->fetchColumn()) {
-                    $error = 'Za izbrani datum rezervacije niso na voljo.';
+                    $error = t('res_edit.err_blackout');
                 } else {
                     try {
                         // Nov token z veljavnostjo do 1h po novem terminu
@@ -255,12 +256,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $reservation && !$error) {
                             );
                         }
 
-                        $done     = 'Vaša rezervacija je bila uspešno posodobljena.';
+                        $done     = t('res_edit.done_edited');
                         $doneType = 'edited';
                         $reservation = null;
                     } catch (PDOException $e) {
                         error_log('Reservation edit error: ' . $e->getMessage());
-                        $error = 'Prišlo je do napake. Prosimo, poskusite znova.';
+                        $error = t('res_edit.err_generic');
                     }
                 }
             }
@@ -408,16 +409,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && isset($_GET['slots_for'])) {
 
 // ── Formatiranje datuma ───────────────────────────────────────
 function fmt_date(string $d): string {
-    $names = ['Ponedeljek','Torek','Sreda','Četrtek','Petek','Sobota','Nedelja'];
+    $names = array_map(fn($i) => t_raw('days.' . $i), range(0, 6));
     return $names[date('N', strtotime($d)) - 1] . ', ' . date('d. m. Y', strtotime($d));
 }
 ?>
 <!DOCTYPE html>
-<html lang="sl">
+<html lang="<?= get_lang() ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Uredi rezervacijo – <?= h(APP_NAME) ?></title>
+    <title><?= t('res_edit.page_title') ?> – <?= h(APP_NAME) ?></title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/login.css">
@@ -473,6 +474,10 @@ function fmt_date(string $d): string {
         .cutoff-info { font-size:.8rem; color:#6B7280; margin-top:4px; }
         #slots-loading { font-size:.8rem; color:#6B7280; }
     </style>
+    <script>
+    window.__T__ = <?= json_encode(get_lang_strings(), JSON_UNESCAPED_UNICODE) ?>;
+    window.t = function(k, p) { var s = window.__T__[k] || k; if (p) { for (var x in p) s = s.split('{'+x+'}').join(p[x]); } return s; };
+    </script>
 </head>
 <body>
 <div class="wrap">
@@ -492,15 +497,15 @@ function fmt_date(string $d): string {
         <!-- Uspešno -->
         <div class="done-card">
             <div class="done-icon"><?= $doneType === 'cancelled' ? '❌' : '✅' ?></div>
-            <h2 class="done-title"><?= $doneType === 'cancelled' ? 'Rezervacija odpovedana' : 'Rezervacija posodobljena' ?></h2>
-            <p class="done-sub"><?= h($done) ?><br><br>Restavracijo smo obvestili.</p>
+            <h2 class="done-title"><?= $doneType === 'cancelled' ? t('res_edit.done_title_cancelled') : t('res_edit.done_title_edited') ?></h2>
+            <p class="done-sub"><?= h($done) ?><br><br><?= t('res_edit.done_notified') ?></p>
         </div>
 
     <?php elseif ($error && !$reservation): ?>
         <!-- Napaka / neveljavna povezava -->
         <div style="text-align:center;padding:8px 0 16px">
             <div style="font-size:2.5rem;margin-bottom:12px">🔗</div>
-            <h1>Neveljavna povezava</h1>
+            <h1><?= t('res_edit.err_title') ?></h1>
             <p class="sub" style="margin:0"><?= h($error) ?></p>
             <?php if ($restContactEmail || $restContactPhone): ?>
             <div style="margin-top:16px;font-size:.875rem;color:#374151">
@@ -510,8 +515,8 @@ function fmt_date(string $d): string {
         </div>
 
     <?php elseif ($reservation): ?>
-        <h1>Upravljanje rezervacije</h1>
-        <p class="sub">Uredite ali odpovejte svojo rezervacijo.</p>
+        <h1><?= t('res_edit.main_title') ?></h1>
+        <p class="sub"><?= t('res_edit.main_sub') ?></p>
 
         <?php if ($error): ?>
             <div class="err-msg"><?= h($error) ?></div>
@@ -521,13 +526,14 @@ function fmt_date(string $d): string {
         <div class="booking-box">
             <div class="rest"><?= h($reservation['restaurant_name']) ?></div>
             <div class="dt"><?= h(fmt_date($reservation['reservation_date'])) ?> ob <?= h(substr($reservation['reservation_time'], 0, 5)) ?></div>
-            <div class="gs"><?= (int)$reservation['guest_count'] ?> <?= (int)$reservation['guest_count'] === 1 ? 'gost' : ((int)$reservation['guest_count'] < 5 ? 'gostje' : 'gostov') ?> · <?= h($reservation['guest_name']) ?></div>
+            <?php $gc = (int)$reservation['guest_count']; $gcLbl = $gc === 1 ? t('res_edit.guest_1') : ($gc < 5 ? t('res_edit.guest_few') : t('res_edit.guest_many')); ?>
+            <div class="gs"><?= $gc ?> <?= $gcLbl ?> · <?= h($reservation['guest_name']) ?></div>
         </div>
 
         <?php if (!$canEdit && !$canCancel): ?>
             <div class="not-allowed-msg">
-                Rezervacije žal ni več mogoče spremeniti ali odpovedati prek spleta (rok je pretečen).<br>
-                Kontaktirajte restavracijo neposredno.
+                <?= t('res_edit.no_edit_msg') ?><br>
+                <?= t('res_edit.no_edit_sub') ?>
                 <?= _contact_inline($restContactEmail, $restContactPhone) ?>
             </div>
 
@@ -535,10 +541,10 @@ function fmt_date(string $d): string {
             <!-- Tabs: Uredi / Odpovej -->
             <div class="action-tabs">
                 <?php if ($canEdit): ?>
-                <button class="action-tab active" id="tab-edit" onclick="switchTab('edit')">Uredi rezervacijo</button>
+                <button class="action-tab active" id="tab-edit" onclick="switchTab('edit')"><?= t('res_edit.tab_edit') ?></button>
                 <?php endif; ?>
                 <?php if ($canCancel): ?>
-                <button class="action-tab cancel-tab <?= !$canEdit ? 'active' : '' ?>" id="tab-cancel" onclick="switchTab('cancel')">Odpovem rezervacijo</button>
+                <button class="action-tab cancel-tab <?= !$canEdit ? 'active' : '' ?>" id="tab-cancel" onclick="switchTab('cancel')"><?= t('res_edit.tab_cancel') ?></button>
                 <?php endif; ?>
             </div>
 
@@ -547,30 +553,30 @@ function fmt_date(string $d): string {
             <div id="panel-edit" class="panel active">
                 <?php if (($reservation['status'] ?? '') === 'confirmed' && !($reservation['booking_auto_confirm'] ?? 1)): ?>
                 <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:12px 16px;margin-bottom:20px;font-size:.875rem;color:#92400E;line-height:1.5">
-                    <strong>Pozor:</strong> Vaša rezervacija je trenutno potrjena. Če jo uredite, bo poslana v ponovno potrditev restavraciji.
+                    <?= t('res_edit.pending_warning') ?>
                 </div>
                 <?php endif; ?>
                 <form method="POST">
                     <input type="hidden" name="action" value="edit">
 
                     <div class="form-group">
-                        <label>Datum</label>
+                        <label><?= t('res_edit.label_date') ?></label>
                         <input type="date" name="reservation_date" id="inp-date"
                                value="<?= h($reservation['reservation_date']) ?>"
                                min="<?= date('Y-m-d', strtotime('+' . (int)$reservation['guest_edit_cutoff_hours'] . ' hours')) ?>"
                                required>
-                        <div class="cutoff-info">Sprememba možna vsaj <?= (int)$reservation['guest_edit_cutoff_hours'] ?> ur pred terminom</div>
+                        <div class="cutoff-info"><?= t('res_edit.cutoff_info', ['hours' => (int)$reservation['guest_edit_cutoff_hours']]) ?></div>
                     </div>
 
                     <div class="form-group">
-                        <label>Čas</label>
-                        <div id="slots-loading" style="display:none">Nalagam termine...</div>
+                        <label><?= t('res_edit.label_time') ?></label>
+                        <div id="slots-loading" style="display:none"><?= t('res_edit.loading_slots') ?></div>
                         <div class="slots-wrap" id="slots-wrap"></div>
                         <input type="hidden" name="reservation_time" id="inp-time" value="<?= h(substr($reservation['reservation_time'], 0, 5)) ?>">
                     </div>
 
                     <div class="form-group">
-                        <label>Število gostov</label>
+                        <label><?= t('res_edit.label_guests') ?></label>
                         <select name="guest_count" required>
                             <?php for ($i = 1; $i <= 20; $i++): ?>
                                 <option value="<?= $i ?>" <?= $i === (int)$reservation['guest_count'] ? 'selected' : '' ?>><?= $i ?></option>
@@ -579,8 +585,8 @@ function fmt_date(string $d): string {
                     </div>
 
                     <div class="form-group">
-                        <label>Opomba (neobvezno)</label>
-                        <textarea name="notes" placeholder="Posebne želje, alergije..."><?= h($reservation['notes'] ?? '') ?></textarea>
+                        <label><?= t('res_edit.label_notes') ?></label>
+                        <textarea name="notes" placeholder="<?= t('res_edit.notes_placeholder') ?>"><?= h($reservation['notes'] ?? '') ?></textarea>
                     </div>
 
                     <?php foreach ($customFields as $cf): ?>
@@ -591,7 +597,7 @@ function fmt_date(string $d): string {
                         $cfName = 'custom_fields[' . (int)$cf['id'] . ']';
                         if ($cf['field_type'] === 'select' && $cf['options']): ?>
                             <select name="<?= $cfName ?>" <?= $cf['is_required'] ? 'required' : '' ?>>
-                                <option value="">– izberite –</option>
+                                <option value=""><?= t('res_edit.select_placeholder') ?></option>
                                 <?php foreach ($cf['options'] as $opt): ?>
                                     <option value="<?= h($opt) ?>" <?= $cfVal === $opt ? 'selected' : '' ?>><?= h($opt) ?></option>
                                 <?php endforeach; ?>
@@ -599,7 +605,7 @@ function fmt_date(string $d): string {
                         <?php elseif ($cf['field_type'] === 'checkbox'): ?>
                             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400">
                                 <input type="checkbox" name="<?= $cfName ?>" value="1" <?= $cfVal ? 'checked' : '' ?> style="width:16px;height:16px;accent-color:#1B4332">
-                                Da
+                                <?= t('res_edit.checkbox_yes') ?>
                             </label>
                         <?php else: ?>
                             <input type="text" name="<?= $cfName ?>" value="<?= h($cfVal) ?>" <?= $cf['is_required'] ? 'required' : '' ?>>
@@ -607,7 +613,7 @@ function fmt_date(string $d): string {
                     </div>
                     <?php endforeach; ?>
 
-                    <button type="submit" class="btn-primary">Shrani spremembe</button>
+                    <button type="submit" class="btn-primary"><?= t('res_edit.btn_save') ?></button>
                 </form>
             </div>
             <?php endif; ?>
@@ -616,27 +622,27 @@ function fmt_date(string $d): string {
             <!-- Panel: Odpovej -->
             <div id="panel-cancel" class="panel <?= !$canEdit ? 'active' : '' ?>">
                 <p style="margin:0 0 16px;font-size:.875rem;color:#374151;line-height:1.6">
-                    Ali ste prepričani, da želite odpovedati rezervacijo?<br>
-                    Restavracijo bomo o odpovedi obvestili.
+                    <?= t('res_edit.cancel_confirm_text') ?><br>
+                    <?= t('res_edit.cancel_confirm_sub') ?>
                 </p>
                 <form method="POST">
                     <input type="hidden" name="action" value="cancel">
                     <div class="form-group">
-                        <label>Razlog odpovedi (neobvezno)</label>
+                        <label><?= t('res_edit.label_cancel_reason') ?></label>
                         <div class="radio-group">
-                            <label class="radio-row"><input type="radio" name="cancel_reason" value="Sprememba načrtov"> Sprememba načrtov</label>
-                            <label class="radio-row"><input type="radio" name="cancel_reason" value="Bolezen"> Bolezen</label>
-                            <label class="radio-row"><input type="radio" name="cancel_reason" value="Napačen datum ali čas"> Napačen datum ali čas</label>
-                            <label class="radio-row"><input type="radio" name="cancel_reason" value="Drugo"> Drugo</label>
+                            <label class="radio-row"><input type="radio" name="cancel_reason" value="Sprememba načrtov"> <?= t('res_edit.reason_plans') ?></label>
+                            <label class="radio-row"><input type="radio" name="cancel_reason" value="Bolezen"> <?= t('res_edit.reason_illness') ?></label>
+                            <label class="radio-row"><input type="radio" name="cancel_reason" value="Napačen datum ali čas"> <?= t('res_edit.reason_wrong_dt') ?></label>
+                            <label class="radio-row"><input type="radio" name="cancel_reason" value="Drugo"> <?= t('res_edit.reason_other') ?></label>
                         </div>
                     </div>
-                    <button type="submit" class="btn-danger" onclick="return confirm('Ali ste prepričani, da želite odpovedati rezervacijo?')">
-                        Potrdi odpoved
+                    <button type="submit" class="btn-danger" onclick="return confirm(window.t('res_edit.cancel_confirm_text'))">
+                        <?= t('res_edit.btn_cancel_confirm') ?>
                     </button>
                 </form>
                 <?php if ($restContactEmail || $restContactPhone): ?>
                 <p style="margin:16px 0 0;font-size:.825rem;color:#6B7280">
-                    Vprašanja? <?= _contact_inline($restContactEmail, $restContactPhone) ?>
+                    <?= t('res_edit.contact_question') ?> <?= _contact_inline($restContactEmail, $restContactPhone) ?>
                 </p>
                 <?php endif; ?>
             </div>
@@ -648,8 +654,8 @@ function fmt_date(string $d): string {
         <!-- Ni tokena -->
         <div style="text-align:center;padding:8px 0 16px">
             <div style="font-size:2.5rem;margin-bottom:12px">📋</div>
-            <h1>Upravljanje rezervacije</h1>
-            <p class="sub" style="margin:0">Za dostop do rezervacije potrebujete veljavno povezavo iz potrditvenega emaila.</p>
+            <h1><?= t('res_edit.no_token_title') ?></h1>
+            <p class="sub" style="margin:0"><?= t('res_edit.no_token_sub') ?></p>
         </div>
     <?php endif; ?>
 
@@ -690,7 +696,7 @@ function loadSlots(date) {
         .then(data => {
             slotsLoading.style.display = 'none';
             if (!data.slots || !data.slots.length) {
-                slotsWrap.innerHTML = '<span style="font-size:.8rem;color:#6B7280">Za ta datum ni prostih terminov.</span>';
+                slotsWrap.innerHTML = '<span style="font-size:.8rem;color:#6B7280">' + window.t('res_edit.no_slots') + '</span>';
                 inpTime.value = '';
                 return;
             }
@@ -716,7 +722,7 @@ function loadSlots(date) {
         })
         .catch(() => {
             slotsLoading.style.display = 'none';
-            slotsWrap.innerHTML = '<span style="font-size:.8rem;color:#DC2626">Napaka pri nalaganju terminov.</span>';
+            slotsWrap.innerHTML = '<span style="font-size:.8rem;color:#DC2626">' + window.t('res_edit.err_slots') + '</span>';
         });
 }
 

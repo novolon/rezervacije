@@ -3,6 +3,7 @@ require_once '../includes/auth_check.php';
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/plans.php';
+require_once '../includes/lang.php';
 
 if (!is_logged_in()) {
     redirect_to_login();
@@ -24,11 +25,11 @@ $isAdmin   = $_SESSION['role'] === 'admin';
 $fullName  = $_SESSION['full_name'];
 $hasFeature = user_has_feature($pdo, (int)$_SESSION['user_id'], 'guest_database');
 
-// Naloži restavracije
+// Naloži restavracije za sidebar
 $restaurants = [];
 if ($isAdmin) {
     $stmt = $pdo->prepare("
-        SELECT r.id, r.name FROM restaurants r
+        SELECT r.id, r.name, r.color FROM restaurants r
         JOIN restaurant_admins ra ON r.id = ra.restaurant_id
         WHERE ra.user_id = ? AND r.is_active = 1 ORDER BY r.name
     ");
@@ -40,29 +41,42 @@ if ($isAdmin) {
     $restaurants = $stmt->fetchAll();
 }
 
-$defaultRestId = count($restaurants) === 1 ? (int)$restaurants[0]['id'] : 0;
+$pendingCount = 0;
+if ($isAdmin) {
+    $s = $pdo->prepare("SELECT COUNT(*) FROM reservations r JOIN restaurant_admins ra ON r.restaurant_id=ra.restaurant_id WHERE ra.user_id=? AND r.status='pending'");
+    $s->execute([$_SESSION['user_id']]); $pendingCount = (int)$s->fetchColumn();
+} elseif (!empty($_SESSION['restaurant_id'])) {
+    $s = $pdo->prepare("SELECT COUNT(*) FROM reservations WHERE restaurant_id=? AND status='pending'");
+    $s->execute([$_SESSION['restaurant_id']]); $pendingCount = (int)$s->fetchColumn();
+}
 
-// URL parameter ?rest_id=X – preveri da admin ima dostop
-$urlRestId = isset($_GET['rest_id']) ? (int)$_GET['rest_id'] : 0;
-if ($urlRestId) {
+// Aktivna restavracija iz sidebara (session)
+$activeRestId = 0;
+if (!empty($_SESSION['restaurant_id'])) {
     $allowed = array_column($restaurants, 'id');
-    if (in_array($urlRestId, $allowed)) {
-        $defaultRestId = $urlRestId;
+    if (in_array((int)$_SESSION['restaurant_id'], $allowed)) {
+        $activeRestId = (int)$_SESSION['restaurant_id'];
     }
+}
+if (!$activeRestId && !empty($restaurants)) {
+    $activeRestId = (int)$restaurants[0]['id'];
+}
+// URL ?rest_id=X ohrani za direktne linke iz drawer-ja
+if (!empty($_GET['rest_id'])) {
+    $urlRest = (int)$_GET['rest_id'];
+    if (in_array($urlRest, array_column($restaurants, 'id'))) $activeRestId = $urlRest;
 }
 ?>
 <!DOCTYPE html>
-<html lang="sl">
+<html lang="<?= get_lang() ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gostje – <?= h(APP_NAME) ?></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <title><?= t('nav.guests') ?> – <?= h(APP_NAME) ?></title>
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css?v=4">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/modal.css?v=2">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/modal.css?v=3">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/rezble.css?v=3">
     <style>
-        .guests-wrap { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
         .guests-title { font-size: 1.4rem; font-weight: 700; color: #111827; margin: 0 0 20px; }
         .guests-toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
         .guests-search { flex: 1; min-width: 200px; max-width: 360px; padding: 8px 12px; border: 1px solid #D1D5DB; border-radius: 8px; font-size: .9rem; outline: none; }
@@ -125,55 +139,21 @@ if ($urlRestId) {
         .upsell-banner h2 { font-size: 1.15rem; font-weight: 700; color: #92400E; margin: 0 0 10px; }
         .upsell-banner p  { color: #78350F; font-size: .9rem; margin: 0 0 20px; line-height: 1.5; }
     </style>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/design.css?v=1">
+    <script>
+    window.__LANG__ = '<?= get_lang() ?>';
+    window.__T__ = <?= json_encode(get_lang_strings(), JSON_UNESCAPED_UNICODE) ?>;
+    </script>
+    <script src="<?= BASE_PATH ?>/assets/js/i18n.js"></script>
 </head>
 <body>
 
-<!-- ── Header ──────────────────────────────────────────────── -->
-<header class="app-header">
-    <a href="<?= BASE_PATH ?>/pages/main.php" class="header-logo" style="flex-shrink:0">
-        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <rect width="28" height="28" rx="7" fill="#F59E0B"/>
-            <path d="M7 10h14M7 14h14M7 18h9" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <?= h(APP_NAME) ?>
-        <?php if ($isAdmin): ?><?= plan_badge($_SESSION['plan_slug'] ?? 'trial') ?><?php endif; ?>
-    </a>
-
-    <div class="header-restaurant">
-        <span style="color:rgba(255,255,255,.5);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;font-weight:600">Gostje</span>
-    </div>
-
-    <div class="header-actions">
-        <span class="header-user">👤 <?= h($fullName) ?></span>
-        <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-            Razpored
-        </a>
-        <a href="<?= BASE_PATH ?>/pages/stats.php" class="btn-header btn-header-admin">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-            Statistika
-        </a>
-        <?php if ($isAdmin): ?>
-        <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">Admin</a>
-        <?php endif; ?>
-        <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header">Profil</a>
-        <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
-    </div>
-    <button class="hamburger-btn" id="hamburger-btn" onclick="document.getElementById('mobile-nav').classList.toggle('open')">
-        <span></span><span></span><span></span>
-    </button>
-</header>
-
-<div class="mobile-nav" id="mobile-nav">
-    <div class="mobile-nav-user">👤 <?= h($fullName) ?></div>
-    <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin">Razpored</a>
-    <a href="<?= BASE_PATH ?>/pages/stats.php" class="btn-header btn-header-admin">Statistika</a>
-    <?php if ($isAdmin): ?>
-    <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">Admin</a>
-    <?php endif; ?>
-    <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header">Profil</a>
-    <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout">Odjava</a>
-</div>
+<div id="rz-app" class="rz-app">
+<?php require_once '../includes/sidebar.php'; ?>
+<main class="rz-main">
 
 <?php require_once '../includes/trial_banner.php'; ?>
 
@@ -182,31 +162,18 @@ if ($urlRestId) {
 <?php if (!$hasFeature): ?>
 <!-- Upsell za Basic/Trial -->
 <div class="upsell-banner">
-    <h2>Baza gostov – Advanced/Premium</h2>
-    <p>Baza gostov z zgodovino rezervacij, oznakami in opombami je na voljo v paketih <strong>Advanced</strong> in <strong>Premium</strong>.</p>
-    <a href="<?= BASE_PATH ?>/pages/billing.php" class="btn btn-primary">Nadgradi paket →</a>
+    <h2><?= t('guests.upsell_title') ?></h2>
+    <p><?= t_raw('guests.upsell_text') ?></p>
+    <a href="<?= BASE_PATH ?>/pages/billing.php" class="btn btn-primary"><?= t('guests.upgrade_btn') ?></a>
 </div>
 <?php else: ?>
 
-<h1 class="guests-title">Baza gostov</h1>
+<h1 class="guests-title"><?= t('guests.title') ?></h1>
 
 <!-- Toolbar -->
 <div class="guests-toolbar">
-    <?php if ($isAdmin && count($restaurants) > 1): ?>
-    <select id="rest-select" class="guests-rest-select">
-        <option value="">— Izberi restavracijo —</option>
-        <?php foreach ($restaurants as $r): ?>
-        <option value="<?= $r['id'] ?>" <?= $defaultRestId === (int)$r['id'] ? 'selected' : '' ?>><?= h($r['name']) ?></option>
-        <?php endforeach; ?>
-    </select>
-    <?php else: ?>
-    <input type="hidden" id="rest-select" value="<?= $defaultRestId ?>">
-    <?php if (count($restaurants) === 1): ?>
-    <span style="font-weight:600;color:#374151"><?= h($restaurants[0]['name']) ?></span>
-    <?php endif; ?>
-    <?php endif; ?>
-
-    <input type="search" id="guests-search" class="guests-search" placeholder="Išči po imenu, emailu, telefonu…">
+    <input type="hidden" id="rest-select" value="<?= $activeRestId ?>">
+    <input type="search" id="guests-search" class="guests-search" placeholder="<?= t('guests.search_placeholder') ?>">
 </div>
 
 <!-- Tabela -->
@@ -214,16 +181,16 @@ if ($urlRestId) {
     <table class="guests-table">
         <thead>
             <tr>
-                <th>Gost</th>
-                <th>Tel.</th>
-                <th>Obiski</th>
-                <th>Zadnji obisk</th>
-                <th>Oznake</th>
+                <th><?= t('guests.col_guest') ?></th>
+                <th><?= t('guests.col_phone') ?></th>
+                <th><?= t('guests.col_visits') ?></th>
+                <th><?= t('guests.col_last_visit') ?></th>
+                <th><?= t('guests.col_tags') ?></th>
                 <th></th>
             </tr>
         </thead>
         <tbody id="guests-tbody">
-            <tr><td colspan="6" class="guests-empty">Naloži restavracijo za prikaz gostov.</td></tr>
+            <tr><td colspan="6" class="guests-empty"><?= t('common.loading') ?></td></tr>
         </tbody>
     </table>
     <div class="guests-pagination" id="guests-pagination" style="display:none">
@@ -239,25 +206,32 @@ if ($urlRestId) {
 <div id="guest-modal" class="modal-overlay" style="display:none" onclick="if(event.target===this)closeGuestModal()">
 <div class="modal-box" style="max-width:700px;width:calc(100% - 32px);max-height:90vh;overflow-y:auto">
     <div class="modal-header">
-        <h3 class="modal-title" id="gm-title">Profil gosta</h3>
+        <h3 class="modal-title" id="gm-title"><?= t('guests.modal_title') ?></h3>
         <button class="modal-close" onclick="closeGuestModal()">✕</button>
     </div>
     <div class="modal-body" id="gm-body">
-        <div style="text-align:center;padding:32px;color:#9CA3AF">Nalagam…</div>
+        <div style="text-align:center;padding:32px;color:#9CA3AF"><?= t('common.loading') ?></div>
     </div>
     <div class="modal-footer">
-        <button class="btn btn-outline" onclick="closeGuestModal()">Zapri</button>
-        <button class="btn btn-primary" id="gm-save-btn" onclick="saveGuestProfile()">Shrani</button>
+        <button class="btn btn-outline" onclick="closeGuestModal()"><?= t('common.close') ?></button>
+        <button class="btn btn-primary" id="gm-save-btn" onclick="saveGuestProfile()"><?= t('common.save') ?></button>
     </div>
 </div>
 </div>
 
 <script>
 const BASE = '<?= BASE_PATH ?>';
-const PREDEFINED_TAGS = ['VIP','Alergija','Posebne zahteve','Redna stranka','No-show','Vegetarijanec/vegan'];
+const PREDEFINED_TAGS = [
+    'VIP',
+    t('guests.tag_allergy'),
+    t('guests.tag_special'),
+    t('guests.tag_regular'),
+    'No-show',
+    t('guests.tag_vegetarian'),
+];
 
 let state = {
-    restId: <?= $defaultRestId ?>,
+    restId: <?= $activeRestId ?>,
     search: '',
     offset: 0,
     limit: 50,
@@ -297,7 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ── Naloži seznam gostov ────────────────────────────────────────
 async function loadGuests() {
     if (!state.restId) {
-        document.getElementById('guests-tbody').innerHTML = '<tr><td colspan="6" class="guests-empty">Izberi restavracijo.</td></tr>';
+        document.getElementById('guests-tbody').innerHTML = `<tr><td colspan="6" class="guests-empty">${t('guests.select_restaurant')}</td></tr>`;
         document.getElementById('guests-pagination').style.display = 'none';
         return;
     }
@@ -310,25 +284,25 @@ async function loadGuests() {
     if (state.search) params.set('search', state.search);
 
     const tbody = document.getElementById('guests-tbody');
-    tbody.innerHTML = '<tr><td colspan="6" class="guests-empty" style="color:#9CA3AF">Nalagam…</td></tr>';
+    tbody.innerHTML = `<tr><td colspan="6" class="guests-empty" style="color:#9CA3AF">${t('common.loading')}</td></tr>`;
 
     try {
         const res = await fetch(`${BASE}/api/guests.php?${params}`);
         const json = await res.json();
-        if (!json.success) { tbody.innerHTML = `<tr><td colspan="6" class="guests-empty">${esc(json.error || 'Napaka')}</td></tr>`; return; }
+        if (!json.success) { tbody.innerHTML = `<tr><td colspan="6" class="guests-empty">${esc(json.error || t('common.error'))}</td></tr>`; return; }
 
         state.total = json.data.total;
         renderGuests(json.data.guests);
         renderPagination();
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="6" class="guests-empty">Napaka pri nalaganju.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="6" class="guests-empty">${t('guests.load_error')}</td></tr>`;
     }
 }
 
 function renderGuests(guests) {
     const tbody = document.getElementById('guests-tbody');
     if (!guests.length) {
-        tbody.innerHTML = '<tr><td colspan="6" class="guests-empty">Ni gostov' + (state.search ? ' za iskalni niz "' + esc(state.search) + '"' : '') + '.</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="6" class="guests-empty">${t('guests.empty')}${state.search ? ' ' + t('guests.empty_search_prefix') + ' "' + esc(state.search) + '"' : ''}.</td></tr>`;
         return;
     }
     tbody.innerHTML = guests.map(g => {
@@ -337,17 +311,19 @@ function renderGuests(guests) {
             `<span class="tag-pill${t === 'VIP' ? ' vip' : ''}">${esc(t)}</span>`
         ).join('');
         const lastVisit = g.last_visit ? fmtDate(g.last_visit) : '—';
-        const blackTag = g.is_blacklisted ? '<span class="tag-pill blacklisted">Blokiran</span>' : '';
-        return `<tr onclick="openGuestModal('${esc(g.email)}')">
+        const blackTag  = g.is_blacklisted ? `<span class="tag-pill blacklisted">${t('guests.blacklisted')}</span>` : '';
+        const subline   = g.email || (g.phone ? g.phone : '—');
+        const [idVal, idType] = g.email ? [g.email, 'email'] : [g.phone, 'phone'];
+        return `<tr onclick="openGuestModal('${esc(idVal)}','${idType}')">
             <td>
                 <div class="guest-name">${esc(name)}</div>
-                <div class="guest-email">${esc(g.email)}</div>
+                <div class="guest-email">${esc(subline)}</div>
             </td>
             <td class="stat-mini">${esc(g.phone || '—')}</td>
             <td class="stat-mini"><span class="num">${g.total_visits}</span>${g.no_shows ? ` <span style="color:#EF4444;font-size:.75rem">(${g.no_shows} ns)</span>` : ''}</td>
             <td class="stat-mini">${lastVisit}</td>
             <td>${tags}${blackTag}</td>
-            <td><button class="btn-row" onclick="event.stopPropagation();openGuestModal('${esc(g.email)}')">Odpri</button></td>
+            <td><button class="btn-row" onclick="event.stopPropagation();openGuestModal('${esc(idVal)}','${idType}')">${t('common.open')}</button></td>
         </tr>`;
     }).join('');
 }
@@ -364,7 +340,7 @@ function renderPagination() {
 
     const from = state.offset + 1;
     const to   = Math.min(state.offset + state.limit, state.total);
-    info.textContent = `${from}–${to} od ${state.total}`;
+    info.textContent = t('guests.pagination_range', { from, to, total: state.total });
 
     let html = `<button onclick="goPage(${current - 1})" ${current === 0 ? 'disabled' : ''}>‹</button>`;
     for (let i = 0; i < pages; i++) {
@@ -386,17 +362,17 @@ function goPage(p) {
 }
 
 // ── Modal profila gosta ────────────────────────────────────────
-async function openGuestModal(email) {
+async function openGuestModal(value, type = 'email') {
     if (!state.restId) return;
-    document.getElementById('gm-title').textContent = 'Nalagam…';
-    document.getElementById('gm-body').innerHTML = '<div style="text-align:center;padding:32px;color:#9CA3AF">Nalagam…</div>';
+    document.getElementById('gm-title').textContent = t('common.loading');
+    document.getElementById('gm-body').innerHTML = `<div style="text-align:center;padding:32px;color:#9CA3AF">${t('common.loading')}</div>`;
     document.getElementById('guest-modal').style.display = 'flex';
 
-    const params = new URLSearchParams({ restaurant_id: state.restId, email });
+    const params = new URLSearchParams({ restaurant_id: state.restId, [type]: value });
     const res  = await fetch(`${BASE}/api/guests.php?${params}`);
     const json = await res.json();
     if (!json.success) {
-        document.getElementById('gm-body').innerHTML = '<div style="text-align:center;padding:32px;color:#EF4444">' + esc(json.error || 'Napaka') + '</div>';
+        document.getElementById('gm-body').innerHTML = `<div style="text-align:center;padding:32px;color:#EF4444">${esc(json.error || t('common.error'))}</div>`;
         return;
     }
 
@@ -413,14 +389,14 @@ async function openGuestModal(email) {
 
     const historyRows = (g.history || []).map(h => {
         const statusClass = h.status === 'confirmed' ? 'confirmed' : h.status === 'pending' ? 'pending' : h.status === 'cancelled' ? 'cancelled' : h.arrived_at ? 'arrived' : 'confirmed';
-        const statusLbl   = { confirmed: 'Potrjena', pending: 'Čaka', cancelled: 'Odpovedana', arrived: 'Prišel' }[h.status] || h.status;
+        const statusLbl   = { confirmed: t('guests.status_confirmed'), pending: t('guests.status_pending'), cancelled: t('guests.status_cancelled'), arrived: t('guests.status_arrived') }[h.status] || h.status;
         return `<tr>
             <td>${fmtDate(h.reservation_date)}</td>
             <td>${(h.reservation_time || '').slice(0,5)}</td>
             <td>${h.guest_count}</td>
             <td><span class="status-badge ${h.status}">${statusLbl}</span></td>
         </tr>`;
-    }).join('') || '<tr><td colspan="4" style="color:#9CA3AF;text-align:center;padding:12px">Ni zgodovine</td></tr>';
+    }).join('') || `<tr><td colspan="4" style="color:#9CA3AF;text-align:center;padding:12px">${t('guests.no_history')}</td></tr>`;
 
     const tagBtns = PREDEFINED_TAGS.map(t =>
         `<button class="tag-btn${state.pendingTags.includes(t) ? (t === 'VIP' ? ' active vip' : ' active') : ''}" onclick="toggleTag('${esc(t)}')" id="tagbtn-${t.replace(/[^a-z]/gi,'_')}">${esc(t)}</button>`
@@ -428,44 +404,45 @@ async function openGuestModal(email) {
 
     document.getElementById('gm-body').innerHTML = `
         <div class="guest-stat-grid">
-            <div class="guest-stat-box"><div class="val">${g.total_visits}</div><div class="lbl">Obiskov</div></div>
-            <div class="guest-stat-box"><div class="val">${g.total_covers}</div><div class="lbl">Skupaj gostov</div></div>
-            <div class="guest-stat-box"><div class="val">${avgRating}</div><div class="lbl">Povp. ocena</div></div>
+            <div class="guest-stat-box"><div class="val">${g.total_visits}</div><div class="lbl">${t('guests.stat_visits')}</div></div>
+            <div class="guest-stat-box"><div class="val">${g.total_covers}</div><div class="lbl">${t('guests.stat_covers')}</div></div>
+            <div class="guest-stat-box"><div class="val">${avgRating}</div><div class="lbl">${t('guests.stat_rating')}</div></div>
         </div>
 
         <div class="guest-modal-body">
             <div class="guest-modal-section">
-                <h4>Kontakt</h4>
-                <div class="guest-info-row"><span class="guest-info-label">Email</span><span class="guest-info-value">${esc(g.email)}</span></div>
-                <div class="guest-info-row"><span class="guest-info-label">Ime</span>
-                    <input type="text" id="gm-first-name" value="${esc(g.first_name || '')}" placeholder="Ime" style="flex:1;padding:4px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:.875rem">
+                <h4>${t('guests.section_contact')}</h4>
+                ${g.email ? `<div class="guest-info-row"><span class="guest-info-label">${t('book.email')}</span><span class="guest-info-value">${esc(g.email)}</span></div>` : ''}
+                ${!g.email && g.phone ? `<div class="guest-info-row"><span class="guest-info-label">${t('guests.col_phone')}</span><span class="guest-info-value">${esc(g.phone)}</span></div>` : ''}
+                <div class="guest-info-row"><span class="guest-info-label">${t('book.first_name')}</span>
+                    <input type="text" id="gm-first-name" value="${esc(g.first_name || '')}" placeholder="${t('book.first_name')}" style="flex:1;padding:4px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:.875rem">
                 </div>
-                <div class="guest-info-row"><span class="guest-info-label">Priimek</span>
-                    <input type="text" id="gm-last-name" value="${esc(g.last_name || '')}" placeholder="Priimek" style="flex:1;padding:4px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:.875rem">
+                <div class="guest-info-row"><span class="guest-info-label">${t('book.last_name')}</span>
+                    <input type="text" id="gm-last-name" value="${esc(g.last_name || '')}" placeholder="${t('book.last_name')}" style="flex:1;padding:4px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:.875rem">
                 </div>
-                <div class="guest-info-row"><span class="guest-info-label">Tel.</span>
-                    <input type="text" id="gm-phone" value="${esc(g.phone || '')}" placeholder="Telefon" style="flex:1;padding:4px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:.875rem">
+                <div class="guest-info-row"><span class="guest-info-label">${t('book.phone')}</span>
+                    <input type="text" id="gm-phone" value="${esc(g.phone || '')}" placeholder="${t('book.phone')}" style="flex:1;padding:4px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:.875rem">
                 </div>
-                <div class="guest-info-row"><span class="guest-info-label">1. obisk</span><span class="guest-info-value">${firstVisit}</span></div>
-                <div class="guest-info-row"><span class="guest-info-label">Zadnji</span><span class="guest-info-value">${lastVisit}</span></div>
+                <div class="guest-info-row"><span class="guest-info-label">${t('guests.first_visit')}</span><span class="guest-info-value">${firstVisit}</span></div>
+                <div class="guest-info-row"><span class="guest-info-label">${t('guests.last_visit')}</span><span class="guest-info-value">${lastVisit}</span></div>
 
-                <h4 style="margin-top:16px">Oznake</h4>
+                <h4 style="margin-top:16px">${t('guests.col_tags')}</h4>
                 <div class="tags-edit" id="tags-edit">${tagBtns}</div>
 
                 <div class="blacklist-row">
                     <input type="checkbox" id="gm-blacklisted" ${g.is_blacklisted ? 'checked' : ''}>
-                    <label for="gm-blacklisted" style="cursor:pointer">Blokiran gost</label>
+                    <label for="gm-blacklisted" style="cursor:pointer">${t('guests.blacklisted_guest')}</label>
                 </div>
             </div>
 
             <div class="guest-modal-section">
-                <h4>Opomba (interno)</h4>
-                <textarea id="gm-notes" class="notes-textarea" placeholder="Opomba za osebje…">${esc(g.notes || '')}</textarea>
+                <h4>${t('guests.notes_label')}</h4>
+                <textarea id="gm-notes" class="notes-textarea" placeholder="${t('guests.notes_placeholder')}">${esc(g.notes || '')}</textarea>
 
-                <h4 style="margin-top:16px">Zgodovina rezervacij</h4>
+                <h4 style="margin-top:16px">${t('guests.history_title')}</h4>
                 <div style="max-height:220px;overflow-y:auto;border:1px solid #E5E7EB;border-radius:8px">
                     <table class="history-table">
-                        <thead><tr><th>Datum</th><th>Ura</th><th>Gostje</th><th>Status</th></tr></thead>
+                        <thead><tr><th>${t('book.summary_date')}</th><th>${t('book.summary_time')}</th><th>${t('book.summary_guests')}</th><th>${t('guests.col_status')}</th></tr></thead>
                         <tbody>${historyRows}</tbody>
                     </table>
                 </div>
@@ -500,7 +477,7 @@ async function saveGuestProfile() {
 
     const saveBtn = document.getElementById('gm-save-btn');
     saveBtn.disabled = true;
-    saveBtn.textContent = 'Shranjujem…';
+    saveBtn.textContent = t('guests.saving');
 
     const body = {
         notes:         document.getElementById('gm-notes').value,
@@ -518,13 +495,13 @@ async function saveGuestProfile() {
             closeGuestModal();
             loadGuests();
         } else {
-            alert('Napaka: ' + (json.error || 'Neznana napaka'));
+            alert(t('common.error') + ': ' + (json.error || t('guests.unknown_error')));
         }
     } catch (e) {
-        alert('Napaka pri shranjevanju.');
+        alert(t('guests.save_error'));
     } finally {
         saveBtn.disabled = false;
-        saveBtn.textContent = 'Shrani';
+        saveBtn.textContent = t('common.save');
     }
 }
 
@@ -538,5 +515,7 @@ function fmtDate(d) {
     return `${parseInt(day)}. ${parseInt(m)}. ${y}`;
 }
 </script>
+</main>
+</div><!-- /rz-app -->
 </body>
 </html>

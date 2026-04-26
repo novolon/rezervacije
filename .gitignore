@@ -16,3 +16,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.swp
+
+# Rezble design bundle (reference only, ni production)
+design-reference/

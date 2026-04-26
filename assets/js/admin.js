@@ -630,35 +630,76 @@
 
     function renderUsersTable() {
         const tbody = document.getElementById('users-tbody');
-        if (!tbody) return;
-        if (users.length === 0) { tbody.innerHTML = `<tr><td colspan="6" class="table-empty">Ni uporabnikov.</td></tr>`; return; }
+        if (tbody && users.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" class="table-empty">Ni uporabnikov.</td></tr>`;
+        } else if (tbody) {
+            tbody.innerHTML = users.map(u => `<tr><td>${h(u.full_name)}</td></tr>`).join('');
+        }
+        renderUsersByRestaurant();
+    }
 
-        tbody.innerHTML = users.map(u => {
-            const roleBadge = u.role === 'admin'
-                ? `<span style="background:#DBEAFE;color:#1D4ED8;border-radius:4px;padding:2px 8px;font-size:.75rem;font-weight:600">Admin</span>`
-                : `<span style="background:#F3F4F6;color:#6B7280;border-radius:4px;padding:2px 8px;font-size:.75rem;font-weight:600">Uporabnik</span>`;
-            return `
-            <tr>
-                <td><strong>${h(u.full_name)}</strong></td>
-                <td>${u.email ? h(u.email) : `<span style="color:var(--color-muted);font-size:.8rem">👤 ${h(u.username)}</span>`}</td>
-                <td>${u.restaurant_name ? h(u.restaurant_name) : '<span style="color:var(--color-muted)">—</span>'}</td>
-                <td>${roleBadge}</td>
-                <td><span class="badge ${u.is_active == 1 ? 'badge-active' : 'badge-inactive'}">${u.is_active == 1 ? 'Aktiven' : 'Neaktiven'}</span></td>
-                <td>
-                    <div class="table-actions">
-                        <button class="btn-icon" title="Uredi" onclick="AdminUsers.edit(${u.id})">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                        </button>
-                        <button class="btn-icon danger" title="Deaktiviraj" onclick="AdminUsers.deactivate(${u.id},'${h(u.full_name)}')">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                        </button>
-                        <button class="btn-icon danger" title="Trajno izbriši" onclick="AdminUsers.delete(${u.id},'${h(u.full_name)}')">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
-                        </button>
-                    </div>
-                </td>
-            </tr>`;
-        }).join('');
+    function renderUsersByRestaurant() {
+        const wrap = document.getElementById('users-by-rest');
+        if (!wrap) return;
+
+        if (users.length === 0) {
+            wrap.innerHTML = `<div style="padding:16px 20px;color:var(--color-muted);font-size:.875rem">Ni zaposlenih. Dodajte prvega.</div>`;
+            return;
+        }
+
+        // Grupiraj po restavraciji
+        const grouped = {};
+        users.forEach(u => {
+            const key  = u.restaurant_id || '__none__';
+            const name = u.restaurant_name || 'Brez restavracije';
+            if (!grouped[key]) grouped[key] = { name, users: [] };
+            grouped[key].users.push(u);
+        });
+
+        wrap.innerHTML = Object.entries(grouped).map(([restId, group]) => `
+            <div style="border-bottom:1px solid var(--color-border);last-child:border-bottom:none">
+                <div style="padding:10px 20px 8px;font-size:.72rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--color-muted);background:var(--color-bg)">
+                    ${h(group.name)}
+                </div>
+                <table class="admin-table" style="margin:0">
+                    <thead>
+                        <tr>
+                            <th>Ime</th>
+                            <th>Email / Uporabniško ime</th>
+                            <th>Vloga</th>
+                            <th>Status</th>
+                            <th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${group.users.map(u => {
+                            const roleBadge = u.role === 'admin'
+                                ? `<span style="background:color-mix(in oklab,var(--color-accent) 12%,transparent);color:var(--color-accent);border-radius:4px;padding:2px 8px;font-size:.72rem;font-weight:700">Admin</span>`
+                                : `<span style="background:var(--color-bg);color:var(--color-muted);border-radius:4px;padding:2px 8px;font-size:.72rem;font-weight:600;border:1px solid var(--color-border)">Osebje</span>`;
+                            return `
+                            <tr>
+                                <td><strong>${h(u.full_name)}</strong></td>
+                                <td style="color:var(--color-text-2)">${u.email ? h(u.email) : `<span style="color:var(--color-muted);font-size:.8rem">👤 ${h(u.username)}</span>`}</td>
+                                <td>${roleBadge}</td>
+                                <td><span class="badge ${u.is_active == 1 ? 'badge-active' : 'badge-inactive'}">${u.is_active == 1 ? 'Aktiven' : 'Neaktiven'}</span></td>
+                                <td>
+                                    <div class="table-actions">
+                                        <button class="btn-icon" title="Uredi" onclick="AdminUsers.edit(${u.id})">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                        </button>
+                                        <button class="btn-icon danger" title="Deaktiviraj" onclick="AdminUsers.deactivate(${u.id},'${h(u.full_name)}')">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                                        </button>
+                                        <button class="btn-icon danger" title="Trajno izbriši" onclick="AdminUsers.delete(${u.id},'${h(u.full_name)}')">
+                                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+                                        </button>
+                                    </div>
+                                </td>
+                            </tr>`;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>`).join('');
     }
 
     function buildRestOptions(selectedId) {

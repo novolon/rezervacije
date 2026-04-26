@@ -1,74 +1,98 @@
 <?php
 require_once 'includes/auth_check.php';
+require_once 'includes/lang.php';
 
 if (is_logged_in()) {
     redirect_to_main();
 }
 ?>
-<!DOCTYPE html>
-<html lang="sl">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Prijava – <?= APP_NAME ?></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/login.css">
-</head>
+<?php
+$pageTitle = t('auth.login_title');
+$extraCss  = ['design.css'];
+require_once 'includes/html_head.php';
+?>
 <body>
-<div class="login-wrapper">
-    <div class="login-card">
-        <div class="login-logo">
-            <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
-                <rect width="40" height="40" rx="10" fill="#F59E0B"/>
-                <path d="M10 14h20M10 20h20M10 26h12" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+
+<div class="rz-auth">
+
+    <!-- Leva stran — branding -->
+    <div class="rz-auth-left">
+        <div class="rz-auth-brand">
+            <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true">
+                <rect width="32" height="32" rx="7" fill="#C4704B"/>
+                <path d="M9 8v16l4-4h5a5 5 0 0 0 5-5v-4a3 3 0 0 0-3-3H9Z" fill="#fff"/>
             </svg>
+            Rezble
         </div>
-        <h1><?= APP_NAME ?></h1>
-        <p class="subtitle">Rezervacijski sistem</p>
-
-        <div id="error-msg" class="error-msg" style="display:none"></div>
-
-        <!-- Opozorilo za nepotrjen email -->
-        <div id="verify-msg" style="display:none;background:#FEF3C7;border:1px solid #F59E0B;border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:.85rem;color:#92400E;text-align:center">
-            <strong>Preverite vaš email!</strong><br>
-            Pred prijavo potrdite email naslov. Preverite mapo Spam.
+        <div class="rz-auth-quote">
+            <div class="rz-auth-eyebrow"><?= t('auth.tagline') ?></div>
+            <h1 class="rz-auth-h"><?= nl2br(t('auth.hero_heading')) ?></h1>
+            <p class="rz-auth-p"><?= t('auth.hero_text') ?></p>
+            <div class="rz-auth-stats">
+                <div>
+                    <span class="rz-auth-stat-val">+127%</span>
+                    <span class="rz-auth-stat-lbl"><?= t('auth.stat_reservations') ?></span>
+                </div>
+                <div>
+                    <span class="rz-auth-stat-val">11 min</span>
+                    <span class="rz-auth-stat-lbl"><?= t('auth.stat_time_saved') ?></span>
+                </div>
+                <div>
+                    <span class="rz-auth-stat-val">390+</span>
+                    <span class="rz-auth-stat-lbl"><?= t('auth.stat_restaurants') ?></span>
+                </div>
+            </div>
         </div>
-
-        <form id="login-form" autocomplete="off">
-            <div class="form-group">
-                <label for="email">Email ali uporabniško ime</label>
-                <input type="text" id="email" name="email" required autofocus autocomplete="username">
-            </div>
-            <div class="form-group">
-                <label for="password">Geslo</label>
-                <input type="password" id="password" name="password" required autocomplete="current-password">
-            </div>
-            <div class="form-group remember-row" style="justify-content:space-between;align-items:center">
-                <label class="remember-label">
-                    <input type="checkbox" id="remember-me">
-                    Zapomni si me (30 dni)
-                </label>
-                <a href="<?= BASE_PATH ?>/forgot-password.php"
-                   style="font-size:.8rem;color:#F59E0B;text-decoration:none;font-weight:500">
-                    Pozabljeno geslo?
-                </a>
-            </div>
-            <button type="submit" id="login-btn">
-                <span id="btn-text">Prijava</span>
-                <span id="btn-loading" style="display:none">...</span>
-            </button>
-        </form>
-
-        <p style="text-align:center;margin-top:20px;font-size:.875rem;color:#6B7280">
-            Nimaš računa?
-            <a href="<?= BASE_PATH ?>/register.php" style="color:#F59E0B;font-weight:600;text-decoration:none">Registracija</a>
-        </p>
+        <div class="rz-auth-foot"><?= t('auth.footer', ['year' => date('Y')]) ?></div>
     </div>
+
+    <!-- Desna stran — forma -->
+    <div class="rz-auth-right">
+        <div class="rz-auth-card">
+            <div class="rz-auth-switch">
+                <button class="is-sel" onclick="showTab('login',this)"><?= t('auth.login_btn') ?></button>
+                <a href="<?= BASE_PATH ?>/register.php" class="rz-btn" style="flex:1;justify-content:center;border:0;font-size:13px;font-weight:600;color:var(--ink-mute);border-radius:7px"><?= t('auth.register_title') ?></a>
+            </div>
+
+            <h2 class="rz-auth-title"><?= t('auth.welcome_back') ?></h2>
+            <p class="rz-auth-sub"><?= t('auth.login_subtitle') ?></p>
+
+            <div id="error-msg" style="display:none;background:color-mix(in oklab, var(--danger) 10%, transparent);color:var(--danger);border:1px solid color-mix(in oklab, var(--danger) 30%, transparent);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:16px"></div>
+            <div id="verify-msg" style="display:none;background:var(--accent-soft);border:1px solid var(--accent);border-radius:8px;padding:12px 14px;margin-bottom:16px;font-size:13px;color:var(--ink-soft)">
+                <strong><?= t('auth.verify_email_title') ?></strong><br>
+                <?= t('auth.verify_email_text') ?>
+            </div>
+
+            <form id="login-form" class="rz-auth-form" autocomplete="off">
+                <div class="rz-field">
+                    <label class="rz-field-label" for="email"><?= t('auth.email_label') ?></label>
+                    <input class="rz-input" type="text" id="email" name="email" required autofocus autocomplete="username" placeholder="<?= t('auth.email_placeholder') ?>">
+                </div>
+                <div class="rz-field">
+                    <div class="rz-auth-row">
+                        <label class="rz-field-label" for="password"><?= t('auth.password_label') ?></label>
+                        <a href="<?= BASE_PATH ?>/forgot-password.php" class="rz-link"><?= t('auth.forgot_password') ?></a>
+                    </div>
+                    <input class="rz-input" type="password" id="password" name="password" required autocomplete="current-password">
+                </div>
+                <label class="rz-check">
+                    <input type="checkbox" id="remember-me">
+                    <?= t('auth.remember_me') ?>
+                </label>
+                <button type="submit" id="login-btn" class="rz-btn rz-btn-primary" style="justify-content:center;padding:12px 18px;font-size:14px">
+                    <span id="btn-text"><?= t('auth.login_btn') ?></span>
+                    <span id="btn-loading" style="display:none">…</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
 </div>
 
 <script>
 const BASE_PATH = '<?= BASE_PATH ?>';
+const T_LOGIN_ERR   = <?= json_encode(t('auth.js_login_error')) ?>;
+const T_NETWORK_ERR = <?= json_encode(t('auth.js_network_error')) ?>;
 document.getElementById('login-form').addEventListener('submit', async function(e) {
     e.preventDefault();
     const btn        = document.getElementById('login-btn');
@@ -99,7 +123,7 @@ document.getElementById('login-form').addEventListener('submit', async function(
             if (json.error === 'email_not_verified') {
                 verifyDiv.style.display = 'block';
             } else {
-                errDiv.textContent   = json.error || 'Napaka pri prijavi.';
+                errDiv.textContent   = json.error || T_LOGIN_ERR;
                 errDiv.style.display = 'block';
             }
             btn.disabled = false;
@@ -107,7 +131,7 @@ document.getElementById('login-form').addEventListener('submit', async function(
             document.getElementById('btn-loading').style.display = 'none';
         }
     } catch(err) {
-        errDiv.textContent   = 'Napaka pri povezavi s strežnikom.';
+        errDiv.textContent   = T_NETWORK_ERR;
         errDiv.style.display = 'block';
         btn.disabled = false;
         document.getElementById('btn-text').style.display    = 'inline';
