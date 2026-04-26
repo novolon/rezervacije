@@ -171,6 +171,12 @@ CREATE TABLE affiliates (
   commission_window_months SMALLINT UNSIGNED NULL,                      -- NULL = global default (12)
   hold_days             SMALLINT UNSIGNED NULL,                         -- NULL = global (45)
   min_payout_eur        DECIMAL(8,2)  NULL,                             -- NULL = global (30)
+  -- popustna koda (grant od superadmina)
+  discount_enabled         TINYINT(1)   NOT NULL DEFAULT 0,             -- ali sme affiliate ponujati popust
+  discount_percent         DECIMAL(5,2) NULL,                           -- npr. 10, 15, 20 (% popust za stranko)
+  discount_duration        ENUM('once','repeating','forever') NULL,
+  discount_duration_months SMALLINT UNSIGNED NULL,                      -- za 'repeating'
+  discount_code_id         INT UNSIGNED NULL,                           -- FK na discount_codes (auto-generated)
   -- status
   status                ENUM('pending','active','suspended','rejected') NOT NULL DEFAULT 'pending',
   rejected_reason       VARCHAR(255)  NULL,
@@ -278,6 +284,65 @@ CREATE TABLE affiliate_payouts (
   INDEX idx_aff_status (affiliate_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- ─── Popustne kode (generic system) ────────────────────────────
+-- Uporablja se za: (a) affiliate auto-generirane kode, (b) marketinške akcije
+-- (superadmin), (c) one-off popuste ob registraciji.
+CREATE TABLE discount_codes (
+  id                  INT UNSIGNED  AUTO_INCREMENT PRIMARY KEY,
+  code                VARCHAR(40)   NOT NULL UNIQUE,                      -- npr. 'MARKO15', 'POMLAD2026'
+  description         VARCHAR(180)  NULL,
+  -- vrednost (eno od dveh)
+  percent_off         DECIMAL(5,2)  NULL,
+  amount_off_eur      DECIMAL(8,2)  NULL,
+  -- aplicabilnost
+  applies_to_plans    VARCHAR(60)   NULL,                                 -- 'basic,advanced,premium' ali NULL = vsi
+  applies_to_cycles   VARCHAR(20)   NULL,                                 -- 'monthly,yearly' ali NULL = oba
+  -- trajanje (Stripe-style)
+  duration            ENUM('once','repeating','forever') NOT NULL DEFAULT 'once',
+  duration_months     SMALLINT UNSIGNED NULL,                             -- za 'repeating'
+  -- omejitve
+  max_redemptions     INT UNSIGNED  NULL,                                 -- NULL = neomejeno
+  redemption_count    INT UNSIGNED  NOT NULL DEFAULT 0,                   -- counter
+  one_per_user        TINYINT(1)    NOT NULL DEFAULT 1,                   -- en user lahko kodo unovči samo enkrat
+  valid_from          DATETIME      NULL,
+  valid_until         DATETIME      NULL,
+  -- lastništvo / izvor
+  owner_affiliate_id  INT UNSIGNED  NULL,                                 -- NULL = sistemska (superadmin)
+  -- Stripe sync
+  stripe_coupon_id    VARCHAR(100)  NULL,                                 -- Stripe coupon objekt
+  stripe_promo_id     VARCHAR(100)  NULL,                                 -- Stripe promotion_code objekt
+  -- meta
+  is_active           TINYINT(1)    NOT NULL DEFAULT 1,
+  created_by          INT UNSIGNED  NULL,                                 -- superadmin user.id
+  created_at          DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at          DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  FOREIGN KEY (owner_affiliate_id) REFERENCES affiliates(id) ON DELETE SET NULL,
+  FOREIGN KEY (created_by)         REFERENCES users(id)      ON DELETE SET NULL,
+  INDEX idx_active     (is_active),
+  INDEX idx_owner      (owner_affiliate_id),
+  INDEX idx_valid      (valid_from, valid_until)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- FK od affiliates.discount_code_id → discount_codes (po obeh kreacijah)
+ALTER TABLE affiliates
+  ADD FOREIGN KEY (discount_code_id) REFERENCES discount_codes(id) ON DELETE SET NULL;
+
+-- Unovčenja kod (1 zapis = 1 invoice z aplicirano kodo)
+CREATE TABLE discount_code_redemptions (
+  id                  BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  code_id             INT UNSIGNED  NOT NULL,
+  user_id             INT UNSIGNED  NOT NULL,
+  subscription_id     INT UNSIGNED  NULL,
+  stripe_invoice_id   VARCHAR(100)  NULL,
+  amount_off_eur      DECIMAL(10,2) NOT NULL,                             -- dejanski znesek popusta v EUR
+  redeemed_at         DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (code_id)         REFERENCES discount_codes(id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id)         REFERENCES users(id)          ON DELETE CASCADE,
+  FOREIGN KEY (subscription_id) REFERENCES subscriptions(id)  ON DELETE SET NULL,
+  INDEX idx_code_user (code_id, user_id),
+  INDEX idx_invoice   (stripe_invoice_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- ─── Globalna konfiguracija ─────────────────────────────────────
 CREATE TABLE affiliate_settings (
   setting_key     VARCHAR(60)   NOT NULL PRIMARY KEY,
@@ -292,7 +357,10 @@ INSERT INTO affiliate_settings (setting_key, setting_value) VALUES
   ('default_hold_days',             '45'),
   ('default_min_payout_eur',        '30.00'),
   ('cookie_ttl_days',               '60'),
-  ('terms_version',                 '1.0');
+  ('terms_version',                 '1.0'),
+  ('default_discount_percent',      '10.00'),
+  ('default_discount_duration',     'once'),
+  ('discount_code_min_length',      '6');
 ```
 
 > FK na `subscriptions.id` zahteva `subscriptions.id` indeks; ta že obstaja (PK).
@@ -316,18 +384,21 @@ INSERT INTO affiliate_settings (setting_key, setting_value) VALUES
   referrals.php
   earnings.php
   payouts.php
+  discount.php             prikaz lastne popustne kode + statistika unovčenj (samo če discount_enabled)
   profile.php
   terms.php
 
 /api/
   affiliate.php            affiliate self-service API (login, profile update, link gen)
-  affiliate_admin.php      superadmin API (approve, configure, payouts)
+  affiliate_admin.php      superadmin API (approve, configure, payouts, discount grant)
   affiliate_track.php      pikselski endpoint za click logging (POST iz JS, async)
+  discount_codes.php       superadmin CRUD + javna validacija kode pri checkoutu
 
 /includes/
   affiliate_auth.php       require_affiliate(), is_affiliate_logged_in()
   affiliate_helper.php     ref_code generator, atribucija, anti-fraud, commission calc
   affiliate_session.php    ločen session namespace ($_SESSION['affiliate_*'])
+  discount_helper.php      validate_code(), apply_to_checkout(), generate_code(), Stripe sync
 
 /cron/
   affiliate_payable.php    pending → payable po hold periodi (dnevno)
@@ -362,6 +433,15 @@ INSERT INTO affiliate_settings (setting_key, setting_value) VALUES
 - `POST {action: 'update_profile', ...}` → urejanje TRR, naslova
 - `POST {action: 'change_password', old, new}`
 - `POST {action: 'generate_link', utm_source, utm_medium, utm_campaign}` → vrne deep-link
+- `GET  ?action=discount_stats` → unovčenja lastne kode (count, skupni popust, zadnja unovčenja) – samo če `discount_enabled`
+
+**Discount kode** (`/api/discount_codes.php`):
+- `GET  ?action=validate&code=XYZ&plan=basic&cycle=monthly` → javno (brez auth): preveri ali koda velja, vrne `{valid, percent_off, amount_off, description}`. Rate-limit 10 req/min/IP.
+- `GET  ?action=list` → superadmin: seznam kod z unovčenji
+- `POST {action: 'create', code?, percent_off, ...}` → superadmin: ročno ustvari sistemsko kodo (Stripe coupon + promo se kreirata avtomatsko)
+- `POST {action: 'update', id, ...}` → superadmin: posodobi metapodatke (NE percent_off – ker je Stripe coupon nespremenljiv; če je sprememba potrebna → kreira se nov coupon)
+- `POST {action: 'deactivate', id}` → deaktivira kodo (Stripe promo `active=false`)
+- `GET  ?action=redemptions&id=N` → seznam unovčenj kode
 
 **Superadmin** (`/api/affiliate_admin.php`, `require_superadmin`):
 - `GET  ?action=list&status=pending` → seznam affiliatov
@@ -375,17 +455,23 @@ INSERT INTO affiliate_settings (setting_key, setting_value) VALUES
 - `GET  ?action=payout_csv&batch=YYYY-MM` → SEPA CSV za banko
 - `POST {action: 'mark_paid', payout_ids: [...]}` → potrdi izvršena nakazila
 - `POST {action: 'manual_adjustment', affiliate_id, amount, note}` → ročni clawback / bonus
+- `POST {action: 'grant_discount', id, percent, duration, duration_months}` → omogoči popustno kodo affiliatu, **avtomatsko generira `discount_codes` zapis + Stripe coupon + promotion code**, posodobi `affiliates.discount_*`
+- `POST {action: 'revoke_discount', id}` → izklopi popustno kodo (deaktivira v Stripe-u, `discount_codes.is_active = 0`)
+- `POST {action: 'regenerate_discount_code', id, new_code?}` → spremeni viden kod string (ustvari nov Stripe promotion_code linkan na obstoječi coupon, deaktivira starega)
 
 ### 5.3 Modificirani obstoječi fajli
 
 | Fajl | Sprememba |
 |------|-----------|
-| `register.php` | Beri `rez_aff` cookie, anti-self-referral check, vstavi `affiliate_referrals` |
-| `api/stripe-webhook.php` | V `handle_invoice_paid()` kliči `affiliate_record_commission()`. V `handle_invoice_failed()` in v dodanem `charge.refunded` evente sproži clawback. |
-| `includes/mailer.php` | Dodaj: `send_affiliate_verify_email`, `send_affiliate_approved_email`, `send_affiliate_rejected_email`, `send_affiliate_payout_email` |
-| `includes/lang.php` / `lang/*` | Stringi za affiliate UI |
-| `pages/superadmin.php` | Dodaj nov tab “Affiliate” |
-| `home/` (React landing) | Sprejmi `?ref=` v URL, postavi cookie pred preusmeritvijo na register |
+| `register.php` | Beri `rez_aff` cookie + `?code=` parameter; anti-self-referral check; vstavi `affiliate_referrals`; če je `?code=` brez `rez_aff` cookie-ja in koda pripada affiliatu → fallback atribucija na `discount_codes.owner_affiliate_id`. |
+| `api/billing.php` | V `create_checkout_session` sprejmi `code` parameter; preko `discount_helper::validate_code()` preveri; v Stripe checkout dodaj `discounts: [{promotion_code: stripe_promo_id}]`. **Pomembno**: če je istočasno aktiven `plan_discounts` (sistemska akcija) – affiliate koda ima prednost (ne stack-amo). |
+| `api/stripe-webhook.php` | V `handle_invoice_paid()` kliči `affiliate_record_commission()` **in** `discount_record_redemption()` (če je bil kupon apliciran). V `handle_invoice_failed()` in v dodanem `charge.refunded` evente sproži clawback (commission `void`). |
+| `includes/mailer.php` | Dodaj: `send_affiliate_verify_email`, `send_affiliate_approved_email`, `send_affiliate_rejected_email`, `send_affiliate_payout_email`, `send_affiliate_discount_granted_email` |
+| `includes/lang.php` / `lang/*` | Stringi za affiliate UI + discount code UI (validacija errorji, polja v checkoutu) |
+| `pages/superadmin.php` | Dodaj nov tab “Affiliate” + tab “Popustne kode” (CRUD nad `discount_codes`) |
+| `pages/billing.php` | Polje za vnos popustne kode pred checkout gumbom; AJAX validacija; prikaz prelomljene cene (prečrtana → popustna) |
+| `register.php` | UI element za prikaz aplicirane popustne kode iz URL parametra (read-only, ker bo dejansko apliciran šele pri prvem plačilu) |
+| `home/` (React landing) | Sprejmi `?ref=` in `?code=` v URL, postavi cookie pred preusmeritvijo na register |
 | `widget.js` | (samo če ga affiliate uporablja v marketingu — ni nujno za MVP) |
 
 ---
@@ -554,7 +640,294 @@ function create_payout_batch(PDO $pdo, int $superadminId): array {
 
 ---
 
-## 7. Varnost in skladnost
+## 7. Sistem popustnih kod (discount codes)
+
+> Splošen mehanizem za popustne kode v aplikaciji. Affiliate program je en
+> uporabnik tega sistema (auto-generirane kode), drugi je superadmin za
+> marketinške akcije.
+
+### 7.1 Kdaj se uporabi
+1. **Affiliate-driven**: superadmin omogoči affiliatu generacijo popustne kode
+   (npr. *MARKO15* za 15 % popust). Affiliate dobi link `?ref=ABC123&code=MARKO15`,
+   ki istočasno **atribuira** in **aplicira popust**.
+2. **Marketing campaign**: superadmin ročno ustvari npr. *POMLAD2026* za 25 %
+   popust prvi mesec, omeji na 100 unovčenj.
+3. **Ad-hoc / sales**: superadmin podeli enkratno kodo individualni stranki
+   (npr. *NIKO50OFF* z `max_redemptions=1`).
+
+### 7.2 Lastnosti kode
+- **Format**: `[A-Z0-9]{6,40}` (case-insensitive lookup, vedno upper-case shranjeno).
+- **Vrednost**: `percent_off` ALI `amount_off_eur` (en NULL).
+- **Trajanje**:
+  - `once` – popust velja samo na 1. invoice (privzeto za marketing kuponov).
+  - `repeating` – velja `duration_months` mesecev (npr. 3) – uporabno za affiliatove.
+  - `forever` – dokler je naročnina aktivna (uporabljati zelo previdno).
+- **Aplicabilnost**: filter po paketu (`basic,advanced,premium`) in/ali billing
+  ciklu (`monthly,yearly`). NULL = velja za vse.
+- **Limit**: `max_redemptions` (skupna kapica), `one_per_user` (default `1`).
+- **Veljavnost**: `valid_from` / `valid_until` (NULL = brez omejitve).
+- **Stripe sync**: vsaka aktivna koda ima svoj **Stripe coupon** in **Stripe
+  promotion_code** zapis.
+
+### 7.3 Generacija affiliate kode
+```php
+function generate_discount_code(PDO $pdo, array $affiliate, float $percent): string {
+    // Sluggify ime + percent: "MARKO15", "PIZZAEXPRESS20"
+    $base = preg_replace('/[^A-Z0-9]/', '', strtoupper(transliterate($affiliate['full_name'])));
+    $base = substr($base, 0, 12) . (int)$percent;
+    $code = $base;
+    $i    = 0;
+    while (discount_code_exists($pdo, $code)) {
+        $i++;
+        $code = $base . $i;
+        if ($i > 99) {
+            // Fallback random
+            $code = 'AFF' . substr(str_shuffle('ABCDEFGHJKMNPQRSTUVWXYZ23456789'), 0, 6);
+        }
+    }
+    return $code;
+}
+```
+
+### 7.4 Tok: superadmin omogoči popust affiliatu
+1. Superadmin v affiliate detajl panelu klikne *"Omogoči popustno kodo"*.
+2. Vnese `percent` (npr. 15), `duration` (`once` / `repeating 3` / `forever`).
+3. Backend:
+   ```php
+   function grant_affiliate_discount(PDO $pdo, int $affId, float $percent,
+                                     string $duration, ?int $months): array {
+       $aff      = affiliate_get($pdo, $affId);
+       $code     = generate_discount_code($pdo, $aff, $percent);
+
+       // Stripe coupon (immutable)
+       $coupon = stripe_request('POST', '/coupons', [
+           'percent_off' => $percent,
+           'duration'    => $duration,
+           'duration_in_months' => $duration === 'repeating' ? $months : null,
+           'name'        => 'Affiliate ' . $aff['full_name'] . ' (' . $percent . '%)',
+           'metadata'    => ['affiliate_id' => $affId, 'kind' => 'affiliate'],
+       ]);
+
+       // Stripe promotion code (uporabniku viden niz)
+       $promo = stripe_request('POST', '/promotion_codes', [
+           'coupon' => $coupon['id'],
+           'code'   => $code,
+           'metadata' => ['affiliate_id' => $affId],
+       ]);
+
+       // Lokalna shramba
+       $stmt = $pdo->prepare("
+           INSERT INTO discount_codes
+           (code, percent_off, duration, duration_months, owner_affiliate_id,
+            stripe_coupon_id, stripe_promo_id, is_active, created_by)
+           VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)
+       ");
+       $stmt->execute([$code, $percent, $duration, $months, $affId,
+                       $coupon['id'], $promo['id'], $_SESSION['user_id']]);
+       $codeId = $pdo->lastInsertId();
+
+       // Posodobi affiliata
+       $pdo->prepare("
+           UPDATE affiliates
+           SET discount_enabled = 1, discount_percent = ?, discount_duration = ?,
+               discount_duration_months = ?, discount_code_id = ?
+           WHERE id = ?
+       ")->execute([$percent, $duration, $months, $codeId, $affId]);
+
+       send_affiliate_discount_granted_email($aff, $code, $percent);
+       return ['code' => $code, 'id' => $codeId];
+   }
+   ```
+
+### 7.5 Validacija ob checkoutu
+```php
+function validate_discount_code(PDO $pdo, string $code, string $planSlug,
+                                string $cycle, ?int $userId = null): array {
+    $stmt = $pdo->prepare("SELECT * FROM discount_codes WHERE code = ? LIMIT 1");
+    $stmt->execute([strtoupper($code)]);
+    $dc = $stmt->fetch();
+    if (!$dc) return ['valid' => false, 'error' => 'Koda ne obstaja.'];
+    if (!$dc['is_active']) return ['valid' => false, 'error' => 'Koda je neaktivna.'];
+    if ($dc['valid_from']  && strtotime($dc['valid_from'])  > time())
+        return ['valid' => false, 'error' => 'Koda še ne velja.'];
+    if ($dc['valid_until'] && strtotime($dc['valid_until']) < time())
+        return ['valid' => false, 'error' => 'Koda je potekla.'];
+    if ($dc['max_redemptions'] && $dc['redemption_count'] >= $dc['max_redemptions'])
+        return ['valid' => false, 'error' => 'Koda je izčrpana.'];
+
+    if ($dc['applies_to_plans']) {
+        $plans = explode(',', $dc['applies_to_plans']);
+        if (!in_array($planSlug, $plans))
+            return ['valid' => false, 'error' => 'Koda ne velja za izbrani paket.'];
+    }
+    if ($dc['applies_to_cycles']) {
+        $cycles = explode(',', $dc['applies_to_cycles']);
+        if (!in_array($cycle, $cycles))
+            return ['valid' => false, 'error' => 'Koda ne velja za izbrani billing cikel.'];
+    }
+
+    if ($userId && $dc['one_per_user']) {
+        $u = $pdo->prepare("SELECT 1 FROM discount_code_redemptions WHERE code_id = ? AND user_id = ?");
+        $u->execute([$dc['id'], $userId]);
+        if ($u->fetchColumn())
+            return ['valid' => false, 'error' => 'To kodo ste že enkrat unovčili.'];
+    }
+
+    return [
+        'valid' => true,
+        'code_id' => $dc['id'],
+        'percent_off' => $dc['percent_off'],
+        'amount_off_eur' => $dc['amount_off_eur'],
+        'duration' => $dc['duration'],
+        'stripe_promo_id' => $dc['stripe_promo_id'],
+    ];
+}
+```
+
+### 7.6 Aplikacija pri Stripe Checkout
+V `api/billing.php` v `create_checkout_session`:
+```php
+if (!empty($body['code'])) {
+    $check = validate_discount_code($pdo, $body['code'], $planSlug, $billingCycle, $userId);
+    if ($check['valid']) {
+        $checkoutParams['discounts'] = [
+            ['promotion_code' => $check['stripe_promo_id']]
+        ];
+        // Nastavi metadata, da znamo kasneje povezati invoice → koda
+        $checkoutParams['metadata']['discount_code_id'] = $check['code_id'];
+        // Ne kreiramo več one-off coupon-a iz `plan_discounts` (override)
+    } else {
+        json_response(false, null, $check['error'], 400);
+    }
+}
+```
+
+> **Stacking pravilo**: Affiliate / vnesena koda **prevzame prednost** nad
+> sistemskim `plan_discounts` (Spring akcija). Stripe ne podpira stack-anja
+> kuponov v eni naročnini, zato moramo izbrati eno.
+
+### 7.7 Beleženje unovčenja
+V `api/stripe-webhook.php` v `handle_invoice_paid()` po sub-update:
+```php
+// Stripe v `discount` polju invoice-a vrne aplicirani coupon
+$couponId = $invoice['discount']['coupon']['id'] ?? null;
+$promoId  = $invoice['discount']['promotion_code'] ?? null;
+if ($couponId || $promoId) {
+    $stmt = $pdo->prepare("
+        SELECT id, redemption_count, max_redemptions
+        FROM discount_codes
+        WHERE stripe_coupon_id = ? OR stripe_promo_id = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$couponId, $promoId]);
+    $dc = $stmt->fetch();
+    if ($dc) {
+        $amountOff = (($invoice['total_discount_amounts'][0]['amount'] ?? 0) / 100);
+        $pdo->prepare("
+            INSERT INTO discount_code_redemptions
+            (code_id, user_id, subscription_id, stripe_invoice_id, amount_off_eur)
+            VALUES (?, ?, ?, ?, ?)
+        ")->execute([$dc['id'], $userId, $subscriptionId, $invoice['id'], $amountOff]);
+
+        $pdo->prepare("UPDATE discount_codes SET redemption_count = redemption_count + 1 WHERE id = ?")
+            ->execute([$dc['id']]);
+    }
+}
+```
+
+### 7.8 Code-based atribucija (fallback)
+Če uporabnik nima `rez_aff` cookie-ja, ampak v URL-u prinese `?code=XYZ`,
+ki pripada affiliatu, naj se atribucija ne izgubi:
+
+```php
+// Razširitev attach_affiliate_on_signup
+function attach_affiliate_on_signup(PDO $pdo, int $newUserId, string $newEmail,
+                                    ?string $taxNumber, ?string $codeFromUrl = null): void {
+    $aff = null;
+
+    // 1) Primarno: cookie
+    if (!empty($_COOKIE['rez_aff'])) {
+        $payload = json_decode($_COOKIE['rez_aff'], true) ?: [];
+        if (!empty($payload['code'])) {
+            $stmt = $pdo->prepare("SELECT * FROM affiliates WHERE ref_code = ? AND status = 'active'");
+            $stmt->execute([$payload['code']]);
+            $aff = $stmt->fetch() ?: null;
+        }
+    }
+
+    // 2) Fallback: ?code=XYZ → discount_codes.owner_affiliate_id
+    if (!$aff && $codeFromUrl) {
+        $stmt = $pdo->prepare("
+            SELECT a.* FROM affiliates a
+            JOIN discount_codes dc ON dc.owner_affiliate_id = a.id
+            WHERE dc.code = ? AND dc.is_active = 1 AND a.status = 'active'
+            LIMIT 1
+        ");
+        $stmt->execute([strtoupper($codeFromUrl)]);
+        $aff = $stmt->fetch() ?: null;
+    }
+
+    if (!$aff) return;
+    // ... ostalo enako (anti-self-referral + INSERT IGNORE INTO affiliate_referrals)
+}
+```
+
+### 7.9 Provizija + popust = kako se sešteta
+- Stripe `invoice.amount_paid` je **že po popustu**.
+- `affiliate_record_commission()` računa % **na `amount_paid`** (ne na original).
+- **Posledica**: če affiliate ponuja 15 % popust in ima 20 % komisijo:
+  - originalna cena Basic: 4,99 €
+  - popust 15 % → stranka plača: 4,24 €
+  - komisija affiliata 20 % od 4,24 € = **0,85 €**
+  - (brez popusta bi bilo: 20 % × 4,99 € = 1,00 €)
+- **Ekonomski učinek**: affiliate sam absorbira del popusta preko nižje komisije.
+  To je **fer** – stimulira ga, da popust ni preagresivni.
+- Alternativni model (NE uporabljamo): komisija na *bruto* ceno – nepravičen do
+  platforme, ker bi popust de-facto plačali mi.
+
+### 7.10 Lifecycle: spremembe in revoke
+- **Sprememba %**: Stripe coupon je **immutable**. Postopek:
+  1. Kreira se NOV coupon (`POST /coupons`),
+  2. Star promotion_code se deaktivira (`POST /promotion_codes/PROMO_ID {active:false}`),
+  3. Kreira se nov promotion_code z istim `code` stringom + nov coupon,
+  4. Star `discount_codes` zapis: `is_active=0`, nov zapis: `is_active=1`,
+     `affiliates.discount_code_id` se preusmeri.
+- **Revoke**: `discount_codes.is_active=0`, Stripe promo `active=false`. Obstoječe
+  naročnine, ki imajo aktivni `repeating`/`forever` coupon, **še vedno**
+  prejemajo popust (Stripe vodi ločeno) – revoke ustavi le nova unovčenja.
+- **Brisanje affiliate računa**: `discount_codes.owner_affiliate_id = NULL`
+  (ON DELETE SET NULL), `is_active=0`. Ne brišemo zaradi avditnih razlogov.
+
+### 7.11 UI panel za superadmina
+- Tab **"Popustne kode"** v `pages/superadmin.php`:
+  - Filter: vse / aktivne / sistemske / affiliatske / potekle.
+  - Stolpci: koda, % / EUR popust, plan, cikel, unovčenj, max, lastnik (`Sistem`
+    ali `Affiliate: ime`), veljavnost, akcije (deaktiviraj, podrobnosti).
+  - Gumb **+ Nova koda** odpre modal s polji za ročno kreacijo.
+- Tab **"Affiliati"** dobi nov stolpec **"Popust"** (✓/✗) in v detajlu gumb
+  *"Omogoči popustno kodo"* / *"Onemogoči"*.
+
+### 7.12 UI za affiliata
+- Stran `/affiliate/discount.php` (vidna samo če `discount_enabled = 1`):
+  - Velika kartica s kodo (kopiraj).
+  - Combo link: `https://app.rezervacije.si/?ref=<refcode>&code=<discountcode>`
+    (oba parametra hkrati – atribucija + popust).
+  - Statistika: koliko unovčenj, skupna vrednost popusta dana strankam,
+    skupna vrednost komisij iz teh unovčenj.
+
+### 7.13 UI za stranko (registracija / billing)
+- V `register.php`: če URL vsebuje `?code=`, prikažemo **info banner**:
+  *"Popustna koda XYZ bo aplicirana ob prvem plačilu (popust X %)."*
+  Koda se shrani v session/skrito polje – **ne aplicira se v trial fazi**.
+- V `pages/billing.php` ob izbiri paketa:
+  - Polje *"Imate popustno kodo?"* (collapse).
+  - AJAX validacija (`/api/discount_codes.php?action=validate`).
+  - Ob veljavni kodi: prikaz prečrtana → popustna cena, gumb checkout-a.
+  - Stripe Checkout sam aplicira preko `discounts` parametra.
+
+---
+
+## 8. Varnost in skladnost
 
 - **Ločen session namespace**: `$_SESSION['affiliate_id']`, ne miksati z admin sejo.
   Cookie path `/affiliate/` (po možnosti tudi separate `session_name()`).
@@ -569,22 +942,32 @@ function create_payout_batch(PDO $pdo, int $superadminId): array {
   minuti → flag affiliata (status `suspended` zahteva ročno verifikacijo).
 - **Audit log**: vsako approve / reject / suspend / payout akcijo logiramo v
   obstoječi audit mehanizem (`audit_log` tabela, če obstaja, drugače dodamo).
+- **Discount code brute-force**: `/api/discount_codes.php?action=validate` mora
+  rate-limitati 10 req/min/IP. Ne izpostavljati informacije o obstoju kode pri
+  napaki (vrni generični `'Koda ne obstaja ali ne velja.'`).
+- **Vrednost kuponov**: superadmin omeji najvišji `percent_off` v
+  `affiliate_settings` (npr. `max_discount_percent = 30`). API zavrne višje.
+- **Stripe webhook idempotenca**: redemptions se beležijo ob `invoice.payment_succeeded`,
+  ne ob `checkout.completed` – zagotovi, da se popust dejansko unovči (plačilo
+  uspelo). Preverjamo unique `stripe_invoice_id` v `discount_code_redemptions`.
 
 ---
 
-## 8. Vplivi na obstoječi code (kontrolne točke)
+## 9. Vplivi na obstoječi code (kontrolne točke)
 
 | Točka | Sprememba | Tveganje |
 |-------|-----------|----------|
-| `register.php` | Klic `attach_affiliate_on_signup()` po `lastInsertId()`. Dodatni `?ref=` parameter v URL preusmeritvi (preskočimo, samo cookie). | Nizko – tek v try/catch, neuspeh ne sme blokirati registracije. |
-| `home/` (React) | V router/wrapper komponenti: ob mountu preberi `?ref=`, validacija (regex `[A-Z2-9]{8}`), POST na `/api/affiliate_track.php` ki nastavi cookie (server-side, da je SameSite enak). | Nizko – samo če `?ref` prisoten. |
-| `api/stripe-webhook.php` | Hook v `handle_invoice_paid()` ter dodan `charge.refunded`. | Srednje – ne sme blokirati glavnega toka. Try/catch okoli affiliate koda + log. |
-| `pages/superadmin.php` | Nov tab + JS modul. | Nizko. |
+| `register.php` | Klic `attach_affiliate_on_signup()` po `lastInsertId()`. Dodatni `?ref=` in `?code=` parameter v URL (`?code=` shranimo v sejo, dejansko se aplicira pri checkoutu). | Nizko – tek v try/catch, neuspeh ne sme blokirati registracije. |
+| `home/` (React) | V router/wrapper komponenti: ob mountu preberi `?ref=` + `?code=`, validacija, POST na `/api/affiliate_track.php` ki nastavi cookie. | Nizko – samo če `?ref`/`?code` prisoten. |
+| `api/billing.php` | Sprejem `code` parametra v `create_checkout_session`. Validacija + `discounts` v Stripe params. **Konflikt z obstoječim `get_active_discount` mehanizmom**: če oba aktivna → koda zmaga. | Srednje – paziti, da pri uvedbi discount code kanala ne pokvarimo Spring akcije logike. |
+| `api/stripe-webhook.php` | Hook v `handle_invoice_paid()` (commission + redemption record), dodan `charge.refunded`. | Srednje – ne sme blokirati glavnega toka. Try/catch okoli affiliate/discount koda + log. |
+| `pages/billing.php` | Nov UI: polje za kodo + AJAX validacija + prelomljena cena. | Nizko. |
+| `pages/superadmin.php` | Nov tab "Affiliati" + nov tab "Popustne kode" + JS moduli. | Nizko. |
 | `includes/lang.php` | Brez sprememb logike – samo nove jsonline. | Brez. |
 
 ---
 
-## 9. Roadmap (faze)
+## 10. Roadmap (faze)
 
 ### Faza 1 – MVP (2 sprinta)
 - [ ] `migrate_affiliate.sql`
@@ -598,7 +981,7 @@ function create_payout_batch(PDO $pdo, int $superadminId): array {
 - [ ] Superadmin: approve/reject/suspend, list affiliatov
 - [ ] Email predloge (verify, approved, rejected)
 
-### Faza 2 – Payouts (1 sprint)
+### Faza 2 – Payouts + Discount kode (1–2 sprinta)
 - [ ] Superadmin payout batch UI
 - [ ] SEPA CSV export
 - [ ] PDF statement generator (FPDF / TCPDF brez Composer? **brez Composer pravila** → uporabimo
@@ -606,6 +989,17 @@ function create_payout_batch(PDO $pdo, int $superadminId): array {
       Composer ni dovoljen)
 - [ ] `mark_paid` + email z PDF priponko
 - [ ] Clawback handler za `charge.refunded`
+- [ ] DB: `discount_codes` + `discount_code_redemptions` + ALTER `affiliates`
+- [ ] `includes/discount_helper.php` (validate/apply/generate)
+- [ ] `api/discount_codes.php` (CRUD + javna validacija)
+- [ ] Superadmin tab "Popustne kode" (CRUD)
+- [ ] Affiliate detail: `grant_discount` / `revoke_discount` akcije
+- [ ] `/affiliate/discount.php` (prikaz kode + statistika)
+- [ ] `pages/billing.php`: polje za vnos + AJAX validacija + prikaz cene
+- [ ] `register.php`: prevzem `?code=` v sejo + info banner
+- [ ] `api/billing.php`: aplikacija `discounts` v Stripe checkout
+- [ ] `api/stripe-webhook.php`: redemption tracking
+- [ ] Email: `send_affiliate_discount_granted_email`
 
 ### Faza 3 – Optimizacije (po potrebi)
 - [ ] Multi-tier komisija (več kot 1 nivo affiliatov)
@@ -616,7 +1010,7 @@ function create_payout_batch(PDO $pdo, int $superadminId): array {
 
 ---
 
-## 10. Odprta vprašanja za usklajevanje
+## 11. Odprta vprašanja za usklajevanje
 
 1. **Pravna osnova izplačil:** ali bomo uporabljali pavšalni odstotek tudi za
    tujino (drugačno DDV zakonodajo)? Predlog: privzeto **samo SI** v MVP-ju,
@@ -631,10 +1025,22 @@ function create_payout_batch(PDO $pdo, int $superadminId): array {
 4. **Minimalni payout prag:** 30 € v MVP-ju zveni razumno. Drugače?
 5. **VIP affiliati / tier:** ali že v MVP-ju, ali šele po 6 mesecih, ko vidimo,
    kdo dejansko dela?
+6. **Maksimalni popust:** kje postavimo ceiling za affiliate kode? Predlog:
+   `max_discount_percent = 30` (sicer ekonomsko nezdravo). Sistemske kode (npr.
+   *POMLAD*) lahko gredo višje, ampak samo z eksplicitnim superadmin opravilom.
+7. **Stripe coupon ali Stripe promotion_code za tracking?** Stripe ima 2 entiteti:
+   `coupon` (interna popustna definicija) in `promotion_code` (uporabniku viden
+   string). Mi uporabljamo OBE: coupon = pravilo (% / duration), promotion_code
+   = string ki ga vnese stranka. To je standardni Stripe pattern – brez alternative.
+8. **Existing `plan_discounts` mehanizem:** trenutno so to časovno omejene
+   sistemske akcije (npr. *Pomladna akcija* – 30% off za 1. plačilo). Ali jih
+   migriramo v nov `discount_codes` sistem? Predlog: **ne** – `plan_discounts`
+   ostane za "vsi vidijo, ni potrebne kode" akcije (banner na pricing strani),
+   `discount_codes` pa za eksplicitno vnesene kode. Sobivata.
 
 ---
 
-## 11. Povezave z obstoječimi dokumenti
+## 12. Povezave z obstoječimi dokumenti
 
 - `PRODUCT_BRIEF.md` – overall produkt
 - `BILLING_TODO.md` – Stripe integracija (povzemamo isti pattern)
@@ -642,11 +1048,21 @@ function create_payout_batch(PDO $pdo, int $superadminId): array {
 
 ---
 
-## 12. TL;DR
+## 13. TL;DR
 
 > Dodamo ločeno entiteto `affiliate` (ni user / admin / staff), z lastnim auth
 > tokovodom, cookie-based atribucijo (60 dni, last-click), Stripe-driven
 > izračunom provizij (20 % × 12 mesecev z 45-dnevnim hold-om), in batch izplačili
 > preko SEPA CSV-ja, ki ga superadmin sproži ročno enkrat mesečno.
-> 6 novih tabel, 1 nova migracija, ~25 novih PHP fajlov, 2 novi CSS/JS file,
-> 2 hook-a v obstoječi `register.php` in `stripe-webhook.php`.
+>
+> Poleg tega vpeljemo **generic discount code sistem** (`discount_codes` +
+> `discount_code_redemptions` + Stripe coupon/promotion_code sync), ki ga
+> uporabljata: (a) affiliate program – superadmin podeli pravico, sistem
+> avtomatsko generira `MARKO15` style kodo, in (b) sistemske marketinške akcije.
+> Stranke kodo vnesejo na `/pages/billing.php` ali jo dobijo skozi affiliate
+> link (`?ref=ABC&code=MARKO15`). Provizija se računa na **netto** zneske, kar
+> je fer (affiliate sam absorbira del popusta).
+>
+> 8 novih tabel, 1 nova migracija, ~30 novih PHP fajlov, 2 nova CSS/JS fajla,
+> 4 hooki v obstoječih (`register.php`, `api/billing.php`, `api/stripe-webhook.php`,
+> `pages/billing.php`).
