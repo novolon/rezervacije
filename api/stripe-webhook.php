@@ -6,6 +6,9 @@
  */
 require_once '../config.php';
 require_once '../includes/db.php';
+require_once '../includes/stripe_helper.php';
+require_once '../includes/affiliate_helper.php';
+require_once '../includes/discount_helper.php';
 
 // Raw payload pred session startom
 $payload   = file_get_contents('php://input');
@@ -58,6 +61,11 @@ switch ($event['type']) {
         handle_subscription_deleted($pdo, $event['data']['object']);
         break;
 
+    // Povračilo (clawback provizije)
+    case 'charge.refunded':
+        handle_charge_refunded($pdo, $event['data']['object']);
+        break;
+
     default:
         // Ignoriramo neznane evente
         break;
@@ -81,7 +89,7 @@ function handle_checkout_completed(PDO $pdo, array $obj): void {
     // Pridobi ends_at iz Stripe subscription
     $endsAt = null;
     if ($subscriptionId) {
-        $sub = stripe_get("/subscriptions/{$subscriptionId}");
+        $sub = stripe_request('GET', "/subscriptions/{$subscriptionId}");
         if (isset($sub['current_period_end'])) {
             $endsAt = date('Y-m-d H:i:s', (int)$sub['current_period_end']);
         }
@@ -107,7 +115,7 @@ function handle_invoice_paid(PDO $pdo, array $invoice): void {
     if (!$subscriptionId) return;
 
     // Pridobi novo obdobje
-    $sub = stripe_get("/subscriptions/{$subscriptionId}");
+    $sub = stripe_request('GET', "/subscriptions/{$subscriptionId}");
     if (!isset($sub['current_period_end'], $sub['metadata']['user_id'])) return;
 
     $endsAt = date('Y-m-d H:i:s', (int)$sub['current_period_end']);
@@ -120,6 +128,17 @@ function handle_invoice_paid(PDO $pdo, array $invoice): void {
 
     $pdo->prepare("UPDATE users SET subscription_status = 'active' WHERE id = ?")
         ->execute([$userId]);
+
+    // Pridobi lokalen subscription ID
+    $localSub = $pdo->prepare("SELECT id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1");
+    $localSub->execute([$subscriptionId]);
+    $localSubId = (int)($localSub->fetchColumn() ?: 0);
+
+    // Affiliate provizija
+    affiliate_record_commission($pdo, $userId, $invoice, $localSubId);
+
+    // Discount redemption
+    discount_record_redemption($pdo, $invoice, $userId, $localSubId);
 }
 
 function handle_invoice_failed(PDO $pdo, array $invoice): void {
@@ -193,18 +212,19 @@ function handle_invoice_upcoming(PDO $pdo, array $invoice): void {
     send_upcoming_invoice_email($user['email'], $user['full_name'], $planName, $amountDue, $billingAt);
 }
 
-// ─── Stripe helpers ───────────────────────────────────────────
+function handle_charge_refunded(PDO $pdo, array $charge): void {
+    // Resolve invoice ID from charge (charge → payment_intent → invoice)
+    $invoiceId = $charge['invoice'] ?? null;
+    if (!$invoiceId && isset($charge['payment_intent'])) {
+        $pi = stripe_request('GET', "/payment_intents/{$charge['payment_intent']}");
+        $invoiceId = $pi['invoice'] ?? null;
+    }
+    if (!$invoiceId) return;
 
-function stripe_get(string $endpoint): array {
-    $ch = curl_init('https://api.stripe.com/v1' . $endpoint);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_USERPWD        => STRIPE_SECRET_KEY . ':',
-    ]);
-    $response = curl_exec($ch);
-    curl_close($ch);
-    return json_decode($response, true) ?? [];
+    affiliate_handle_refund($pdo, (string)$invoiceId);
 }
+
+// ─── Stripe signature verification ───────────────────────────
 
 function stripe_verify_signature(string $payload, string $sigHeader, string $secret): ?array {
     // Format: t=timestamp,v1=signature,...

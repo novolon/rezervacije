@@ -1,0 +1,122 @@
+/* Affiliate portal – skupna CSS */
+:root {
+    --aff-primary:   #F59E0B;
+    --aff-primary-d: #D97706;
+    --aff-ink:       #111827;
+    --aff-ink-mute:  #6B7280;
+    --aff-bg:        #F9FAFB;
+    --aff-card:      #fff;
+    --aff-border:    #E5E7EB;
+    --aff-radius:    10px;
+    --aff-green:     #059669;
+    --aff-red:       #DC2626;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: var(--aff-bg); font-family: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; color: var(--aff-ink); font-size: 15px; line-height: 1.5; }
+a { color: var(--aff-primary); }
+
+/* ── Auth layout ────────────────────────────────────────────── */
+.aff-auth { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+.aff-auth-card { background: var(--aff-card); border-radius: 14px; box-shadow: 0 4px 24px rgba(0,0,0,.07); padding: 40px 40px; width: 100%; max-width: 440px; }
+.aff-auth-logo { display: flex; align-items: center; gap: 10px; font-size: 1.1rem; font-weight: 700; color: var(--aff-ink); margin-bottom: 28px; }
+.aff-auth-logo-icon { background: var(--aff-primary); color: #fff; width: 34px; height: 34px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1rem; flex-shrink: 0; }
+.aff-auth-title { font-size: 1.35rem; font-weight: 700; margin: 0 0 4px; }
+.aff-auth-sub { color: var(--aff-ink-mute); margin: 0 0 24px; font-size: .9rem; }
+.aff-form-group { margin-bottom: 14px; }
+.aff-form-group label { display: block; font-size: .82rem; font-weight: 600; color: #374151; margin-bottom: 5px; }
+.aff-form-group input, .aff-form-group select { width: 100%; padding: 9px 12px; border: 1.5px solid var(--aff-border); border-radius: 8px; font-size: .9rem; color: var(--aff-ink); background: #fff; outline: none; transition: border-color .15s; }
+.aff-form-group input:focus, .aff-form-group select:focus { border-color: var(--aff-primary); }
+.aff-btn { display: block; width: 100%; padding: 11px; background: var(--aff-primary); color: #fff; border: none; border-radius: 9px; font-size: .95rem; font-weight: 700; cursor: pointer; text-align: center; text-decoration: none; transition: background .15s; }
+.aff-btn:hover { background: var(--aff-primary-d); }
+.aff-btn-sm { display: inline-block; padding: 7px 16px; font-size: .85rem; border-radius: 7px; }
+.aff-btn-outline { background: transparent; border: 1.5px solid var(--aff-border); color: var(--aff-ink); }
+.aff-btn-outline:hover { border-color: var(--aff-primary); color: var(--aff-primary); }
+.aff-error { background: #FEE2E2; color: var(--aff-red); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: .87rem; }
+.aff-success { background: #ECFDF5; color: var(--aff-green); border-radius: 8px; padding: 10px 14px; margin-bottom: 16px; font-size: .87rem; }
+.aff-auth-foot { text-align: center; margin-top: 20px; font-size: .83rem; color: var(--aff-ink-mute); }
+
+/* ── App layout ─────────────────────────────────────────────── */
+.aff-layout { display: grid; grid-template-columns: 220px 1fr; min-height: 100vh; }
+.aff-sidebar { background: #1F2937; padding: 24px 0; display: flex; flex-direction: column; }
+.aff-sidebar-logo { display: flex; align-items: center; gap: 10px; padding: 0 20px 24px; color: #fff; font-weight: 700; font-size: 1rem; border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 12px; }
+.aff-sidebar-logo-icon { background: var(--aff-primary); color: #fff; width: 30px; height: 30px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: .9rem; flex-shrink: 0; }
+.aff-nav-link { display: flex; align-items: center; gap: 10px; padding: 9px 20px; color: rgba(255,255,255,.65); font-size: .88rem; text-decoration: none; transition: all .15s; border-left: 3px solid transparent; }
+.aff-nav-link:hover { background: rgba(255,255,255,.06); color: #fff; }
+.aff-nav-link.is-active { background: rgba(245,158,11,.12); color: var(--aff-primary); border-left-color: var(--aff-primary); }
+.aff-nav-section { padding: 14px 20px 6px; font-size: .7rem; text-transform: uppercase; letter-spacing: .06em; color: rgba(255,255,255,.3); font-weight: 600; }
+.aff-sidebar-foot { margin-top: auto; padding: 16px 20px; font-size: .8rem; color: rgba(255,255,255,.35); }
+
+.aff-main { padding: 32px 36px; overflow-y: auto; }
+.aff-topbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
+.aff-page-title { font-size: 1.35rem; font-weight: 700; }
+
+/* ── Kartice / stat ─────────────────────────────────────────── */
+.aff-stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 28px; }
+.aff-stat-card { background: var(--aff-card); border-radius: var(--aff-radius); padding: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.aff-stat-label { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--aff-ink-mute); font-weight: 600; margin-bottom: 6px; }
+.aff-stat-val { font-size: 1.6rem; font-weight: 800; color: var(--aff-ink); }
+.aff-stat-val.green { color: var(--aff-green); }
+
+.aff-card { background: var(--aff-card); border-radius: var(--aff-radius); padding: 24px; box-shadow: 0 1px 4px rgba(0,0,0,.06); margin-bottom: 20px; }
+.aff-card-title { font-size: 1rem; font-weight: 700; margin: 0 0 16px; }
+
+/* ── Code box ───────────────────────────────────────────────── */
+.aff-code-box { background: #FEF3C7; border: 1.5px solid #FDE68A; border-radius: 10px; padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.aff-code-text { font-size: 1.25rem; font-weight: 800; letter-spacing: .12em; color: #92400E; font-family: 'Courier New', monospace; }
+.aff-copy-btn { background: #fff; border: 1.5px solid #FDE68A; color: #92400E; font-size: .8rem; font-weight: 700; padding: 6px 14px; border-radius: 7px; cursor: pointer; transition: background .15s; white-space: nowrap; }
+.aff-copy-btn:hover { background: #FFFBEB; }
+
+/* ── Tabela ─────────────────────────────────────────────────── */
+.aff-table-wrap { overflow-x: auto; }
+.aff-table { width: 100%; border-collapse: collapse; font-size: .87rem; }
+.aff-table th { text-align: left; padding: 8px 12px; font-size: .73rem; text-transform: uppercase; letter-spacing: .05em; color: var(--aff-ink-mute); border-bottom: 2px solid var(--aff-border); font-weight: 600; }
+.aff-table td { padding: 10px 12px; border-bottom: 1px solid #F3F4F6; vertical-align: middle; }
+.aff-table tr:last-child td { border-bottom: none; }
+
+/* ── Badge ──────────────────────────────────────────────────── */
+.aff-badge { display: inline-block; padding: 2px 8px; border-radius: 20px; font-size: .73rem; font-weight: 700; }
+.aff-badge-green  { background: #ECFDF5; color: #065F46; }
+.aff-badge-amber  { background: #FEF3C7; color: #92400E; }
+.aff-badge-gray   { background: #F3F4F6; color: #374151; }
+.aff-badge-red    { background: #FEE2E2; color: #991B1B; }
+/* BEM modifier variants */
+.aff-badge--success { background: #ECFDF5; color: #065F46; }
+.aff-badge--warning { background: #FEF3C7; color: #92400E; }
+.aff-badge--info    { background: #EFF6FF; color: #1D4ED8; }
+.aff-badge--danger  { background: #FEE2E2; color: #991B1B; }
+.aff-badge--muted   { background: #F3F4F6; color: #374151; }
+
+/* ── Pending banner ─────────────────────────────────────────── */
+.aff-pending-banner { background: #FEF3C7; border: 1.5px solid #FDE68A; border-radius: 10px; padding: 20px 24px; text-align: center; }
+.aff-pending-banner h2 { margin: 0 0 8px; color: #92400E; }
+.aff-pending-banner p  { margin: 0; color: #B45309; font-size: .9rem; }
+
+/* ── Select ─────────────────────────────────────────────────── */
+.aff-select { padding: 7px 12px; border: 1.5px solid var(--aff-border); border-radius: 8px; font-size: .85rem; color: var(--aff-ink); background: #fff; outline: none; cursor: pointer; }
+.aff-select:focus { border-color: var(--aff-primary); }
+
+/* ── Button (small inline) ──────────────────────────────────── */
+.aff-btn-sm { display: inline-block; padding: 7px 14px; font-size: .83rem; font-weight: 600; border-radius: 7px; border: 1.5px solid var(--aff-border); background: #fff; color: var(--aff-ink); cursor: pointer; transition: border-color .15s, color .15s; text-decoration: none; }
+.aff-btn-sm:hover { border-color: var(--aff-primary); color: var(--aff-primary); }
+.aff-btn-sm.active { background: var(--aff-primary); border-color: var(--aff-primary); color: #fff; }
+
+/* ── Marketing material blocks ──────────────────────────────── */
+.aff-material-block { background: var(--aff-bg); border: 1.5px solid var(--aff-border); border-radius: 8px; padding: 14px; }
+.aff-material-label { font-size: .75rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--aff-ink-mute); margin-bottom: 8px; }
+.aff-material-text { font-size: .85rem; color: var(--aff-ink); white-space: pre-wrap; word-break: break-word; margin-bottom: 10px; line-height: 1.55; }
+
+/* ── Modal ──────────────────────────────────────────────────── */
+.aff-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; z-index: 1000; padding: 16px; }
+.aff-modal-box { background: #fff; border-radius: 12px; padding: 28px; width: 100%; box-shadow: 0 8px 32px rgba(0,0,0,.18); }
+
+/* ── Danger color ───────────────────────────────────────────── */
+:root { --aff-danger: #DC2626; }
+
+@media (max-width: 768px) {
+    .aff-layout { grid-template-columns: 1fr; }
+    .aff-sidebar { display: none; }
+    .aff-main { padding: 20px 16px; }
+    .aff-auth-card { padding: 28px 20px; }
+    .aff-stats-grid { grid-template-columns: 1fr 1fr; }
+}

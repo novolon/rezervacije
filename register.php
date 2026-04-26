@@ -4,6 +4,7 @@ require_once 'includes/lang.php';
 require_once 'includes/db.php';
 require_once 'includes/functions.php';
 require_once 'includes/mailer.php';
+require_once 'includes/affiliate_helper.php';
 
 if (is_logged_in()) {
     redirect_to_main();
@@ -95,6 +96,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ]);
 
             $newUserId = (int) $pdo->lastInsertId();
+
+            // Affiliate atribucija: cookie ima prednost, URL ?ref= / ?code= kot fallback
+            $affCookieRaw  = $_COOKIE['rez_aff'] ?? null;
+            $affCookieData = $affCookieRaw ? json_decode($affCookieRaw, true) : null;
+            $affRefCode    = $affCookieData['code'] ?? ($_GET['ref'] ?? null);
+            $affDiscCode   = $_GET['code'] ?? null;
+            if ($affRefCode || $affDiscCode) {
+                attach_affiliate_on_signup($pdo, $newUserId, $post['email'], $affRefCode, $affDiscCode);
+            }
 
             // Ustvari trial subscription z izbranim paketom.
             // status='trial' označuje brezplačno obdobje; po preteku mora zakupiti.

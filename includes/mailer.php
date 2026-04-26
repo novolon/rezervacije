@@ -563,3 +563,70 @@ function send_gdpr_confirmation(string $toEmail, string $requestType): bool {
     $text = "Prejeli smo vaš zahtevek za {$requestType}. Odgovorili bomo v 30 dneh.";
     return send_email($toEmail, 'Potrditev GDPR zahtevka – ' . $appName, $html, $text);
 }
+
+// ─── Affiliate emaili ─────────────────────────────────────────────
+
+function send_affiliate_verify_email(string $toEmail, string $name, string $token): bool {
+    $appName = APP_NAME;
+    $link    = APP_URL . BASE_PATH . '/affiliate/verify-email.php?token=' . urlencode($token);
+    $body    = "<h2 style='margin:0 0 16px;font-size:1.3rem;color:#111827'>Potrdi email naslov</h2>
+        <p style='margin:0 0 12px'>Pozdravljeni, <strong>" . htmlspecialchars($name, ENT_QUOTES) . "</strong>!</p>
+        <p style='margin:0 0 20px'>Hvala za prijavo v affiliate program. Klikni spodnji gumb za potrditev emaila.</p>
+        <p style='margin:0'><a href='{$link}' style='background:#F59E0B;color:#fff;text-decoration:none;padding:11px 24px;border-radius:8px;font-weight:600;font-size:.9rem;display:inline-block'>Potrdi email →</a></p>
+        <p style='margin:16px 0 0;font-size:.82rem;color:#9CA3AF'>Če niste oddali prijave, ignorirajte to sporočilo.</p>";
+    $html = email_wrap($appName, $body, 'Po potrditvi emaila bomo preverili vašo prijavo.');
+    return send_email($toEmail, 'Potrdi email – Affiliate program', $html);
+}
+
+function send_affiliate_approved_email(string $toEmail, string $name, string $refCode): bool {
+    $appName  = APP_NAME;
+    $dashLink = APP_URL . BASE_PATH . '/affiliate/dashboard.php';
+    $refLink  = APP_URL . BASE_PATH . '/?ref=' . urlencode($refCode);
+    $body     = "<h2 style='margin:0 0 16px;font-size:1.3rem;color:#111827'>Vaša prijava je odobrena! 🎉</h2>
+        <p style='margin:0 0 12px'>Pozdravljeni, <strong>" . htmlspecialchars($name, ENT_QUOTES) . "</strong>!</p>
+        <p style='margin:0 0 12px'>Vaša affiliate prijava je bila odobrena. Vaša unikatna referenčna koda je:</p>
+        <div style='background:#FEF3C7;border:1px solid #FDE68A;border-radius:8px;padding:12px 16px;margin:0 0 20px;font-size:1.4rem;font-weight:700;text-align:center;letter-spacing:.1em;color:#92400E'>{$refCode}</div>
+        <p style='margin:0 0 8px'>Vaša referenčna povezava:</p>
+        <p style='margin:0 0 20px;font-size:.85rem;color:#6B7280;word-break:break-all'>{$refLink}</p>
+        <p style='margin:0'><a href='{$dashLink}' style='background:#F59E0B;color:#fff;text-decoration:none;padding:11px 24px;border-radius:8px;font-weight:600;font-size:.9rem;display:inline-block'>Odpri affiliate dashboard →</a></p>";
+    $html = email_wrap($appName, $body, 'Dobrodošli v affiliate programu!');
+    return send_email($toEmail, 'Vaša affiliate prijava je odobrena!', $html);
+}
+
+function send_affiliate_rejected_email(string $toEmail, string $name, string $reason): bool {
+    $appName = APP_NAME;
+    $body    = "<h2 style='margin:0 0 16px;font-size:1.3rem;color:#111827'>Affiliate prijava ni bila odobrena</h2>
+        <p style='margin:0 0 12px'>Pozdravljeni, <strong>" . htmlspecialchars($name, ENT_QUOTES) . "</strong>.</p>
+        <p style='margin:0 0 12px'>Po pregledu vaše prijave vam sporočamo, da je ne moremo odobriti.</p>"
+        . ($reason ? "<p style='margin:0 0 12px'><strong>Razlog:</strong> " . htmlspecialchars($reason, ENT_QUOTES) . "</p>" : '')
+        . "<p style='margin:0'>Kontaktirajte nas na <a href='mailto:info@rezervacije.si' style='color:#F59E0B'>info@rezervacije.si</a> za več informacij.</p>";
+    $html = email_wrap($appName, $body, '');
+    return send_email($toEmail, 'Affiliate prijava – obvestilo', $html);
+}
+
+function send_affiliate_payout_email(string $toEmail, string $name, float $amountEur, string $reference): bool {
+    $appName = APP_NAME;
+    $body    = "<h2 style='margin:0 0 16px;font-size:1.3rem;color:#111827'>Izplačilo affiliate provizije</h2>
+        <p style='margin:0 0 12px'>Pozdravljeni, <strong>" . htmlspecialchars($name, ENT_QUOTES) . "</strong>!</p>
+        <p style='margin:0 0 12px'>Vaše nakazilo je bilo izvedeno:</p>
+        <table style='width:100%;border-collapse:collapse;margin:0 0 20px'>
+            <tr><td style='padding:8px 0;color:#6B7280;border-bottom:1px solid #F3F4F6'>Referenca</td><td style='padding:8px 0;font-weight:600;border-bottom:1px solid #F3F4F6;text-align:right'>" . htmlspecialchars($reference, ENT_QUOTES) . "</td></tr>
+            <tr><td style='padding:8px 0;color:#6B7280'>Znesek</td><td style='padding:8px 0;font-weight:700;font-size:1.1rem;color:#059669;text-align:right'>" . number_format($amountEur, 2, ',', '.') . " €</td></tr>
+        </table>
+        <p style='margin:0;font-size:.85rem;color:#9CA3AF'>Nakazilo bo vidno na vašem računu v 1–3 bančnih dneh.</p>";
+    $html = email_wrap($appName, $body, 'Hvala za vaše partnerstvo!');
+    return send_email($toEmail, 'Affiliate izplačilo – ' . $reference, $html);
+}
+
+function send_affiliate_discount_granted_email(string $toEmail, string $name, string $code, float $percent): bool {
+    $appName  = APP_NAME;
+    $dashLink = APP_URL . BASE_PATH . '/affiliate/dashboard.php';
+    $body     = "<h2 style='margin:0 0 16px;font-size:1.3rem;color:#111827'>Vaša popustna koda je aktivna!</h2>
+        <p style='margin:0 0 12px'>Pozdravljeni, <strong>" . htmlspecialchars($name, ENT_QUOTES) . "</strong>!</p>
+        <p style='margin:0 0 12px'>Pridobili ste popustno kodo za vaše stranke (" . (int)$percent . "% popust):</p>
+        <div style='background:#ECFDF5;border:1px solid #6EE7B7;border-radius:8px;padding:12px 16px;margin:0 0 20px;font-size:1.4rem;font-weight:700;text-align:center;letter-spacing:.1em;color:#065F46'>" . htmlspecialchars($code, ENT_QUOTES) . "</div>
+        <p style='margin:0 0 20px;font-size:.85rem;color:#6B7280'>Stranke vpišejo kodo pri plačilu ali kliknejo vaš kombinirani link v dashboardu.</p>
+        <p style='margin:0'><a href='{$dashLink}' style='background:#F59E0B;color:#fff;text-decoration:none;padding:11px 24px;border-radius:8px;font-weight:600;font-size:.9rem;display:inline-block'>Odpri dashboard →</a></p>";
+    $html = email_wrap($appName, $body, 'Vsako unovčenje kode se beleži v vašem dashboardu.');
+    return send_email($toEmail, 'Vaša affiliate popustna koda: ' . $code, $html);
+}

@@ -449,6 +449,8 @@
   "billing.try_plan": "Preizkusi {name}",
   "billing.buy_plan": "Zakupi {name}",
   "billing.invoice_link": "ali po predračunu →",
+  "billing.discount_code_placeholder": "Code promo",
+  "billing.apply_code_btn": "Appliquer",
   "billing.secure_payment": "Plačilo je varno in šifrirano. Zakup je mogoč kadar koli med trialom.",
   "billing.included_features": "Vključeno v vašem paketu",
   "billing.available_upgrades": "Razpoložljive nadgradnje",

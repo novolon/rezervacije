@@ -3,6 +3,8 @@ require_once '../includes/auth_check.php';
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/plans.php';
+require_once '../includes/stripe_helper.php';
+require_once '../includes/discount_helper.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -16,6 +18,7 @@ $action  = $body['action'] ?? ($_GET['action'] ?? '');
 if ($method === 'POST' && $action === 'create_checkout_session') {
     $planSlug     = $body['plan_slug']     ?? '';
     $billingCycle = $body['billing_cycle'] ?? 'monthly'; // monthly | yearly
+    $discountCode = strtoupper(trim($body['discount_code'] ?? ''));
 
     if (!isset(STRIPE_PRICES[$planSlug])) {
         json_response(false, null, 'Neveljaven paket.', 400);
@@ -28,26 +31,39 @@ if ($method === 'POST' && $action === 'create_checkout_session') {
     $userId  = (int)$session['user_id'];
     $email   = $session['email'] ?? '';
 
-    // Preveri aktivni popust in ustvari Stripe coupon
-    $couponId = null;
-    $discount = get_active_discount($pdo, $planSlug);
-    if ($discount) {
-        $discPrice = $billingCycle === 'yearly'
-            ? ($discount['discounted_yearly']  ?? null)
-            : ($discount['discounted_monthly'] ?? null);
-        $origPrice = PLANS[$planSlug][$billingCycle . '_price'];
-        if ($discPrice !== null && (float)$discPrice < (float)$origPrice) {
-            $amountOff = (int)round(((float)$origPrice - (float)$discPrice) * 100); // v centih
-            $coupon = stripe_request('POST', '/coupons', [
-                'amount_off' => $amountOff,
-                'currency'   => 'eur',
-                'duration'   => 'once',
-                'name'       => $discount['label'],
-            ]);
-            if (isset($coupon['id'])) {
-                $couponId = $coupon['id'];
-            } else {
-                error_log('Stripe coupon creation failed: ' . json_encode($coupon));
+    // Discount code ima prednost pred plan_discounts; ne stackamo
+    $couponId      = null;
+    $promoCodeId   = null;  // Stripe promotion_code ID (za discount kode)
+    $appliedCodeId = null;  // local discount_codes.id (za redemption tracking)
+
+    if ($discountCode !== '') {
+        $valid = validate_discount_code($pdo, $discountCode, $email, $planSlug, $userId);
+        if (!$valid['valid']) {
+            json_response(false, null, $valid['error'], 400);
+        }
+        $promoCodeId   = $valid['stripe_promo_id'];
+        $appliedCodeId = $valid['id'];
+    } else {
+        // Fallback na plan_discounts (kampanjski popusti)
+        $discount = get_active_discount($pdo, $planSlug);
+        if ($discount) {
+            $discPrice = $billingCycle === 'yearly'
+                ? ($discount['discounted_yearly']  ?? null)
+                : ($discount['discounted_monthly'] ?? null);
+            $origPrice = PLANS[$planSlug][$billingCycle . '_price'];
+            if ($discPrice !== null && (float)$discPrice < (float)$origPrice) {
+                $amountOff = (int)round(((float)$origPrice - (float)$discPrice) * 100);
+                $coupon = stripe_request('POST', '/coupons', [
+                    'amount_off' => $amountOff,
+                    'currency'   => 'eur',
+                    'duration'   => 'once',
+                    'name'       => $discount['label'],
+                ]);
+                if (isset($coupon['id'])) {
+                    $couponId = $coupon['id'];
+                } else {
+                    error_log('Stripe coupon creation failed: ' . json_encode($coupon));
+                }
             }
         }
     }
@@ -88,19 +104,23 @@ if ($method === 'POST' && $action === 'create_checkout_session') {
         'locale'               => 'sl',
         'subscription_data'    => [
             'metadata' => [
-                'user_id'       => $userId,
-                'plan_slug'     => $planSlug,
-                'billing_cycle' => $billingCycle,
+                'user_id'           => $userId,
+                'plan_slug'         => $planSlug,
+                'billing_cycle'     => $billingCycle,
+                'discount_code_id'  => $appliedCodeId ?? '',
             ],
         ],
         'metadata' => [
-            'user_id'       => $userId,
-            'plan_slug'     => $planSlug,
-            'billing_cycle' => $billingCycle,
+            'user_id'           => $userId,
+            'plan_slug'         => $planSlug,
+            'billing_cycle'     => $billingCycle,
+            'discount_code_id'  => $appliedCodeId ?? '',
         ],
     ];
 
-    if ($couponId) {
+    if ($promoCodeId) {
+        $checkoutParams['discounts'] = [['promotion_code' => $promoCodeId]];
+    } elseif ($couponId) {
         $checkoutParams['discounts'] = [['coupon' => $couponId]];
     }
 
@@ -276,47 +296,4 @@ if ($method === 'POST' && $action === 'request_invoice') {
 
 json_response(false, null, 'Neznan action.', 400);
 
-// ─── Stripe HTTP helper ───────────────────────────────────────
-function stripe_request(string $method, string $endpoint, array $data = []): array {
-    $url = 'https://api.stripe.com/v1' . $endpoint;
-
-    // Stripe pričakuje nested arrays kot foo[bar]=baz
-    $payload = stripe_encode($data);
-
-    $ch = curl_init($url);
-    curl_setopt_array($ch, [
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_USERPWD        => STRIPE_SECRET_KEY . ':',
-        CURLOPT_HTTPHEADER     => ['Content-Type: application/x-www-form-urlencoded'],
-    ]);
-
-    if ($method === 'POST') {
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-    }
-
-    $response = curl_exec($ch);
-    curl_close($ch);
-
-    return json_decode($response, true) ?? [];
-}
-
-function stripe_encode(array $data, string $prefix = ''): string {
-    $parts = [];
-    foreach ($data as $key => $value) {
-        $fullKey = $prefix ? "{$prefix}[{$key}]" : $key;
-        if (is_array($value)) {
-            // Indexed arrays (line_items[0][price])
-            foreach ($value as $i => $v) {
-                if (is_array($v)) {
-                    $parts[] = stripe_encode($v, "{$fullKey}[{$i}]");
-                } else {
-                    $parts[] = urlencode("{$fullKey}[{$i}]") . '=' . urlencode($v);
-                }
-            }
-        } else {
-            $parts[] = urlencode($fullKey) . '=' . urlencode((string)$value);
-        }
-    }
-    return implode('&', $parts);
-}
+// stripe_request() and stripe_encode() are defined in includes/stripe_helper.php

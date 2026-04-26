@@ -105,6 +105,17 @@ if ($isActive) {
         <?= t_raw('billing.trial_info') ?>
     </div>
 
+    <!-- Popustna koda -->
+    <div style="margin-bottom:20px;display:flex;gap:8px;align-items:flex-start;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px;max-width:320px">
+            <input type="text" id="discount-code-input" placeholder="<?= t('billing.discount_code_placeholder') ?>"
+                   style="width:100%;padding:9px 14px;border:1.5px solid var(--color-border);border-radius:var(--radius);font-size:.9rem;text-transform:uppercase"
+                   oninput="this.value=this.value.toUpperCase()" maxlength="30">
+        </div>
+        <button onclick="applyDiscountCode()" class="btn btn-outline" style="white-space:nowrap"><?= t('billing.apply_code_btn') ?></button>
+        <div id="discount-code-msg" style="width:100%;font-size:.83rem;margin-top:4px"></div>
+    </div>
+
     <!-- Billing cycle toggle -->
     <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-bottom:28px">
         <span style="font-size:.9rem;font-weight:500;color:#374151"><?= t('billing.toggle_monthly') ?></span>
@@ -503,6 +514,31 @@ async function switchTrialPlan(slug, btn) {
     }
 }
 
+// ─── Popustna koda ─────────────────────────────────────────────
+let appliedDiscountCode = '';
+async function applyDiscountCode() {
+    const input = document.getElementById('discount-code-input');
+    const msg   = document.getElementById('discount-code-msg');
+    const code  = (input?.value ?? '').trim().toUpperCase();
+    if (!code) { msg.innerHTML = ''; return; }
+    msg.innerHTML = '<span style="color:var(--color-muted)">Preverjam…</span>';
+    try {
+        const res = await fetch(APP_STATE.base + '/api/discount_codes.php?action=validate&code=' + encodeURIComponent(code));
+        const d   = await res.json();
+        if (d.success && d.data.valid) {
+            appliedDiscountCode = code;
+            const pct = d.data.percent_off;
+            const dur = d.data.duration === 'repeating' ? ` za ${d.data.duration_months} mes.` : (d.data.duration === 'forever' ? ' za vedno' : '');
+            msg.innerHTML = `<span style="color:#059669;font-weight:600">✓ Koda uveljavljena: ${pct}% popust${dur}</span>`;
+        } else {
+            appliedDiscountCode = '';
+            msg.innerHTML = `<span style="color:#DC2626">${d.error || d.data?.error || 'Neveljavna koda.'}</span>`;
+        }
+    } catch(e) {
+        msg.innerHTML = '<span style="color:#DC2626">Napaka pri preverjanju.</span>';
+    }
+}
+
 // ─── Zakup paketa (Stripe Checkout) ───────────────────────────
 async function selectPlan(slug) {
     const cycle = document.getElementById('billing-yearly')?.checked ? 'yearly' : 'monthly';
@@ -510,10 +546,12 @@ async function selectPlan(slug) {
     if (btn) { btn.disabled = true; btn.textContent = window.t('billing.redirecting'); }
 
     try {
+        const body = { action: 'create_checkout_session', plan_slug: slug, billing_cycle: cycle };
+        if (appliedDiscountCode) body.discount_code = appliedDiscountCode;
         const res = await fetch(APP_STATE.base + '/api/billing.php', {
             method:  'POST',
             headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({ action: 'create_checkout_session', plan_slug: slug, billing_cycle: cycle }),
+            body:    JSON.stringify(body),
         });
         const data = await res.json();
         if (data.success && data.data?.url) {
