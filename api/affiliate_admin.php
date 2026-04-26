@@ -175,9 +175,10 @@ if ($method === 'POST' && $action === 'configure') {
 // ─── POST: grant_discount ─────────────────────────────────────────
 if ($method === 'POST' && $action === 'grant_discount') {
     $id       = (int)($body['id'] ?? 0);
-    $percent  = (float)($body['percent'] ?? 0);
+    $percent  = (float)($body['percent_off'] ?? $body['percent'] ?? 0);
     $duration = in_array($body['duration'] ?? '', ['once','repeating','forever']) ? $body['duration'] : 'once';
-    $months   = ($duration === 'repeating' && isset($body['months'])) ? (int)$body['months'] : null;
+    $months   = ($duration === 'repeating' && isset($body['duration_months'])) ? (int)$body['duration_months']
+              : ($duration === 'repeating' && isset($body['months']) ? (int)$body['months'] : null);
 
     if (!$id || $percent <= 0 || $percent > 100) json_response(false, null, 'Neveljavni parametri.', 400);
 
