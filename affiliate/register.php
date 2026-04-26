@@ -31,20 +31,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (empty($errors)) {
         try {
-            $pdo  = getDB();
+            $pdo = getDB();
 
-            // Preveri duplicate
             $dup = $pdo->prepare("SELECT 1 FROM affiliates WHERE email = ?");
             $dup->execute([$post['email']]);
             if ($dup->fetchColumn()) {
                 $errors[] = 'Email naslov je že registriran.';
             } else {
-                // Generiraj ref_code
                 require_once '../includes/affiliate_helper.php';
                 $refCode = affiliate_generate_ref_code($pdo);
                 $token   = bin2hex(random_bytes(32));
 
-                // Pridobi verzijo pogojev
                 $termsVer = $pdo->query("SELECT setting_value FROM affiliate_settings WHERE setting_key = 'terms_version'")->fetchColumn() ?: '1.0';
 
                 $pdo->prepare("
@@ -67,96 +64,100 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 send_affiliate_verify_email($post['email'], $post['full_name'], $token);
                 $success = true;
             }
-        } catch (PDOException $e) {
+        } catch (\Throwable $e) {
             error_log('Affiliate register error: ' . $e->getMessage());
-            $errors[] = 'Napaka strežnika. Poskusite znova.';
+            $errors[] = 'Napaka strežnika. Preverite, ali so bili SQL migracije izvedene, in poskusite znova.';
         }
     }
 }
+
+$pageTitle = 'Registracija – Affiliate';
+$extraCss  = ['design.css'];
+require_once '../includes/html_head.php';
 ?>
-<!DOCTYPE html>
-<html lang="sl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Affiliate registracija – <?= APP_NAME ?></title>
-<link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/affiliate.css">
-</head>
 <body>
-<div class="aff-auth" style="padding:40px 16px">
-<div class="aff-auth-card" style="max-width:480px">
-    <div class="aff-auth-logo">
-        <div class="aff-auth-logo-icon">R</div>
-        <?= htmlspecialchars(APP_NAME, ENT_QUOTES) ?> Affiliati
-    </div>
+<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:40px 16px">
+<div style="width:100%;max-width:460px">
+
+    <a href="<?= BASE_PATH ?>/" style="display:flex;align-items:center;gap:10px;margin-bottom:32px;color:var(--ink);font-weight:700;font-size:17px;letter-spacing:-.02em;text-decoration:none">
+        <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true" style="flex:none">
+            <rect width="32" height="32" rx="7" fill="var(--accent)"/>
+            <path d="M9 8v16l4-4h5a5 5 0 0 0 5-5v-4a3 3 0 0 0-3-3H9Z" fill="#fff"/>
+        </svg>
+        Rezble <span style="font-weight:400;color:var(--ink-mute)">/ Affiliate</span>
+    </a>
 
     <?php if ($success): ?>
-    <div class="aff-success" style="padding:20px;text-align:center">
-        <div style="font-size:2rem;margin-bottom:8px">✉️</div>
-        <h2 style="margin:0 0 8px;color:#065F46">Prijavnica oddana!</h2>
-        <p style="margin:0;color:#047857">Poslali smo vam potrditveni email. Po potrditvi emaila bomo pregledali vašo prijavo in vas obvestili.</p>
-        <div style="margin-top:16px"><a href="<?= BASE_PATH ?>/affiliate/login.php" class="aff-btn" style="display:inline-block;width:auto;padding:10px 24px">Na prijavo</a></div>
+    <div class="rz-card" style="text-align:center;padding:40px 32px">
+        <div style="font-size:2.5rem;margin-bottom:16px">✉️</div>
+        <h2 style="margin:0 0 10px;font-size:22px;font-weight:700;color:var(--ink)">Prijavnica oddana!</h2>
+        <p style="margin:0 0 24px;color:var(--ink-mute);font-size:14px;line-height:1.6">Poslali smo vam potrditveni email. Po potrditvi emaila bomo pregledali vašo prijavo in vas obvestili.</p>
+        <a href="<?= BASE_PATH ?>/affiliate/login.php" class="rz-btn rz-btn-primary" style="display:inline-flex">Na prijavo →</a>
     </div>
     <?php else: ?>
-    <h1 class="aff-auth-title">Postanite affiliate</h1>
-    <p class="aff-auth-sub">Zaslužite 20% provizije za vsako priporočeno restavracijo</p>
+    <div class="rz-card">
+        <h1 class="rz-auth-title">Postanite affiliate</h1>
+        <p class="rz-auth-sub">Zaslužite 20% provizije za vsako priporočeno restavracijo</p>
 
-    <?php if ($errors): ?>
-    <div class="aff-error"><?= implode('<br>', array_map(fn($e) => htmlspecialchars($e, ENT_QUOTES), $errors)) ?></div>
-    <?php endif; ?>
+        <?php if ($errors): ?>
+        <div style="background:color-mix(in oklab,var(--danger) 10%,transparent);color:var(--danger);border:1px solid color-mix(in oklab,var(--danger) 25%,transparent);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:16px">
+            <?= implode('<br>', array_map(fn($e) => htmlspecialchars($e, ENT_QUOTES), $errors)) ?>
+        </div>
+        <?php endif; ?>
 
-    <form method="POST" autocomplete="off">
-        <div class="aff-form-group">
-            <label for="full_name">Ime in priimek *</label>
-            <input type="text" id="full_name" name="full_name" value="<?= htmlspecialchars($post['full_name'] ?? '', ENT_QUOTES) ?>" required autofocus>
-        </div>
-        <div class="aff-form-group">
-            <label for="email">Email naslov *</label>
-            <input type="email" id="email" name="email" value="<?= htmlspecialchars($post['email'] ?? '', ENT_QUOTES) ?>" required autocomplete="email">
-        </div>
-        <div class="aff-form-group">
-            <label for="legal_form">Pravna oblika *</label>
-            <select id="legal_form" name="legal_form">
-                <option value="individual" <?= ($post['legal_form'] ?? '') === 'individual' ? 'selected' : '' ?>>Fizična oseba</option>
-                <option value="sole_trader" <?= ($post['legal_form'] ?? '') === 'sole_trader' ? 'selected' : '' ?>>Samostojni podjetnik (s.p.)</option>
-                <option value="company" <?= ($post['legal_form'] ?? '') === 'company' ? 'selected' : '' ?>>Podjetje (d.o.o., d.d.)</option>
-                <option value="foreign" <?= ($post['legal_form'] ?? '') === 'foreign' ? 'selected' : '' ?>>Tujina</option>
-            </select>
-        </div>
-        <div class="aff-form-group">
-            <label for="iban">IBAN za izplačila</label>
-            <input type="text" id="iban" name="iban" value="<?= htmlspecialchars($post['iban'] ?? '', ENT_QUOTES) ?>" placeholder="SI56...">
-        </div>
-        <div class="aff-form-group">
-            <label for="password">Geslo *</label>
-            <input type="password" id="password" name="password" required autocomplete="new-password">
-        </div>
-        <div class="aff-form-group">
-            <label for="password_confirm">Potrdi geslo *</label>
-            <input type="password" id="password_confirm" name="password_confirm" required>
-        </div>
+        <form method="POST" autocomplete="off" class="rz-auth-form">
+            <div class="rz-form-2">
+                <div class="rz-field">
+                    <label class="rz-field-label">Ime in priimek *</label>
+                    <input type="text" name="full_name" class="rz-input" value="<?= htmlspecialchars($post['full_name'] ?? '', ENT_QUOTES) ?>" required autofocus>
+                </div>
+                <div class="rz-field">
+                    <label class="rz-field-label">Email naslov *</label>
+                    <input type="email" name="email" class="rz-input" value="<?= htmlspecialchars($post['email'] ?? '', ENT_QUOTES) ?>" required autocomplete="email">
+                </div>
+            </div>
+            <div class="rz-field">
+                <label class="rz-field-label">Pravna oblika *</label>
+                <select name="legal_form" class="rz-input">
+                    <option value="individual" <?= ($post['legal_form'] ?? '') === 'individual' ? 'selected' : '' ?>>Fizična oseba</option>
+                    <option value="sole_trader" <?= ($post['legal_form'] ?? '') === 'sole_trader' ? 'selected' : '' ?>>Samostojni podjetnik (s.p.)</option>
+                    <option value="company" <?= ($post['legal_form'] ?? '') === 'company' ? 'selected' : '' ?>>Podjetje (d.o.o., d.d.)</option>
+                    <option value="foreign" <?= ($post['legal_form'] ?? '') === 'foreign' ? 'selected' : '' ?>>Tujina</option>
+                </select>
+            </div>
+            <div class="rz-field">
+                <label class="rz-field-label">IBAN za izplačila</label>
+                <input type="text" name="iban" class="rz-input" value="<?= htmlspecialchars($post['iban'] ?? '', ENT_QUOTES) ?>" placeholder="SI56...">
+            </div>
+            <div class="rz-form-2">
+                <div class="rz-field">
+                    <label class="rz-field-label">Geslo *</label>
+                    <input type="password" name="password" class="rz-input" required autocomplete="new-password">
+                </div>
+                <div class="rz-field">
+                    <label class="rz-field-label">Potrdi geslo *</label>
+                    <input type="password" name="password_confirm" class="rz-input" required>
+                </div>
+            </div>
 
-        <div style="border-top:1px solid var(--aff-border);margin:16px 0"></div>
+            <div style="border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:10px">
+                <label class="rz-check">
+                    <input type="checkbox" name="terms_consent" required>
+                    Strinjam se s <a href="<?= BASE_PATH ?>/affiliate/terms.php" target="_blank" class="rz-link">pogoji affiliate programa</a>. *
+                </label>
+                <label class="rz-check">
+                    <input type="checkbox" name="marketing_consent">
+                    Strinjam se s prejemanjem novic in nasvetov programa.
+                </label>
+            </div>
 
-        <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:10px">
-            <input type="checkbox" id="terms_consent" name="terms_consent" style="margin-top:3px;flex-shrink:0" required>
-            <label for="terms_consent" style="font-size:.83rem;color:#374151;cursor:pointer">
-                Strinjam se s <a href="<?= BASE_PATH ?>/affiliate/terms.php" target="_blank">pogoji affiliate programa</a>. *
-            </label>
-        </div>
-        <div style="display:flex;gap:10px;align-items:flex-start;margin-bottom:20px">
-            <input type="checkbox" id="marketing_consent" name="marketing_consent" style="margin-top:3px;flex-shrink:0">
-            <label for="marketing_consent" style="font-size:.83rem;color:#374151;cursor:pointer">
-                Strinjam se s prejemanjem novic in nasvetov affiliate programa.
-            </label>
-        </div>
-
-        <button type="submit" class="aff-btn">Oddaj prijavnico</button>
-    </form>
-
-    <div class="aff-auth-foot">
-        Že imate račun? <a href="<?= BASE_PATH ?>/affiliate/login.php">Prijava</a>
+            <button type="submit" class="rz-btn rz-btn-primary" style="width:100%;justify-content:center;padding:11px;margin-top:4px">Oddaj prijavnico</button>
+        </form>
     </div>
+
+    <p style="text-align:center;margin-top:16px;font-size:12px;color:var(--ink-mute)">
+        Že imate račun? <a href="<?= BASE_PATH ?>/affiliate/login.php" class="rz-link">Prijava</a>
+    </p>
     <?php endif; ?>
 </div>
 </div>
