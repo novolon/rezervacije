@@ -20,26 +20,39 @@ $action  = $body['action'] ?? ($_GET['action'] ?? '');
 
 // ─── GET: seznam affiliatov ──────────────────────────────────────
 if ($method === 'GET' && $action === 'list') {
-    $status = $_GET['status'] ?? 'all';
+    $status = $_GET['status'] ?? '';
     $where  = in_array($status, ['pending','active','suspended','rejected'])
         ? "WHERE a.status = " . $pdo->quote($status)
         : '';
 
-    $rows = $pdo->query("
+    $stmt = $pdo->query("
         SELECT a.id, a.ref_code, a.email, a.full_name, a.status,
-               a.discount_enabled, a.discount_percent,
-               a.created_at, a.approved_at,
+               a.commission_percent, a.hold_days, a.commission_window_months,
+               a.discount_enabled, a.discount_percent, a.discount_duration,
+               a.discount_duration_months, a.created_at, a.approved_at,
+               (SELECT COALESCE(SUM(c.amount_eur),0) FROM affiliate_commissions c WHERE c.affiliate_id = a.id AND c.status = 'payable') AS payable_eur,
                (SELECT COUNT(*) FROM affiliate_referrals r WHERE r.affiliate_id = a.id) AS referral_count,
-               (SELECT COUNT(*) FROM affiliate_referrals r WHERE r.affiliate_id = a.id AND r.status = 'converted') AS converted_count,
-               (SELECT COALESCE(SUM(c.amount_eur),0) FROM affiliate_commissions c WHERE c.affiliate_id = a.id AND c.status IN ('pending','payable')) AS pending_eur,
                dc.code AS discount_code
         FROM affiliates a
         LEFT JOIN discount_codes dc ON dc.id = a.discount_code_id
         {$where}
         ORDER BY a.created_at DESC
         LIMIT 500
-    ")->fetchAll();
-    json_response(true, $rows);
+    ");
+    $rows = $stmt->fetchAll();
+
+    $resp = ['items' => $rows];
+    if (!empty($_GET['settings'])) {
+        $settings = $pdo->query("SELECT setting_key, setting_value FROM affiliate_settings")->fetchAll(PDO::FETCH_KEY_PAIR);
+        $resp['settings'] = $settings;
+    }
+    json_response(true, $resp);
+}
+
+// ─── GET: global nastavitve ──────────────────────────────────────
+if ($method === 'GET' && $action === 'settings') {
+    $settings = $pdo->query("SELECT setting_key, setting_value FROM affiliate_settings")->fetchAll(PDO::FETCH_KEY_PAIR);
+    json_response(true, $settings);
 }
 
 // ─── GET: detail affiliata ───────────────────────────────────────
@@ -75,13 +88,18 @@ if ($method === 'GET' && $action === 'detail') {
         $discCode = $dc->fetch() ?: null;
     }
 
-    json_response(true, [
-        'affiliate'    => $aff,
-        'referrals'    => $referrals->fetchAll(),
-        'commissions'  => $commissions->fetchAll(),
-        'payouts'      => $payouts->fetchAll(),
-        'discount_code'=> $discCode,
-    ]);
+    // Merge discount_code fields into flat response so JS can access aff.discount_code, aff.discount_percent etc.
+    $data = $aff;
+    if ($discCode) {
+        $data['discount_code']           = $discCode['code'];
+        $data['discount_percent']        = $discCode['percent_off'];
+        $data['discount_duration']       = $discCode['duration'];
+        $data['discount_duration_months']= $discCode['duration_months'];
+    }
+    $data['referrals']   = $referrals->fetchAll();
+    $data['commissions'] = $commissions->fetchAll();
+    $data['payouts']     = $payouts->fetchAll();
+    json_response(true, $data);
 }
 
 // ─── POST: approve ────────────────────────────────────────────────

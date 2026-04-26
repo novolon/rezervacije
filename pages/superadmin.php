@@ -67,6 +67,8 @@ $fullName = $_SESSION['full_name'];
         <button class="admin-tab active" data-tab="sa-admins"><?= t('superadmin.tab_admins') ?></button>
         <button class="admin-tab" data-tab="sa-restaurants"><?= t('superadmin.tab_restaurants') ?></button>
         <button class="admin-tab" data-tab="sa-discounts"><?= t('superadmin.tab_discounts') ?></button>
+        <button class="admin-tab" data-tab="sa-affiliate">Affiliate</button>
+        <button class="admin-tab" data-tab="sa-disc-codes">Kode za popust</button>
         <button class="admin-tab" data-tab="sa-system"><?= t('superadmin.tab_system') ?></button>
         <a href="<?= BASE_PATH ?>/pages/gdpr.php" class="admin-tab" style="text-decoration:none"><?= t('superadmin.tab_gdpr') ?></a>
     </div>
@@ -145,6 +147,98 @@ $fullName = $_SESSION['full_name'];
                     </thead>
                     <tbody id="sa-discounts-tbody">
                         <tr><td colspan="8" class="table-empty"><?= t('superadmin.loading') ?></td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Panel: Affiliate -->
+    <div id="panel-sa-affiliate" class="admin-panel">
+        <div class="admin-card">
+            <div class="admin-card-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+                <h2>Affiliate partnerji</h2>
+                <div style="display:flex;gap:8px;align-items:center">
+                    <select id="aff-filter-status" class="admin-select" onchange="loadAffiliates()" style="font-size:.85rem;padding:6px 10px">
+                        <option value="">Vsi statusi</option>
+                        <option value="pending">Čakajo</option>
+                        <option value="active">Aktivni</option>
+                        <option value="suspended">Suspendirani</option>
+                        <option value="rejected">Zavrnjeni</option>
+                    </select>
+                    <button class="btn btn-sm btn-ghost" onclick="downloadPayoutCsv()">⬇ SEPA CSV</button>
+                    <button class="btn btn-sm btn-primary" onclick="openPayoutBatch()">Izplačilo</button>
+                </div>
+            </div>
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Ime</th>
+                            <th>Email</th>
+                            <th>Ref. koda</th>
+                            <th>Status</th>
+                            <th>Prov. %</th>
+                            <th>Izplačljivo</th>
+                            <th>Registracija</th>
+                            <th>Dejanja</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sa-affiliate-tbody">
+                        <tr><td colspan="8" class="table-empty">Nalaganje…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Affiliate global nastavitve -->
+        <div class="admin-card" style="margin-top:16px">
+            <div class="admin-card-header"><h2>Globalne nastavitve affiliate</h2></div>
+            <div style="padding:4px 0 8px;display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px" id="aff-settings-grid">
+                <div class="admin-field">
+                    <label>Privzeta provizija (%)</label>
+                    <input type="number" id="aff-set-pct" min="0" max="100" step="0.1" style="width:100%;box-sizing:border-box">
+                </div>
+                <div class="admin-field">
+                    <label>Hold dni (zadržanje)</label>
+                    <input type="number" id="aff-set-hold" min="0" max="180" step="1" style="width:100%;box-sizing:border-box">
+                </div>
+                <div class="admin-field">
+                    <label>Okno provizij (meseci)</label>
+                    <input type="number" id="aff-set-window" min="1" max="60" step="1" style="width:100%;box-sizing:border-box">
+                </div>
+                <div class="admin-field">
+                    <label>Min. izplačilo (€)</label>
+                    <input type="number" id="aff-set-min" min="0" step="0.01" style="width:100%;box-sizing:border-box">
+                </div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="saveAffSettings()">Shrani nastavitve</button>
+        </div>
+    </div>
+
+    <!-- Panel: Kode za popust -->
+    <div id="panel-sa-disc-codes" class="admin-panel">
+        <div class="admin-card">
+            <div class="admin-card-header" style="display:flex;align-items:center;justify-content:space-between">
+                <h2>Kode za popust</h2>
+                <button class="btn btn-primary btn-sm" onclick="openCreateDiscCode()">+ Nova koda</button>
+            </div>
+            <div class="admin-table-wrap">
+                <table class="admin-table">
+                    <thead>
+                        <tr>
+                            <th>Koda</th>
+                            <th>Popust</th>
+                            <th>Trajanje</th>
+                            <th>Lastnik</th>
+                            <th>Unovčenj</th>
+                            <th>Status</th>
+                            <th>Ustvarjena</th>
+                            <th>Dejanja</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sa-disc-codes-tbody">
+                        <tr><td colspan="8" class="table-empty">Nalaganje…</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -566,6 +660,438 @@ window.APP_STATE = <?= json_encode([
     document.querySelectorAll('.admin-tab').forEach(tab => {
         if (tab.dataset.tab === 'sa-discounts') {
             tab.addEventListener('click', loadDiscounts);
+        }
+    });
+
+    // ── Affiliate ─────────────────────────────────────────────────
+    const AFF_STATUS = {
+        pending:   '<span class="badge badge-trial">Čaka</span>',
+        active:    '<span class="badge badge-active">Aktiven</span>',
+        suspended: '<span class="badge badge-payment_failed">Suspendiran</span>',
+        rejected:  '<span class="badge badge-inactive">Zavrnjen</span>',
+    };
+
+    async function loadAffiliates() {
+        const status = document.getElementById('aff-filter-status')?.value ?? '';
+        const tbody  = document.getElementById('sa-affiliate-tbody');
+        try {
+            const params = '/api/affiliate_admin.php?action=list' + (status ? '&status=' + encodeURIComponent(status) : '');
+            const d = await API.get(params);
+            if (!d.items?.length) {
+                tbody.innerHTML = `<tr><td colspan="8" class="table-empty">Ni affiliate partnerjev.</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = d.items.map(a => `
+                <tr>
+                    <td><strong>${h(a.full_name)}</strong></td>
+                    <td style="font-size:.82rem">${h(a.email)}</td>
+                    <td><code style="background:#F3F4F6;padding:2px 6px;border-radius:4px;font-size:.8rem">${h(a.ref_code)}</code></td>
+                    <td>${AFF_STATUS[a.status] ?? h(a.status)}</td>
+                    <td style="text-align:center">${a.commission_percent ?? '—'}%</td>
+                    <td style="text-align:right">${(+(a.payable_eur ?? 0)).toFixed(2)} €</td>
+                    <td>${fmtDate(a.created_at)}</td>
+                    <td>
+                        <button class="btn btn-sm btn-ghost" onclick="openAffDetail(${a.id})">Uredi</button>
+                    </td>
+                </tr>
+            `).join('');
+        } catch(e) { toast(e.message, 'error'); }
+    }
+
+    async function loadAffSettings() {
+        try {
+            const s = await API.get('/api/affiliate_admin.php?action=settings');
+            document.getElementById('aff-set-pct').value    = s.default_commission_percent ?? '';
+            document.getElementById('aff-set-hold').value   = s.default_hold_days ?? '';
+            document.getElementById('aff-set-window').value = s.default_commission_window_m ?? '';
+            document.getElementById('aff-set-min').value    = s.min_payout_eur ?? '';
+        } catch(e) {}
+    }
+
+    async function saveAffSettings() {
+        try {
+            await API.post('/api/affiliate_admin.php', {
+                action: 'set_global',
+                default_commission_percent:   document.getElementById('aff-set-pct').value,
+                default_hold_days:            document.getElementById('aff-set-hold').value,
+                default_commission_window_m:  document.getElementById('aff-set-window').value,
+                min_payout_eur:               document.getElementById('aff-set-min').value,
+            });
+            toast('Nastavitve shranjene.');
+        } catch(e) { toast(e.message, 'error'); }
+    }
+    window.saveAffSettings = saveAffSettings;
+
+    async function openAffDetail(id) {
+        let aff;
+        try { aff = await API.get('/api/affiliate_admin.php?action=detail&id=' + id); }
+        catch(e) { toast(e.message, 'error'); return; }
+
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.id = 'aff-detail-modal';
+        overlay.innerHTML = `
+        <div class="modal-box" style="max-width:520px">
+            <div class="modal-header">
+                <div class="modal-title">${h(aff.full_name)}</div>
+                <button class="modal-close" onclick="document.getElementById('aff-detail-modal').remove()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:.83rem">
+                    <div><span style="color:var(--color-muted)">Email:</span> ${h(aff.email)}</div>
+                    <div><span style="color:var(--color-muted)">IBAN:</span> ${h(aff.iban ?? '—')}</div>
+                    <div><span style="color:var(--color-muted)">Ref koda:</span> <code>${h(aff.ref_code)}</code></div>
+                    <div><span style="color:var(--color-muted)">Status:</span> ${AFF_STATUS[aff.status] ?? h(aff.status)}</div>
+                    <div><span style="color:var(--color-muted)">Davčna:</span> ${h(aff.tax_number ?? '—')}</div>
+                    <div><span style="color:var(--color-muted)">Naslov:</span> ${h(aff.address ?? '—')}</div>
+                </div>
+                <div style="border-top:1px solid var(--color-border);padding-top:12px">
+                    <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--color-muted);margin-bottom:10px">Provizija</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+                        <div class="admin-field">
+                            <label>% provizija</label>
+                            <input type="number" id="ad-pct" value="${aff.commission_percent ?? ''}" min="0" max="100" step="0.1" style="width:100%;box-sizing:border-box" placeholder="privzeto">
+                        </div>
+                        <div class="admin-field">
+                            <label>Hold dni</label>
+                            <input type="number" id="ad-hold" value="${aff.hold_days ?? ''}" min="0" max="180" step="1" style="width:100%;box-sizing:border-box" placeholder="privzeto">
+                        </div>
+                        <div class="admin-field">
+                            <label>Okno (mes.)</label>
+                            <input type="number" id="ad-window" value="${aff.commission_window_months ?? ''}" min="1" max="60" step="1" style="width:100%;box-sizing:border-box" placeholder="privzeto">
+                        </div>
+                    </div>
+                </div>
+                <div style="border-top:1px solid var(--color-border);padding-top:12px">
+                    <div style="font-size:.75rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--color-muted);margin-bottom:10px">Popustna koda</div>
+                    ${aff.discount_enabled ? `
+                    <div style="background:#ECFDF5;border:1px solid #6EE7B7;border-radius:8px;padding:10px 14px;font-size:.85rem;margin-bottom:10px">
+                        <strong>${h(aff.discount_code ?? '—')}</strong> · ${aff.discount_percent}% popust
+                        · ${aff.discount_duration === 'repeating' ? aff.discount_duration_months + ' mes.' : aff.discount_duration}
+                    </div>
+                    <button class="btn btn-sm btn-ghost" style="color:#991B1B" onclick="revokeAffDiscount(${id})">Prekliči popust</button>
+                    ` : `
+                    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+                        <div class="admin-field">
+                            <label>Popust (%)</label>
+                            <input type="number" id="ad-disc-pct" min="1" max="80" step="1" style="width:100%;box-sizing:border-box" placeholder="npr. 15">
+                        </div>
+                        <div class="admin-field">
+                            <label>Trajanje</label>
+                            <select id="ad-disc-dur" style="width:100%;box-sizing:border-box">
+                                <option value="once">Enkrat</option>
+                                <option value="repeating">N mesecev</option>
+                                <option value="forever">Za vedno</option>
+                            </select>
+                        </div>
+                        <div class="admin-field">
+                            <label>Meseci</label>
+                            <input type="number" id="ad-disc-months" min="1" max="24" step="1" style="width:100%;box-sizing:border-box" placeholder="če repeating">
+                        </div>
+                    </div>
+                    <button class="btn btn-sm btn-primary" onclick="grantAffDiscount(${id})">Dodeli popust</button>
+                    `}
+                </div>
+                <div id="ad-error" style="display:none;color:#991B1B;font-size:.83rem"></div>
+            </div>
+            <div class="modal-footer" style="justify-content:space-between">
+                <div style="display:flex;gap:8px">
+                    ${aff.status === 'pending' ? `
+                        <button class="btn btn-sm btn-primary" onclick="affAction(${id},'approve')">Odobri</button>
+                        <button class="btn btn-sm btn-ghost" style="color:#991B1B" onclick="affAction(${id},'reject')">Zavrni</button>
+                    ` : ''}
+                    ${aff.status === 'active' ? `
+                        <button class="btn btn-sm btn-ghost" style="color:#D97706" onclick="affAction(${id},'suspend')">Suspendiraj</button>
+                    ` : ''}
+                    ${aff.status === 'suspended' ? `
+                        <button class="btn btn-sm btn-primary" onclick="affAction(${id},'approve')">Aktiviraj</button>
+                    ` : ''}
+                </div>
+                <div style="display:flex;gap:8px">
+                    <button class="btn btn-ghost" onclick="document.getElementById('aff-detail-modal').remove()">Zapri</button>
+                    <button class="btn btn-primary" onclick="saveAffConfig(${id})">Shrani konfig</button>
+                </div>
+            </div>
+        </div>`;
+
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    }
+    window.openAffDetail = openAffDetail;
+
+    async function saveAffConfig(id) {
+        const errEl = document.getElementById('ad-error');
+        errEl.style.display = 'none';
+        try {
+            await API.post('/api/affiliate_admin.php', {
+                action: 'configure', id,
+                commission_percent:       document.getElementById('ad-pct')?.value     || null,
+                hold_days:                document.getElementById('ad-hold')?.value    || null,
+                commission_window_months: document.getElementById('ad-window')?.value  || null,
+            });
+            toast('Konfiguracija shranjena.');
+            document.getElementById('aff-detail-modal')?.remove();
+            loadAffiliates();
+        } catch(e) {
+            errEl.textContent = e.message;
+            errEl.style.display = 'block';
+        }
+    }
+    window.saveAffConfig = saveAffConfig;
+
+    async function affAction(id, action) {
+        const labels = { approve: 'Odobri', reject: 'Zavrni', suspend: 'Suspendiraj' };
+        if (!confirm('Akcija: ' + (labels[action] ?? action) + '?')) return;
+        try {
+            await API.post('/api/affiliate_admin.php', { action, id });
+            toast('Uspešno.');
+            document.getElementById('aff-detail-modal')?.remove();
+            loadAffiliates();
+        } catch(e) { toast(e.message, 'error'); }
+    }
+    window.affAction = affAction;
+
+    async function grantAffDiscount(id) {
+        const pct    = document.getElementById('ad-disc-pct')?.value;
+        const dur    = document.getElementById('ad-disc-dur')?.value;
+        const months = document.getElementById('ad-disc-months')?.value || null;
+        const errEl  = document.getElementById('ad-error');
+        errEl.style.display = 'none';
+        if (!pct) { errEl.textContent = 'Vnesite % popusta.'; errEl.style.display = 'block'; return; }
+        try {
+            await API.post('/api/affiliate_admin.php', { action: 'grant_discount', id, percent_off: pct, duration: dur, duration_months: months });
+            toast('Popust dodeljen!');
+            document.getElementById('aff-detail-modal')?.remove();
+            loadAffiliates();
+        } catch(e) {
+            errEl.textContent = e.message;
+            errEl.style.display = 'block';
+        }
+    }
+    window.grantAffDiscount = grantAffDiscount;
+
+    async function revokeAffDiscount(id) {
+        if (!confirm('Prekličete popustno kodo tega affiliate partnerja?')) return;
+        try {
+            await API.post('/api/affiliate_admin.php', { action: 'revoke_discount', id });
+            toast('Popust preklican.');
+            document.getElementById('aff-detail-modal')?.remove();
+            loadAffiliates();
+        } catch(e) { toast(e.message, 'error'); }
+    }
+    window.revokeAffDiscount = revokeAffDiscount;
+
+    async function openPayoutBatch() {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.id = 'payout-modal';
+        overlay.innerHTML = `
+        <div class="modal-box" style="max-width:400px">
+            <div class="modal-header">
+                <div class="modal-title">Ustvari serijo izplačil</div>
+                <button class="modal-close" onclick="document.getElementById('payout-modal').remove()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:.85rem;color:var(--color-muted)">Sistem bo zajel vse izplačljive provizije in ustvaril izplačilne zapise. Referenčno številko boste dobili za identifikacijo pri banki.</p>
+                <div class="admin-field" style="margin-top:12px">
+                    <label>Referenca (neobvezno)</label>
+                    <input type="text" id="po-ref" placeholder="npr. AFF-2025-01" style="width:100%;box-sizing:border-box">
+                </div>
+                <div id="po-error" style="display:none;color:#991B1B;font-size:.83rem;margin-top:8px"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="document.getElementById('payout-modal').remove()">Prekliči</button>
+                <button class="btn btn-primary" onclick="confirmPayout()">Ustvari izplačila</button>
+            </div>
+        </div>`;
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    }
+    window.openPayoutBatch = openPayoutBatch;
+
+    async function confirmPayout() {
+        const ref   = document.getElementById('po-ref')?.value.trim() || null;
+        const errEl = document.getElementById('po-error');
+        errEl.style.display = 'none';
+        try {
+            const d = await API.post('/api/affiliate_admin.php', { action: 'create_payout_batch', batch_reference: ref });
+            toast('Izplačila ustvarjena: ' + (d.count ?? 0) + ' partnerjev, skupaj ' + (+d.total_eur).toFixed(2) + ' €');
+            document.getElementById('payout-modal')?.remove();
+            loadAffiliates();
+        } catch(e) {
+            errEl.textContent = e.message;
+            errEl.style.display = 'block';
+        }
+    }
+    window.confirmPayout = confirmPayout;
+
+    function downloadPayoutCsv() {
+        window.open(APP_STATE.base + '/api/affiliate_admin.php?action=payout_csv', '_blank');
+    }
+    window.downloadPayoutCsv = downloadPayoutCsv;
+
+    // ── Kode za popust ────────────────────────────────────────────
+    const DISC_DUR_LABELS = { once: 'Enkrat', repeating: 'N mesecev', forever: 'Za vedno' };
+
+    async function loadDiscCodes() {
+        const tbody = document.getElementById('sa-disc-codes-tbody');
+        try {
+            const d = await API.get('/api/discount_codes.php?action=list');
+            if (!d.items?.length) {
+                tbody.innerHTML = `<tr><td colspan="8" class="table-empty">Ni kod za popust.</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = d.items.map(c => `
+                <tr>
+                    <td><code style="background:#F3F4F6;padding:2px 8px;border-radius:4px;font-weight:700;font-size:.85rem">${h(c.code)}</code></td>
+                    <td>${c.percent_off}%</td>
+                    <td>${DISC_DUR_LABELS[c.duration] ?? c.duration}${c.duration === 'repeating' ? ' (' + c.duration_months + ' mes.)' : ''}</td>
+                    <td style="font-size:.82rem">${c.owner_name ? h(c.owner_name) : '<span style="color:var(--color-muted)">Splošna</span>'}</td>
+                    <td style="text-align:center">${c.redemption_count}</td>
+                    <td><span class="badge ${c.is_active==1 ? 'badge-active' : 'badge-inactive'}">${c.is_active==1 ? 'Aktivna' : 'Neaktivna'}</span></td>
+                    <td>${fmtDate(c.created_at)}</td>
+                    <td>
+                        <button class="btn btn-sm btn-ghost" onclick="viewRedemptions(${c.id}, '${h(c.code)}')">Unovčitve</button>
+                        ${c.is_active==1 ? `<button class="btn btn-sm btn-ghost" style="color:#991B1B;margin-left:4px" onclick="deactivateCode(${c.id}, '${h(c.code)}')">Deaktiviraj</button>` : ''}
+                    </td>
+                </tr>
+            `).join('');
+        } catch(e) { toast(e.message, 'error'); }
+    }
+
+    async function deactivateCode(id, code) {
+        if (!confirm('Deaktivirate kodo ' + code + '?')) return;
+        try {
+            await API.post('/api/discount_codes.php', { action: 'deactivate', id });
+            toast('Koda deaktivirana.');
+            loadDiscCodes();
+        } catch(e) { toast(e.message, 'error'); }
+    }
+    window.deactivateCode = deactivateCode;
+
+    async function viewRedemptions(id, code) {
+        let rows;
+        try { rows = await API.get('/api/discount_codes.php?action=redemptions&id=' + id); }
+        catch(e) { toast(e.message, 'error'); return; }
+
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.id = 'redemptions-modal';
+        overlay.innerHTML = `
+        <div class="modal-box" style="max-width:560px">
+            <div class="modal-header">
+                <div class="modal-title">Unovčitve kode ${h(code)}</div>
+                <button class="modal-close" onclick="document.getElementById('redemptions-modal').remove()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="modal-body">
+                ${!rows.items?.length ? '<p style="color:var(--color-muted)">Ni unovčitev.</p>' : `
+                <div class="admin-table-wrap">
+                    <table class="admin-table">
+                        <thead><tr><th>Datum</th><th>Email</th><th>Popust (€)</th></tr></thead>
+                        <tbody>${rows.items.map(r => `
+                            <tr>
+                                <td>${fmtDate(r.created_at)}</td>
+                                <td>${h(r.user_email)}</td>
+                                <td>${(+r.amount_off_eur).toFixed(2)}</td>
+                            </tr>
+                        `).join('')}</tbody>
+                    </table>
+                </div>`}
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="document.getElementById('redemptions-modal').remove()">Zapri</button>
+            </div>
+        </div>`;
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    }
+    window.viewRedemptions = viewRedemptions;
+
+    function openCreateDiscCode() {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.id = 'create-disc-code-modal';
+        overlay.innerHTML = `
+        <div class="modal-box" style="max-width:420px">
+            <div class="modal-header">
+                <div class="modal-title">Nova koda za popust</div>
+                <button class="modal-close" onclick="document.getElementById('create-disc-code-modal').remove()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+            </div>
+            <div class="modal-body" style="display:flex;flex-direction:column;gap:14px">
+                <div class="admin-field">
+                    <label>Koda (pusti prazno za avtomatsko)</label>
+                    <input type="text" id="dcc-code" placeholder="npr. POLETJE20" style="width:100%;box-sizing:border-box;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()" maxlength="30">
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+                    <div class="admin-field">
+                        <label>Popust (%)</label>
+                        <input type="number" id="dcc-pct" min="1" max="80" step="1" required style="width:100%;box-sizing:border-box" placeholder="npr. 20">
+                    </div>
+                    <div class="admin-field">
+                        <label>Trajanje</label>
+                        <select id="dcc-dur" style="width:100%;box-sizing:border-box" onchange="document.getElementById('dcc-months-row').style.display=this.value==='repeating'?'block':'none'">
+                            <option value="once">Enkrat</option>
+                            <option value="repeating">N mesecev</option>
+                            <option value="forever">Za vedno</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="admin-field" id="dcc-months-row" style="display:none">
+                    <label>Število mesecev</label>
+                    <input type="number" id="dcc-months" min="1" max="24" step="1" style="width:100%;box-sizing:border-box" placeholder="npr. 3">
+                </div>
+                <div class="admin-field">
+                    <label>Ime za opis (neobvezno)</label>
+                    <input type="text" id="dcc-name" placeholder="npr. Poletna akcija" style="width:100%;box-sizing:border-box">
+                </div>
+                <div id="dcc-error" style="display:none;color:#991B1B;font-size:.83rem"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" onclick="document.getElementById('create-disc-code-modal').remove()">Prekliči</button>
+                <button class="btn btn-primary" onclick="submitCreateDiscCode()">Ustvari kodo</button>
+            </div>
+        </div>`;
+        overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+        document.body.appendChild(overlay);
+    }
+    window.openCreateDiscCode = openCreateDiscCode;
+
+    async function submitCreateDiscCode() {
+        const code    = document.getElementById('dcc-code').value.trim().toUpperCase() || null;
+        const pct     = document.getElementById('dcc-pct').value;
+        const dur     = document.getElementById('dcc-dur').value;
+        const months  = document.getElementById('dcc-months').value || null;
+        const name    = document.getElementById('dcc-name').value.trim() || null;
+        const errEl   = document.getElementById('dcc-error');
+        errEl.style.display = 'none';
+        if (!pct) { errEl.textContent = 'Vnesite % popusta.'; errEl.style.display = 'block'; return; }
+        try {
+            const d = await API.post('/api/discount_codes.php', { action: 'create', code, percent_off: pct, duration: dur, duration_months: months, name });
+            toast('Koda ustvarjena: ' + d.code);
+            document.getElementById('create-disc-code-modal')?.remove();
+            loadDiscCodes();
+        } catch(e) {
+            errEl.textContent = e.message;
+            errEl.style.display = 'block';
+        }
+    }
+    window.submitCreateDiscCode = submitCreateDiscCode;
+
+    // Naloži ob kliku na tab
+    document.querySelectorAll('.admin-tab').forEach(tab => {
+        if (tab.dataset.tab === 'sa-affiliate') {
+            tab.addEventListener('click', () => { loadAffiliates(); loadAffSettings(); });
+        }
+        if (tab.dataset.tab === 'sa-disc-codes') {
+            tab.addEventListener('click', loadDiscCodes);
         }
     });
 

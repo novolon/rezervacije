@@ -53,13 +53,15 @@ function validate_discount_code(
     }
 
     return [
-        'valid'          => true,
-        'code_id'        => (int)$dc['id'],
-        'percent_off'    => $dc['percent_off']     ? (float)$dc['percent_off']    : null,
-        'amount_off_eur' => $dc['amount_off_eur']  ? (float)$dc['amount_off_eur'] : null,
-        'duration'       => $dc['duration'],
-        'description'    => $dc['description'] ?? '',
-        'stripe_promo_id'=> $dc['stripe_promo_id'],
+        'valid'           => true,
+        'id'              => (int)$dc['id'],
+        'code_id'         => (int)$dc['id'],
+        'percent_off'     => $dc['percent_off']     ? (float)$dc['percent_off']    : null,
+        'amount_off_eur'  => $dc['amount_off_eur']  ? (float)$dc['amount_off_eur'] : null,
+        'duration'        => $dc['duration'],
+        'duration_months' => $dc['duration_months'] ? (int)$dc['duration_months'] : null,
+        'description'     => $dc['description'] ?? '',
+        'stripe_promo_id' => $dc['stripe_promo_id'],
     ];
 }
 

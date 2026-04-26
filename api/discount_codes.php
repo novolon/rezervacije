@@ -36,11 +36,13 @@ if ($action === 'validate') {
         json_response(false, null, $result['error'], 422);
     }
     json_response(true, [
+        'valid'          => true,
         'code'           => $code,
         'percent_off'    => $result['percent_off'],
-        'amount_off_eur' => $result['amount_off_eur'],
+        'amount_off_eur' => $result['amount_off_eur'] ?? null,
         'duration'       => $result['duration'],
-        'description'    => $result['description'],
+        'duration_months'=> $result['duration_months'] ?? null,
+        'description'    => $result['description'] ?? '',
     ]);
 }
 
@@ -56,14 +58,14 @@ if ($action === 'list') {
     $rows = $pdo->query("
         SELECT dc.*,
                a.full_name AS owner_name,
-               (SELECT COUNT(*) FROM discount_code_redemptions r WHERE r.code_id = dc.id) AS redemptions
+               (SELECT COUNT(*) FROM discount_code_redemptions r WHERE r.code_id = dc.id) AS redemption_count
         FROM discount_codes dc
         LEFT JOIN affiliates a ON a.id = dc.owner_affiliate_id
         {$where}
         ORDER BY dc.created_at DESC
         LIMIT 200
     ")->fetchAll();
-    json_response(true, $rows);
+    json_response(true, ['items' => $rows]);
 }
 
 if ($action === 'create') {
@@ -143,16 +145,16 @@ if ($action === 'deactivate') {
 if ($action === 'redemptions') {
     $id = (int)($_GET['id'] ?? 0);
     if (!$id) json_response(false, null, 'Manjka id.', 400);
-    $rows = $pdo->prepare("
-        SELECT r.*, u.full_name, u.email
+    $stmt = $pdo->prepare("
+        SELECT r.*, u.full_name AS user_name, u.email AS user_email
         FROM discount_code_redemptions r
         JOIN users u ON u.id = r.user_id
         WHERE r.code_id = ?
-        ORDER BY r.redeemed_at DESC
+        ORDER BY r.created_at DESC
         LIMIT 200
     ");
-    $rows->execute([$id]);
-    json_response(true, $rows->fetchAll());
+    $stmt->execute([$id]);
+    json_response(true, ['items' => $stmt->fetchAll()]);
 }
 
 json_response(false, null, 'Neznan action.', 400);
