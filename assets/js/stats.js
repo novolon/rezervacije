@@ -64,10 +64,26 @@ async function loadAll() {
         loadGroupsDist(),
         loadReturning(),
         loadTopCustomers(),
+        loadInsights(),
     ]);
 }
 
 // ─── KPI kartice ─────────────────────────────────────────────────
+function renderDelta(elId, pct, suffix) {
+    suffix = suffix || '%';
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (pct === null || pct === undefined || isNaN(+pct)) { el.innerHTML = ''; return; }
+    pct = +pct;
+    const abs = Math.abs(pct);
+    if (abs < 1) { el.className = 'rz-kpi-delta is-flat'; el.textContent = '→ 0' + suffix; return; }
+    const up = pct > 0;
+    el.className = 'rz-kpi-delta ' + (up ? 'is-up' : 'is-down');
+    const sign = up ? '+' : '';
+    const val  = Number.isInteger(pct) ? pct : pct.toFixed(1);
+    el.textContent = (up ? '▲' : '▼') + ' ' + sign + val + suffix + ' vs. prej';
+}
+
 async function loadOverview() {
     try {
         const d = await fetchStats('overview');
@@ -75,6 +91,9 @@ async function loadOverview() {
         document.getElementById('kpi-guests').textContent  = fmtNum(d.total_guests);
         document.getElementById('kpi-avg').textContent     = d.avg_guests ? d.avg_guests.toLocaleString('sl-SI') : '0';
         document.getElementById('kpi-arrival').textContent = d.arrival_rate ? d.arrival_rate + '%' : '—';
+        renderDelta('kpi-total-delta',   d.delta_reservations,  '%');
+        renderDelta('kpi-guests-delta',  d.delta_guests,        '%');
+        renderDelta('kpi-arrival-delta', d.delta_arrival_rate,  ' pp');
     } catch { /* tiho */ }
 }
 
@@ -386,6 +405,39 @@ document.getElementById('btn-returning-only')?.addEventListener('click', functio
     document.getElementById('btn-all-guests').classList.remove('active');
     loadTopCustomers();
 });
+
+// ─── AI Insights ─────────────────────────────────────────────────
+const INSIGHT_ICONS = {
+    fire:  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2c0 6-6 8-6 13a6 6 0 0 0 12 0c0-5-6-7-6-13Z"/><path d="M12 12c0 3-2 4-2 6a2 2 0 0 0 4 0c0-2-2-3-2-6Z"/></svg>',
+    clock: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>',
+    warn:  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.3 2 19h20L13.7 3.3a2 2 0 0 0-3.4 0Z"/><path d="M12 10v4M12 17v1"/></svg>',
+    up:    '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>',
+    down:  '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7 7 7-7"/></svg>',
+    group: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.2"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5M14 18c0-2 2-4 5-4s5 1.5 5 3"/></svg>',
+};
+const INSIGHT_COLOR = { fire:'var(--accent)', clock:'var(--info)', warn:'var(--warning)', up:'var(--success)', down:'var(--danger)', group:'var(--secondary)' };
+
+async function loadInsights() {
+    const el = document.getElementById('insights-list');
+    if (!el) return;
+    try {
+        const d = await fetchStats('insights');
+        if (!d.insights || !d.insights.length) {
+            el.innerHTML = '<div style="text-align:center;color:var(--ink-mute);padding:24px;font-size:13px">Premalo podatkov za ugotovitve. Preverite pozneje.</div>';
+            return;
+        }
+        el.innerHTML = d.insights.map(i => {
+            const color = INSIGHT_COLOR[i.icon] || 'var(--ink-mute)';
+            const icon  = INSIGHT_ICONS[i.icon] || '';
+            return `<div style="display:flex;align-items:flex-start;gap:10px;background:var(--bg-sunken);border:1px solid var(--line);border-radius:10px;padding:12px 14px">
+                <span style="color:${color};flex-shrink:0;margin-top:1px">${icon}</span>
+                <span style="font-size:13px;color:var(--ink-soft);line-height:1.5">${i.text}</span>
+            </div>`;
+        }).join('');
+    } catch {
+        el.innerHTML = '';
+    }
+}
 
 // ─── Init ────────────────────────────────────────────────────────
 setDays(30);

@@ -73,7 +73,7 @@ $rf = build_rest_filter($pdo, $session, $rest_id);
 
 // ─── Sekcija: overview ─────────────────────────────────────────
 if ($section === 'overview') {
-    $stmt = $pdo->prepare("
+    $overviewSql = "
         SELECT
             COUNT(*) AS total_reservations,
             COALESCE(SUM(guest_count), 0) AS total_guests,
@@ -84,9 +84,29 @@ if ($section === 'overview') {
             SUM(status IN ('rejected','cancelled')) AS rejected_count
         FROM reservations r
         WHERE {$rf['where']} AND r.reservation_date BETWEEN ? AND ?
-    ");
+    ";
+    $stmt = $pdo->prepare($overviewSql);
     $stmt->execute(array_merge($rf['params'], [$from, $to]));
-    json_response(true, $stmt->fetch());
+    $current = $stmt->fetch();
+
+    // Prejšnje enako obdobje za delta primerjavo
+    $periodDays = (int)round((strtotime($to) - strtotime($from)) / 86400) + 1;
+    $prevTo     = date('Y-m-d', strtotime($from) - 86400);
+    $prevFrom   = date('Y-m-d', strtotime($prevTo) - ($periodDays - 1) * 86400);
+    $stmt2 = $pdo->prepare($overviewSql);
+    $stmt2->execute(array_merge($rf['params'], [$prevFrom, $prevTo]));
+    $prev = $stmt2->fetch();
+
+    // Izračunaj delta %
+    $deltaFn = fn($cur, $pre) => $pre > 0 ? round(($cur - $pre) / $pre * 100) : ($cur > 0 ? 100 : 0);
+    $current['prev_total_reservations'] = (int)$prev['total_reservations'];
+    $current['prev_total_guests']       = (int)$prev['total_guests'];
+    $current['prev_arrival_rate']       = (float)($prev['arrival_rate'] ?? 0);
+    $current['delta_reservations']      = $deltaFn((int)$current['total_reservations'], (int)$prev['total_reservations']);
+    $current['delta_guests']            = $deltaFn((int)$current['total_guests'], (int)$prev['total_guests']);
+    $current['delta_arrival_rate']      = round((float)($current['arrival_rate'] ?? 0) - (float)($prev['arrival_rate'] ?? 0), 1);
+
+    json_response(true, $current);
 }
 
 // ─── Sekcija: by_day ──────────────────────────────────────────
@@ -363,6 +383,91 @@ if ($section === 'export') {
     }
     fclose($out);
     exit;
+}
+
+// ─── Sekcija: insights ────────────────────────────────────────
+if ($section === 'insights') {
+    $insights = [];
+    $days7Labels = ['Nedelja','Ponedeljek','Torek','Sreda','Četrtek','Petek','Sobota'];
+
+    // 1) Najprometnjeji dan v tednu (zadnjih 90 dni)
+    $d90from = date('Y-m-d', strtotime('-90 days'));
+    $stmt = $pdo->prepare("
+        SELECT DAYOFWEEK(reservation_date) AS dow, COUNT(*) AS cnt
+        FROM reservations r
+        WHERE {$rf['where']} AND reservation_date >= ? AND status NOT IN ('rejected','cancelled')
+        GROUP BY dow ORDER BY cnt DESC LIMIT 1
+    ");
+    $stmt->execute(array_merge($rf['params'], [$d90from]));
+    $busiest = $stmt->fetch();
+    if ($busiest && $busiest['cnt'] >= 3) {
+        $dayName = $days7Labels[$busiest['dow'] - 1] ?? '';
+        $insights[] = ['icon' => 'fire', 'text' => "{$dayName} je v zadnjih 90 dneh najprometnješi dan ({$busiest['cnt']} rezervacij)."];
+    }
+
+    // 2) Najpogostejša ura rezervacij
+    $stmt = $pdo->prepare("
+        SELECT HOUR(reservation_time) AS h, COUNT(*) AS cnt
+        FROM reservations r
+        WHERE {$rf['where']} AND reservation_date BETWEEN ? AND ? AND status NOT IN ('rejected','cancelled')
+        GROUP BY h ORDER BY cnt DESC LIMIT 1
+    ");
+    $stmt->execute(array_merge($rf['params'], [$from, $to]));
+    $peakHour = $stmt->fetch();
+    if ($peakHour && $peakHour['cnt'] >= 3) {
+        $insights[] = ['icon' => 'clock', 'text' => "Koničasta ura v izbranem obdobju: {$peakHour['h']}:00 ({$peakHour['cnt']} rezervacij)."];
+    }
+
+    // 3) No-show stopnja
+    $stmt = $pdo->prepare("
+        SELECT COUNT(*) AS total,
+               SUM(status = 'no_show') AS no_shows
+        FROM reservations r
+        WHERE {$rf['where']} AND reservation_date BETWEEN ? AND ?
+    ");
+    $stmt->execute(array_merge($rf['params'], [$from, $to]));
+    $nsData = $stmt->fetch();
+    if ($nsData && $nsData['total'] >= 5 && $nsData['no_shows'] > 0) {
+        $pct = round($nsData['no_shows'] / $nsData['total'] * 100);
+        if ($pct >= 5) {
+            $insights[] = ['icon' => 'warn', 'text' => "Stopnja no-show je {$pct}% ({$nsData['no_shows']} od {$nsData['total']} rezervacij). Razmislite o SMS opomniku."];
+        }
+    }
+
+    // 4) Rezervacije se povečujejo / zmanjšujejo
+    $midpoint = date('Y-m-d', (strtotime($from) + strtotime($to)) / 2);
+    $stmt = $pdo->prepare("
+        SELECT
+            SUM(reservation_date < ?) AS first_half,
+            SUM(reservation_date >= ?) AS second_half
+        FROM reservations r
+        WHERE {$rf['where']} AND reservation_date BETWEEN ? AND ? AND status NOT IN ('rejected','cancelled')
+    ");
+    $stmt->execute(array_merge($rf['params'], [$midpoint, $midpoint, $from, $to]));
+    $halves = $stmt->fetch();
+    if ($halves && $halves['first_half'] > 0 && $halves['second_half'] > 0) {
+        $trend = $halves['second_half'] - $halves['first_half'];
+        if (abs($trend) >= 2) {
+            $pct  = round(abs($trend) / max($halves['first_half'], 1) * 100);
+            $dir  = $trend > 0 ? 'naraščajo' : 'padajo';
+            $insights[] = ['icon' => $trend > 0 ? 'up' : 'down', 'text' => "Rezervacije {$dir} – {$pct}% razlika med prvo in drugo polovico obdobja."];
+        }
+    }
+
+    // 5) Najpogostejša velikost skupin
+    $stmt = $pdo->prepare("
+        SELECT guest_count, COUNT(*) AS cnt
+        FROM reservations r
+        WHERE {$rf['where']} AND reservation_date BETWEEN ? AND ? AND status NOT IN ('rejected','cancelled')
+        GROUP BY guest_count ORDER BY cnt DESC LIMIT 1
+    ");
+    $stmt->execute(array_merge($rf['params'], [$from, $to]));
+    $grp = $stmt->fetch();
+    if ($grp && $grp['cnt'] >= 3) {
+        $insights[] = ['icon' => 'group', 'text' => "Najpogostejša skupina ima {$grp['guest_count']} gost(a/ov) ({$grp['cnt']}× v obdobju)."];
+    }
+
+    json_response(true, ['insights' => $insights]);
 }
 
 json_response(false, null, 'Neznana sekcija.', 400);

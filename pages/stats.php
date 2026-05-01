@@ -114,11 +114,13 @@ require_once '../includes/html_head.php';
         <div class="rz-kpi">
             <div class="rz-kpi-label"><?= t('stats.kpi_total') ?></div>
             <div class="rz-kpi-value" id="kpi-total">–</div>
+            <div class="rz-kpi-delta" id="kpi-total-delta"></div>
             <div class="rz-kpi-hint"><?= t('stats.kpi_total_hint') ?></div>
         </div>
         <div class="rz-kpi">
             <div class="rz-kpi-label"><?= t('stats.kpi_guests') ?></div>
             <div class="rz-kpi-value" id="kpi-guests">–</div>
+            <div class="rz-kpi-delta" id="kpi-guests-delta"></div>
             <div class="rz-kpi-hint"><?= t('stats.kpi_guests_hint') ?></div>
         </div>
         <div class="rz-kpi">
@@ -129,6 +131,7 @@ require_once '../includes/html_head.php';
         <div class="rz-kpi">
             <div class="rz-kpi-label"><?= t('stats.kpi_arrival') ?></div>
             <div class="rz-kpi-value" id="kpi-arrival">–</div>
+            <div class="rz-kpi-delta" id="kpi-arrival-delta"></div>
             <div class="rz-kpi-hint"><?= t('stats.kpi_arrival_hint') ?></div>
         </div>
     </div>
@@ -230,6 +233,19 @@ require_once '../includes/html_head.php';
                     <tr><td colspan="7" class="table-empty"><?= t('common.loading') ?></td></tr>
                 </tbody>
             </table>
+        </div>
+    </div>
+
+    <!-- AI Insights -->
+    <div class="rz-card" id="section-insights" style="margin-top:20px">
+        <div class="rz-card-head">
+            <div>
+                <div class="rz-card-eyebrow"><?= t('stats.insights_eyebrow') ?></div>
+                <h2 class="rz-card-title"><?= t('stats.insights_title') ?></h2>
+            </div>
+        </div>
+        <div id="insights-list" style="display:flex;flex-direction:column;gap:10px">
+            <div style="text-align:center;color:var(--ink-mute);padding:24px;font-size:13px"><?= t('common.loading') ?></div>
         </div>
     </div>
 

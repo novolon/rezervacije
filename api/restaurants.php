@@ -308,6 +308,9 @@ if ($method === 'PUT') {
     $allow_area_choice                 = isset($body['allow_area_choice'])                 ? ($body['allow_area_choice'] ? 1 : 0) : null;
     $employees_can_override_schedule   = isset($body['employees_can_override_schedule'])   ? ($body['employees_can_override_schedule'] ? 1 : 0) : null;
 
+    $track_no_shows    = isset($body['track_no_shows'])    ? ($body['track_no_shows'] ? 1 : 0) : null;
+    $no_show_threshold = isset($body['no_show_threshold']) ? max(1, (int)$body['no_show_threshold']) : null;
+
     $sets = []; $params = [];
     if ($name)                               { $sets[] = 'name = ?';                        $params[] = $name; }
     if ($duration)                           { $sets[] = 'reservation_duration = ?';        $params[] = $duration; }
@@ -330,6 +333,8 @@ if ($method === 'PUT') {
     if ($all_tables_mergeable !== null)            { $sets[] = 'all_tables_mergeable = ?';                  $params[] = $all_tables_mergeable; }
     if ($allow_area_choice !== null)               { $sets[] = 'allow_area_choice = ?';                     $params[] = $allow_area_choice; }
     if ($employees_can_override_schedule !== null) { $sets[] = 'employees_can_override_schedule = ?';        $params[] = $employees_can_override_schedule; }
+    if ($track_no_shows !== null)                  { $sets[] = 'track_no_shows = ?';                        $params[] = $track_no_shows; }
+    if ($no_show_threshold !== null)               { $sets[] = 'no_show_threshold = ?';                     $params[] = $no_show_threshold; }
 
     try {
         // Day schedules

@@ -415,6 +415,73 @@ if ($method === 'POST' && ($_GET['action'] ?? '') === 'mark_arrived') {
     json_response(true, ['arrived_at' => $arrivedAt, 'survey_scheduled' => $surveyCreated]);
 }
 
+// ─── POST mark_no_show ────────────────────────────────────────
+if ($method === 'POST' && ($_GET['action'] ?? '') === 'mark_no_show') {
+    $id = isset($_GET['id']) ? (int)$_GET['id'] : 0;
+    if (!$id) json_response(false, null, 'ID ni določen.', 400);
+
+    $stmt = $pdo->prepare("SELECT r.*, res.track_no_shows, res.no_show_threshold FROM reservations r JOIN restaurants res ON r.restaurant_id = res.id WHERE r.id = ?");
+    $stmt->execute([$id]);
+    $res = $stmt->fetch();
+    if (!$res) json_response(false, null, 'Rezervacija ne obstaja.', 404);
+
+    if ($session['role'] === 'user' && (int)$session['restaurant_id'] !== (int)$res['restaurant_id'])
+        json_response(false, null, 'Dostop zavrnjen.', 403);
+    if ($session['role'] === 'admin' && !admin_owns_restaurant($pdo, $session, (int)$res['restaurant_id']))
+        json_response(false, null, 'Dostop zavrnjen.', 403);
+
+    $body = json_decode(file_get_contents('php://input'), true) ?? [];
+    $undo = !empty($body['undo']);
+
+    if ($undo) {
+        $pdo->prepare("UPDATE reservations SET no_show_at = NULL, status = 'confirmed' WHERE id = ? AND status = 'no_show'")->execute([$id]);
+        // Zmanjšaj no_shows na gostem
+        if ($res['email'] || $res['phone']) {
+            $where = $res['email'] ? 'email = ?' : 'phone = ?';
+            $val   = $res['email'] ? strtolower($res['email']) : $res['phone'];
+            $pdo->prepare("UPDATE guests SET no_shows = GREATEST(0, no_shows - 1) WHERE restaurant_id = ? AND {$where}")->execute([(int)$res['restaurant_id'], $val]);
+        }
+        json_response(true, ['no_show_at' => null]);
+    }
+
+    $pdo->prepare("UPDATE reservations SET no_show_at = NOW(), status = 'no_show' WHERE id = ?")->execute([$id]);
+    $noShowAt = date('Y-m-d H:i:s');
+
+    // Posodobi profil gosta
+    $guestEmail = strtolower(trim($res['guest_email'] ?? $res['email'] ?? ''));
+    $guestPhone = trim($res['phone'] ?? '');
+    if ($guestEmail || $guestPhone) {
+        upsert_guest($pdo, (int)$res['restaurant_id'], $guestEmail, [
+            'guest_name'       => $res['guest_name'],
+            'phone'            => $guestPhone,
+            'reservation_date' => $res['reservation_date'],
+            'guest_count'      => (int)$res['guest_count'],
+            'no_show'          => true,
+        ]);
+
+        // Preverimo ali je gost presegel prag (samo ko je sledenje vklopljeno)
+        $newlyBlocked = false;
+        if (!empty($res['track_no_shows'])) {
+            $threshold = max(1, (int)$res['no_show_threshold']);
+            $guestWhere = $guestEmail ? 'email = ?' : 'phone = ?';
+            $guestVal   = $guestEmail ?: normalize_phone($guestPhone);
+            if ($guestVal) {
+                $gRow = $pdo->prepare("SELECT id, no_shows, is_blacklisted FROM guests WHERE restaurant_id = ? AND {$guestWhere}");
+                $gRow->execute([(int)$res['restaurant_id'], $guestVal]);
+                $guest = $gRow->fetch();
+                if ($guest && (int)$guest['no_shows'] >= $threshold && !$guest['is_blacklisted']) {
+                    $pdo->prepare("UPDATE guests SET is_blacklisted = 1, block_reason = ?, blocked_at = NOW() WHERE id = ?")
+                        ->execute(["Samodejno: {$guest['no_shows']} no-show(s)", (int)$guest['id']]);
+                    $newlyBlocked = true;
+                }
+            }
+        }
+        json_response(true, ['no_show_at' => $noShowAt, 'newly_blocked' => $newlyBlocked]);
+    }
+
+    json_response(true, ['no_show_at' => $noShowAt, 'newly_blocked' => false]);
+}
+
 // ─── POST (ustvari) ────────────────────────────────────────────
 if ($method === 'POST') {
     $body = get_body();

@@ -424,6 +424,7 @@
 .rz-chip-status-pending   { background: color-mix(in oklab, var(--danger) 10%, transparent);  color: var(--danger);  border-color: transparent; }
 .rz-chip-status-arrived   { background: color-mix(in oklab, var(--accent) 15%, transparent);  color: var(--accent);  border-color: transparent; }
 .rz-chip-status-cancelled { color: var(--ink-mute); }
+.rz-chip-status-no_show   { background: color-mix(in oklab, var(--danger) 10%, transparent); color: var(--danger); border-color: transparent; }
 .rz-chip-status-past      { color: var(--ink-mute); }
 
 /* =============================================

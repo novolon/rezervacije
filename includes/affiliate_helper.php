@@ -127,6 +127,18 @@ function attach_affiliate_on_signup(
             if ($aff) $attribution = 'code';
         }
 
+        // 3) Fallback: ?ref= URL param → direktno po ref_code
+        if (!$aff) {
+            $refFromUrl = strtoupper(trim($_GET['ref'] ?? ''));
+            if ($refFromUrl && preg_match('/^[A-Z2-9]{8}$/', $refFromUrl)) {
+                $aff = affiliate_get_by_code($pdo, $refFromUrl);
+                if ($aff) {
+                    $attribution = 'url';
+                    $payload     = ['code' => $refFromUrl, 'landing' => $_SERVER['REQUEST_URI'] ?? ''];
+                }
+            }
+        }
+
         if (!$aff) return;
 
         // Anti-self-referral

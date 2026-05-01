@@ -618,6 +618,55 @@ function send_affiliate_payout_email(string $toEmail, string $name, float $amoun
     return send_email($toEmail, 'Affiliate izplačilo – ' . $reference, $html);
 }
 
+/**
+ * Potrditveni email ob spremembi/aktivaciji paketa.
+ */
+function send_plan_changed_email(
+    string $to,
+    string $name,
+    string $planName,
+    string $billingCycle,
+    float  $price
+): bool {
+    $appName     = APP_NAME;
+    $billingUrl  = APP_URL . BASE_PATH . '/pages/billing.php';
+    $cycleLabel  = $billingCycle === 'yearly' ? 'letno' : 'mesečno';
+    $priceStr    = $price > 0
+        ? number_format($price, 2, ',', '.') . ' €/' . ($billingCycle === 'yearly' ? 'leto' : 'mesec')
+        : 'brezplačno';
+    $escapedName = htmlspecialchars($name, ENT_QUOTES);
+
+    $priceRow = $price > 0
+        ? "<tr style='border-top:1px solid #E5E7EB'><td style='padding:12px 16px;color:#6B7280;font-size:.875rem'>Cena:</td>
+               <td style='padding:12px 16px;font-weight:700;font-size:1.05rem;color:#111827'>{$priceStr}</td></tr>"
+        : '';
+
+    $body = "
+        <h2 style='margin:0 0 6px;font-size:1.15rem;color:#111827'>Naročnina posodobljena</h2>
+        <p style='margin:0 0 20px;font-size:.875rem;color:#6B7280'>Vaš paket je bil uspešno spremenjen.</p>
+        <p style='margin:0 0 16px;font-size:.875rem;color:#374151'>Pozdravljeni, <strong>{$escapedName}</strong>!</p>
+        <table style='width:100%;border-collapse:collapse;margin-bottom:24px;background:#F9FAFB;border-radius:8px'>
+            <tr><td style='padding:12px 16px;color:#6B7280;font-size:.875rem;width:130px'>Paket:</td>
+                <td style='padding:12px 16px;font-weight:600;color:#111827'>{$planName}</td></tr>
+            <tr style='border-top:1px solid #E5E7EB'><td style='padding:12px 16px;color:#6B7280;font-size:.875rem'>Plačilo:</td>
+                <td style='padding:12px 16px;font-weight:600;color:#111827'>{$cycleLabel}</td></tr>
+            {$priceRow}
+        </table>
+        <p style='margin:0 0 20px;font-size:.875rem;color:#374151'>
+            Račun za naročnino je na voljo v vašem računu pod <em>Naročnine &amp; Računi</em>.
+        </p>
+        <a href='{$billingUrl}' style='display:inline-block;background:#F59E0B;color:#fff;padding:11px 24px;border-radius:8px;text-decoration:none;font-weight:600;font-size:.9rem;margin-bottom:20px'>Odpri naročnine in račune →</a>
+        <p style='margin:0;font-size:.8rem;color:#9CA3AF'>Hvala za zaupanje!</p>
+    ";
+
+    $html = email_wrap($appName, $body, $appName . ' · Potrditev spremembe paketa');
+    $text  = "Naročnina posodobljena\n\nPaket: {$planName}\nPlačilo: {$cycleLabel}"
+           . ($price > 0 ? "\nCena: {$priceStr}" : '')
+           . "\n\nRačun si oglejte v vašem računu:\n{$billingUrl}";
+
+    return send_email($to, 'Naročnina posodobljena – ' . $appName, $html, $text);
+}
+
 function send_affiliate_discount_granted_email(string $toEmail, string $name, string $code, float $percent): bool {
     $appName  = APP_NAME;
     $dashLink = APP_URL . BASE_PATH . '/affiliate/dashboard.php';

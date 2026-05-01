@@ -449,19 +449,23 @@ const Schedule = (() => {
         const stateCls =
           r.status === "arrived"
             ? "rz-chip-arrived"
-            : r.status === "confirmed"
-              ? "rz-chip-confirmed"
-              : r.status === "pending"
-                ? "rz-chip-pending"
-                : "rz-chip-past";
+            : r.status === "no_show"
+              ? "rz-chip-danger"
+              : r.status === "confirmed"
+                ? "rz-chip-confirmed"
+                : r.status === "pending"
+                  ? "rz-chip-pending"
+                  : "rz-chip-past";
         const stateLabel =
           r.status === "arrived"
             ? "PRIŠLI"
-            : r.status === "confirmed"
-              ? "POTRJENO"
-              : r.status === "pending"
-                ? "ČAKA"
-                : "KONČANO";
+            : r.status === "no_show"
+              ? "NI PRIŠEL"
+              : r.status === "confirmed"
+                ? "POTRJENO"
+                : r.status === "pending"
+                  ? "ČAKA"
+                  : "KONČANO";
         const tables =
           Array.isArray(r.table_assignments) && r.table_assignments.length
             ? r.table_assignments

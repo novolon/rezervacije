@@ -136,11 +136,12 @@ $pendingCount = (int) $stmt->fetchColumn();
 <!-- APP_STATE (minimalen) -->
 <script>
 window.APP_STATE = <?= json_encode([
-    'userId'      => (int) $_SESSION['user_id'],
-    'role'        => $_SESSION['role'],
+    'userId'    => (int) $_SESSION['user_id'],
+    'role'      => $_SESSION['role'],
+    'planSlug'  => $_SESSION['plan_slug'] ?? 'basic',
     'restaurants' => [],
-    'today'       => date('Y-m-d'),
-    'base'        => BASE_PATH,
+    'today'     => date('Y-m-d'),
+    'base'      => BASE_PATH,
 ], JSON_UNESCAPED_UNICODE) ?>;
 </script>
 

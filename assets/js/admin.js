@@ -303,6 +303,26 @@
                     </div>
 
                     ${rest ? `
+                    <!-- No-show sledenje -->
+                    <div style="border-top:1px solid #E5E7EB;margin:14px 0 10px;padding-top:12px">
+                        <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6B7280;margin-bottom:8px">No-show sledenje</div>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px">
+                            <input type="checkbox" id="r-track-no-shows"
+                                style="width:16px;height:16px;accent-color:#DC2626;cursor:pointer;flex-shrink:0"
+                                ${(rest?.track_no_shows ?? 1) == 1 ? 'checked' : ''}
+                                onchange="document.getElementById('r-no-show-settings').style.display=this.checked?'':'none'">
+                            <span style="font-size:.875rem;font-weight:500;color:#374151">Sledenje no-showov</span>
+                        </label>
+                        <div id="r-no-show-settings" style="display:${(rest?.track_no_shows ?? 1) == 1 ? '' : 'none'}">
+                            <div class="admin-field">
+                                <label>Prag za blokado <span style="font-size:.75rem;color:#9CA3AF;font-weight:400">(število no-showov)</span></label>
+                                <input id="r-no-show-threshold" type="number" min="1" max="99"
+                                    value="${rest?.no_show_threshold ?? 3}"
+                                    style="max-width:80px">
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Zaposleni -->
                     <div style="border-top:1px solid #E5E7EB;margin:14px 0 10px;padding-top:12px">
                         <div style="font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#6B7280;margin-bottom:8px">Zaposleni</div>
@@ -345,14 +365,14 @@
                                         style="width:100%;border:1px solid #E5E7EB;border-radius:6px;padding:7px 10px;font-size:.8rem;font-family:inherit;resize:vertical"></textarea>
                                 </div>
                                 <div class="admin-field-row" style="margin:0">
-                                    <div class="admin-field" style="margin:0">
+                                    ${APP_STATE.planSlug !== 'basic' ? `<div class="admin-field" style="margin:0">
                                         <label>Velja za</label>
                                         <select id="cf-applies">
                                             <option value="both">Interno + Splet</option>
                                             <option value="internal">Samo interno</option>
                                             <option value="public">Samo splet</option>
                                         </select>
-                                    </div>
+                                    </div>` : ''}
                                     <div class="admin-field" style="margin:0;justify-content:flex-end;padding-top:18px">
                                         <label style="display:flex;align-items:center;gap:7px;cursor:pointer;font-weight:500;font-size:.875rem">
                                             <input type="checkbox" id="cf-required" style="width:15px;height:15px;accent-color:#F59E0B;cursor:pointer">
@@ -404,6 +424,8 @@
             const bookingAutoConfirm  = document.getElementById('r-auto-confirm')?.checked ? 1 : 0;
             const bookingMinGuests    = parseInt(document.getElementById('r-min-guests')?.value || '2');
             const bookingMaxGuests    = parseInt(document.getElementById('r-max-guests')?.value || '10');
+            const trackNoShows    = document.getElementById('r-track-no-shows')?.checked ? 1 : 0;
+            const noShowThreshold = parseInt(document.getElementById('r-no-show-threshold')?.value || '3');
             const daySchedules   = getDaySchedules();
             const errEl          = document.getElementById('admin-rest-error');
 
@@ -428,6 +450,8 @@
                 booking_auto_confirm: bookingAutoConfirm,
                 booking_min_guests: bookingMinGuests,
                 booking_max_guests: bookingMaxGuests,
+                track_no_shows: trackNoShows,
+                no_show_threshold: noShowThreshold,
             };
 
             const saveBtn = document.getElementById('admin-rest-save');
@@ -500,33 +524,132 @@
     const TYPE_LABELS    = { text: 'Besedilo', select: 'Izbira', checkbox: 'Da/Ne' };
 
     const AdminCustomFields = {
+        _fields: [],   // lokalna kopija za reorder
+        _restId: null,
+
         toggleOptions: (type) => {
             const wrap = document.getElementById('cf-options-wrap');
             if (wrap) wrap.style.display = type === 'select' ? '' : 'none';
         },
+
         load: async (restId) => {
+            AdminCustomFields._restId = restId;
             const el = document.getElementById('cf-list');
             if (!el) return;
             try {
                 const fields = await API.get(`/api/customfields.php?restaurant_id=${restId}`) || [];
+                AdminCustomFields._fields = fields;
                 el.innerHTML = fields.length
-                    ? fields.map(f => AdminCustomFields._row(f)).join('')
+                    ? fields.map((f, i) => AdminCustomFields._row(f, i, fields.length)).join('')
                     : '<p style="font-size:.825rem;color:#9CA3AF;padding:2px 0">Ni polj po meri.</p>';
             } catch (e) { if (el) el.innerHTML = '<p style="font-size:.825rem;color:#EF4444">Napaka pri nalaganju.</p>'; }
         },
-        _row: (f) => `
-            <div id="cf-row-${f.id}" style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:#FFF7ED;border-radius:6px;margin-bottom:5px;font-size:.825rem;flex-wrap:wrap">
-                <span style="font-weight:600;color:#374151;flex:1">${h(f.label)}</span>
-                <span style="background:#E5E7EB;color:#374151;border-radius:4px;padding:1px 7px;font-size:.72rem">${h(TYPE_LABELS[f.field_type] || f.field_type)}</span>
-                <span style="background:#DBEAFE;color:#1D4ED8;border-radius:4px;padding:1px 7px;font-size:.72rem">${h(APPLIES_LABELS[f.applies_to] || f.applies_to)}</span>
-                ${f.is_required ? '<span style="background:#FEE2E2;color:#DC2626;border-radius:4px;padding:1px 7px;font-size:.72rem">Obvezno</span>' : ''}
-                <button type="button" title="Izbriši" style="color:#EF4444;background:none;border:none;cursor:pointer;font-size:1.1rem;line-height:1;padding:0 2px"
+
+        _row: (f, idx, total) => `
+            <div id="cf-row-${f.id}" style="display:flex;align-items:center;gap:6px;padding:7px 10px;background:#FFF7ED;border-radius:6px;margin-bottom:5px;font-size:.825rem">
+                <div style="display:flex;flex-direction:column;gap:1px;flex-shrink:0">
+                    <button type="button" title="Gor" ${idx === 0 ? 'disabled' : ''} style="line-height:1;padding:1px 3px;font-size:.65rem;color:${idx===0?'#D1D5DB':'#6B7280'};cursor:${idx===0?'default':'pointer'}"
+                        onclick="AdminCustomFields.move(${f.id},-1)">▲</button>
+                    <button type="button" title="Dol" ${idx === total-1 ? 'disabled' : ''} style="line-height:1;padding:1px 3px;font-size:.65rem;color:${idx===total-1?'#D1D5DB':'#6B7280'};cursor:${idx===total-1?'default':'pointer'}"
+                        onclick="AdminCustomFields.move(${f.id},1)">▼</button>
+                </div>
+                <span style="font-weight:600;color:#374151;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${h(f.label)}</span>
+                <span style="background:#E5E7EB;color:#374151;border-radius:4px;padding:1px 7px;font-size:.72rem;flex-shrink:0">${h(TYPE_LABELS[f.field_type] || f.field_type)}</span>
+                <span style="background:#DBEAFE;color:#1D4ED8;border-radius:4px;padding:1px 7px;font-size:.72rem;flex-shrink:0">${h(APPLIES_LABELS[f.applies_to] || f.applies_to)}</span>
+                ${f.is_required ? '<span style="background:#FEE2E2;color:#DC2626;border-radius:4px;padding:1px 7px;font-size:.72rem;flex-shrink:0">Obvezno</span>' : ''}
+                <button type="button" title="Uredi" style="color:#F59E0B;font-size:.75rem;font-weight:600;padding:2px 6px;border:1px solid #FDE68A;border-radius:4px;flex-shrink:0"
+                    onclick="AdminCustomFields.startEdit(${f.id})">Uredi</button>
+                <button type="button" title="Izbriši" style="color:#EF4444;font-size:1.1rem;line-height:1;padding:0 4px;flex-shrink:0"
                     onclick="AdminCustomFields.remove(${f.id})">×</button>
             </div>`,
+
+        startEdit: (id) => {
+            const f = AdminCustomFields._fields.find(x => x.id === id);
+            if (!f) return;
+            const row = document.getElementById(`cf-row-${id}`);
+            if (!row) return;
+            const hasPublic = APP_STATE.planSlug !== 'basic';
+            const optsTxt = Array.isArray(f.options) ? f.options.join('\n') : '';
+            row.outerHTML = `
+            <div id="cf-edit-${id}" style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:10px 12px;margin-bottom:5px">
+                <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+                    <div style="flex:1;min-width:140px">
+                        <label style="font-size:.72rem;font-weight:600;color:#6B7280;display:block;margin-bottom:3px">Oznaka</label>
+                        <input type="text" id="cf-edit-label-${id}" value="${h(f.label)}" style="width:100%;border:1px solid #E5E7EB;border-radius:6px;padding:5px 8px;font-size:.8rem">
+                    </div>
+                    <div style="min-width:110px">
+                        <label style="font-size:.72rem;font-weight:600;color:#6B7280;display:block;margin-bottom:3px">Tip</label>
+                        <select id="cf-edit-type-${id}" style="width:100%;border:1px solid #E5E7EB;border-radius:6px;padding:5px 8px;font-size:.8rem" onchange="document.getElementById('cf-edit-opts-${id}').style.display=this.value==='select'?'':'none'">
+                            <option value="text" ${f.field_type==='text'?'selected':''}>Besedilo</option>
+                            <option value="select" ${f.field_type==='select'?'selected':''}>Izbira</option>
+                            <option value="checkbox" ${f.field_type==='checkbox'?'selected':''}>Da/Ne</option>
+                        </select>
+                    </div>
+                    ${hasPublic ? `<div style="min-width:130px">
+                        <label style="font-size:.72rem;font-weight:600;color:#6B7280;display:block;margin-bottom:3px">Velja za</label>
+                        <select id="cf-edit-applies-${id}" style="width:100%;border:1px solid #E5E7EB;border-radius:6px;padding:5px 8px;font-size:.8rem">
+                            <option value="both" ${f.applies_to==='both'?'selected':''}>Interno + Splet</option>
+                            <option value="internal" ${f.applies_to==='internal'?'selected':''}>Samo interno</option>
+                            <option value="public" ${f.applies_to==='public'?'selected':''}>Samo splet</option>
+                        </select>
+                    </div>` : ''}
+                    <div style="display:flex;align-items:flex-end;padding-bottom:2px">
+                        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:.8rem;font-weight:500">
+                            <input type="checkbox" id="cf-edit-req-${id}" ${f.is_required?'checked':''} style="width:14px;height:14px;accent-color:#F59E0B">Obvezno
+                        </label>
+                    </div>
+                </div>
+                <div id="cf-edit-opts-${id}" style="display:${f.field_type==='select'?'':'none'};margin-bottom:8px">
+                    <label style="font-size:.72rem;font-weight:600;color:#6B7280;display:block;margin-bottom:3px">Možnosti (ena na vrstico)</label>
+                    <textarea id="cf-edit-options-${id}" rows="3" style="width:100%;border:1px solid #E5E7EB;border-radius:6px;padding:6px 8px;font-size:.78rem;font-family:inherit;resize:vertical">${h(optsTxt)}</textarea>
+                </div>
+                <div style="display:flex;gap:6px;justify-content:flex-end">
+                    <button type="button" onclick="AdminCustomFields.load(AdminCustomFields._restId)" style="font-size:.78rem;padding:4px 12px;border:1px solid #E5E7EB;border-radius:6px;color:#6B7280;cursor:pointer">Prekliči</button>
+                    <button type="button" onclick="AdminCustomFields.saveEdit(${id})" style="font-size:.78rem;padding:4px 12px;border:1px solid #F59E0B;border-radius:6px;background:#FEF3C7;color:#92400E;font-weight:600;cursor:pointer">Shrani</button>
+                </div>
+            </div>`;
+        },
+
+        saveEdit: async (id) => {
+            const label   = document.getElementById(`cf-edit-label-${id}`)?.value.trim();
+            const type    = document.getElementById(`cf-edit-type-${id}`)?.value;
+            const applies = document.getElementById(`cf-edit-applies-${id}`)?.value ?? 'internal';
+            const req     = document.getElementById(`cf-edit-req-${id}`)?.checked ? 1 : 0;
+            const optsTxt = document.getElementById(`cf-edit-options-${id}`)?.value || '';
+            if (!label) { toast('Oznaka je obvezna.', 'error'); return; }
+            const options = type === 'select'
+                ? optsTxt.split('\n').map(s => s.trim()).filter(Boolean)
+                : [];
+            try {
+                await API.put(`/api/customfields.php?id=${id}`, { label, field_type: type, applies_to: applies, is_required: req, options });
+                await AdminCustomFields.load(AdminCustomFields._restId);
+                toast('Polje posodobljeno!');
+            } catch (e) { toast(e.message, 'error'); }
+        },
+
+        move: async (id, dir) => {
+            const fields = AdminCustomFields._fields;
+            const idx = fields.findIndex(f => f.id === id);
+            if (idx < 0) return;
+            const swapIdx = idx + dir;
+            if (swapIdx < 0 || swapIdx >= fields.length) return;
+            // Zamenjaj sort_order med sosedoma
+            const a = fields[idx], b = fields[swapIdx];
+            const aOrder = a.sort_order ?? idx;
+            const bOrder = b.sort_order ?? swapIdx;
+            try {
+                await Promise.all([
+                    API.put(`/api/customfields.php?id=${a.id}`, { sort_order: bOrder }),
+                    API.put(`/api/customfields.php?id=${b.id}`, { sort_order: aOrder }),
+                ]);
+                await AdminCustomFields.load(AdminCustomFields._restId);
+            } catch (e) { toast(e.message, 'error'); }
+        },
+
         add: async (restId) => {
             const label    = document.getElementById('cf-label')?.value.trim();
             const type     = document.getElementById('cf-type')?.value;
-            const applies  = document.getElementById('cf-applies')?.value;
+            const applies  = document.getElementById('cf-applies')?.value ?? 'internal';
             const required = document.getElementById('cf-required')?.checked ? 1 : 0;
             const optsTxt  = document.getElementById('cf-options')?.value || '';
 
@@ -540,12 +663,12 @@
             }
 
             try {
+                const newOrder = AdminCustomFields._fields.length;
                 await API.post('/api/customfields.php', {
                     restaurant_id: restId,
                     label, field_type: type, applies_to: applies,
-                    is_required: required, options,
+                    is_required: required, options, sort_order: newOrder,
                 });
-                // Počisti formo
                 ['cf-label','cf-options'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
                 const cfRequired = document.getElementById('cf-required');
                 if (cfRequired) cfRequired.checked = false;
@@ -553,11 +676,12 @@
                 toast('Polje dodano!');
             } catch (e) { toast(e.message, 'error'); }
         },
+
         remove: async (id) => {
             if (!confirm('Izbrišete polje po meri? Obstoječe vrednosti v rezervacijah se ohranijo.')) return;
             try {
                 await API.delete(`/api/customfields.php?id=${id}`);
-                document.getElementById(`cf-row-${id}`)?.remove();
+                await AdminCustomFields.load(AdminCustomFields._restId);
                 toast('Polje odstranjeno.');
             } catch (e) { toast(e.message, 'error'); }
         },

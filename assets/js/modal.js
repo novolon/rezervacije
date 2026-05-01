@@ -152,6 +152,20 @@ const ReservationModal = (() => {
 
       footer.appendChild(delBtn);
 
+      // ── Ni prišel (no-show) ──
+      if (data.status === "confirmed" || data.status === "no_show") {
+        const isNoShow = data.status === "no_show" || !!data.no_show_at;
+        const noShowBtn = document.createElement("button");
+        noShowBtn.className = "btn btn-ghost";
+        noShowBtn.id = "btn-no-show";
+        noShowBtn.style.cssText = isNoShow
+          ? "color:#DC2626;border-color:#FECACA;background:#FEF2F2"
+          : "color:#6B7280";
+        noShowBtn.textContent = isNoShow ? "Ni prišel ✗" : "Ni prišel";
+        noShowBtn.addEventListener("click", () => handleMarkNoShow(data, noShowBtn, box));
+        footer.appendChild(noShowBtn);
+      }
+
       // ── Gost je prišel + Pošlji anketo (samo za potrjene z emailom) ──
       if (APP_STATE.hasSurvey && data.email && (data.status === "confirmed" || data.status === "arrived")) {
         const arrivedBtn = document.createElement("button");
@@ -299,6 +313,7 @@ const ReservationModal = (() => {
       confirmed: "Potrjena",
       pending: "Čakajoča",
       arrived: "Prišel",
+      no_show: "Ni prišel",
       cancelled: "Preklicana",
     };
     const rawStatus =
@@ -406,6 +421,21 @@ const ReservationModal = (() => {
       editBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="m18.5 2.5 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg> Uredi`;
       editBtn.addEventListener("click", () => open("edit", data));
       actions.appendChild(editBtn);
+
+      if (data.status === "confirmed" || data.status === "no_show") {
+        const isNoShow = data.status === "no_show" || !!data.no_show_at;
+        const drNoShowBtn = document.createElement("button");
+        drNoShowBtn.className = "rz-btn";
+        drNoShowBtn.id = "drawer-no-show-btn";
+        if (isNoShow) {
+          drNoShowBtn.style.cssText = "color:var(--danger);border-color:var(--danger);background:color-mix(in oklab,var(--danger) 10%,transparent)";
+          drNoShowBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg> Ni prišel`;
+        } else {
+          drNoShowBtn.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6 6 18M6 6l12 12"/></svg> Ni prišel`;
+        }
+        drNoShowBtn.addEventListener("click", () => handleMarkNoShow(data, drNoShowBtn, drawer));
+        actions.appendChild(drNoShowBtn);
+      }
 
       if (APP_STATE.hasSurvey && data.email && (data.status === "confirmed" || data.status === "arrived")) {
         const isArrived = !!data.arrived_at || data.status === "arrived";
@@ -1467,6 +1497,32 @@ const ReservationModal = (() => {
           "success",
         );
       // Osveži footer – znova odpri view modal
+      open("view", data);
+    } catch (e) {
+      btn.disabled = false;
+      if (window.App) App.showToast(e.message || "Napaka.", "error");
+    }
+  }
+
+  // ── Mark no-show ──────────────────────────────────────────────
+  async function handleMarkNoShow(data, btn, box) {
+    const isNoShow = data.status === "no_show" || !!data.no_show_at;
+    if (isNoShow) {
+      if (!confirm("Razveljaviti oznako »ni prišel«?")) return;
+    }
+    btn.disabled = true;
+    try {
+      const res = await API.post(
+        `/api/reservations.php?action=mark_no_show&id=${data.id}`,
+        { undo: isNoShow },
+      );
+      data.no_show_at = res.no_show_at || null;
+      data.status = isNoShow ? "confirmed" : "no_show";
+      if (res.newly_blocked && window.App) {
+        App.showToast("Gost označen kot ni prišel in blokiran.", "error");
+      } else if (window.App) {
+        App.showToast(isNoShow ? "Oznaka razveljavljena." : "Gost označen kot ni prišel.", "success");
+      }
       open("view", data);
     } catch (e) {
       btn.disabled = false;

@@ -644,6 +644,7 @@
 .rz-chip-confirmed { background: color-mix(in oklab, var(--success) 10%, transparent); color: var(--success); border-color: transparent; }
 .rz-chip-pending { background: color-mix(in oklab, var(--danger) 10%, transparent); color: var(--danger); border-color: transparent; }
 .rz-chip-arrived { background: color-mix(in oklab, var(--accent) 15%, transparent); color: var(--accent); border-color: transparent; }
+.rz-chip-danger { background: color-mix(in oklab, var(--danger) 15%, transparent); color: var(--danger); border-color: transparent; font-weight: 700; }
 .rz-chip-past { color: var(--ink-mute); }
 .rz-chip-ok { background: color-mix(in oklab, var(--success) 12%, transparent); color: var(--success); border-color: transparent; }
 .rz-chip-mute { color: var(--ink-mute); }

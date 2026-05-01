@@ -378,6 +378,25 @@ if ($method === 'POST') {
         json_response(false, null, "Število gostov mora biti med 1 in {$maxGuests}.", 400);
     }
 
+    // Blokiran gost?
+    if (!empty($rest['track_no_shows'])) {
+        $normPhone = normalize_phone($phone);
+        $blockedGuest = null;
+        if ($email) {
+            $bStmt = $pdo->prepare("SELECT is_blacklisted FROM guests WHERE restaurant_id = ? AND email = ? LIMIT 1");
+            $bStmt->execute([(int)$rest['id'], strtolower($email)]);
+            $blockedGuest = $bStmt->fetch();
+        }
+        if (!$blockedGuest && $normPhone) {
+            $bStmt = $pdo->prepare("SELECT is_blacklisted FROM guests WHERE restaurant_id = ? AND phone = ? LIMIT 1");
+            $bStmt->execute([(int)$rest['id'], $normPhone]);
+            $blockedGuest = $bStmt->fetch();
+        }
+        if ($blockedGuest && !empty($blockedGuest['is_blacklisted'])) {
+            json_response(false, null, 'Rezervacija ni mogoča. Prosimo kontaktirajte restavracijo.', 403);
+        }
+    }
+
     // Blokiran datum? (cel dan → zavrni, delno → preverimo čas spodaj)
     $blackout = get_blackout($pdo, (int)$rest['id'], $date);
     if ($blackout !== false && $blackout['full']) {

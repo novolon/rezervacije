@@ -3,6 +3,8 @@ require_once '../includes/auth_check.php';
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/plans.php';
+require_once '../includes/stripe_helper.php';
+require_once '../includes/racunhub.php';
 require_once '../includes/lang.php';
 
 if (!is_logged_in()) redirect_to_login();
@@ -11,6 +13,120 @@ if ($_SESSION['role'] !== 'admin') {
 }
 
 $pdo = getDB();
+
+// ── Verificiraj Stripe checkout session in aktiviraj naročnino ──
+$sessionId = trim($_GET['session_id'] ?? '');
+if ($sessionId) {
+    try {
+        $cs           = stripe_request('GET', "/checkout/sessions/{$sessionId}");
+        $csStatus     = $cs['status']         ?? '';
+        $subId        = $cs['subscription']   ?? null;
+        $meta         = $cs['metadata']       ?? [];
+        $userId       = (int)($meta['user_id']       ?? 0);
+        $planSlug     = $meta['plan_slug']     ?? 'basic';
+        $billingCycle = $meta['billing_cycle'] ?? 'monthly';
+
+        if ($csStatus === 'complete' && $userId && $subId) {
+
+            // Preveri ali webhook ni že aktiviral naročnine
+            $activeStmt = $pdo->prepare("SELECT id FROM subscriptions WHERE stripe_subscription_id = ? AND status = 'active' LIMIT 1");
+            $activeStmt->execute([$subId]);
+            $alreadyActive = $activeStmt->fetchColumn();
+
+            // Pridobi Stripe subscription (potrebujemo ends_at + latest_invoice)
+            $stripeSub      = stripe_request('GET', "/subscriptions/{$subId}");
+            $endsAt         = isset($stripeSub['current_period_end'])
+                ? date('Y-m-d H:i:s', (int)$stripeSub['current_period_end'])
+                : null;
+            $customerId     = $stripeSub['customer'] ?? null;
+            $latestInvoice  = $stripeSub['latest_invoice'] ?? null;
+
+            if (!$alreadyActive) {
+                $pdo->prepare("UPDATE subscriptions SET status = 'canceled' WHERE user_id = ? AND status IN ('trial','active','pending_invoice')")
+                    ->execute([$userId]);
+
+                $pdo->prepare("
+                    INSERT INTO subscriptions
+                        (user_id, plan_slug, status, billing_cycle, payment_method, ends_at, stripe_subscription_id, stripe_customer_id)
+                    VALUES (?, ?, 'active', ?, 'stripe', ?, ?, ?)
+                ")->execute([$userId, $planSlug, $billingCycle, $endsAt, $subId, $customerId]);
+
+                $pdo->prepare("UPDATE users SET subscription_status = 'active' WHERE id = ?")
+                    ->execute([$userId]);
+            }
+
+            // ── Hub račun (idempotency = stripe invoice ID → brez duplikatov z webhookom) ──
+            try {
+                $amountPaid      = 0;
+                $stripeInvoiceId = '';
+
+                if ($latestInvoice) {
+                    $inv             = stripe_request('GET', "/invoices/{$latestInvoice}");
+                    $amountPaid      = (int)($inv['amount_paid'] ?? 0);
+                    $stripeInvoiceId = $inv['id'] ?? '';
+                }
+                // Fallback na katalog cen
+                if (!$amountPaid) {
+                    $amountPaid = (int)(PLANS[$planSlug][$billingCycle . '_price'] * 100);
+                }
+
+                $userStmt = $pdo->prepare("SELECT full_name, email, company_name, company_address, tax_number, is_vat_registered, vat_id FROM users WHERE id = ? LIMIT 1");
+                $userStmt->execute([$userId]);
+                $userData = $userStmt->fetch();
+
+                if ($userData && $stripeInvoiceId) {
+                    $planName = PLANS[$planSlug]['name'] ?? ucfirst($planSlug);
+                    $cycleTag = $billingCycle === 'yearly' ? 'letno' : 'mesecno';
+                    $today    = date('Y-m-d');
+
+                    $clientData = hub_build_client($userData);
+
+                    $hub        = get_racunhub();
+                    $hubInvoice = $hub->createInvoice('sub-invoice-' . $stripeInvoiceId, [
+                        'client' => $clientData,
+                        'issue_date'     => $today,
+                        'due_date'       => $today,
+                        'items'          => [[
+                            'description' => "Naročnina Rezervacije – {$planName} ({$cycleTag})",
+                            'quantity'    => 1,
+                            'unit'        => 'kos',
+                            'unit_price'  => $amountPaid / 100,
+                        ]],
+                        'source_app'     => 'rezervacije',
+                        'reference'      => $stripeInvoiceId,
+                        'payment_method' => 'stripe',
+                        'mark_paid'      => true,
+                        'paid_date'      => $today,
+                        'category'       => 'Rezble',
+                        'tags'           => [$cycleTag, $planSlug],
+                    ]);
+
+                    if (!empty($hubInvoice['id'])) {
+                        $localSubStmt = $pdo->prepare("SELECT id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1");
+                        $localSubStmt->execute([$subId]);
+                        $localSubIdForInv = (int)($localSubStmt->fetchColumn() ?: 0);
+
+                        $pdo->prepare("INSERT IGNORE INTO subscription_invoices
+                            (user_id, subscription_id, hub_invoice_id, stripe_invoice_id, plan_slug, billing_cycle)
+                            VALUES (?, ?, ?, ?, ?, ?)")
+                            ->execute([$userId, $localSubIdForInv, $hubInvoice['id'], $stripeInvoiceId, $planSlug, $billingCycle]);
+
+                        // Ohrani tudi na subscription vrstici (backwards compat)
+                        if ($localSubIdForInv) {
+                            $pdo->prepare("UPDATE subscriptions SET hub_invoice_id = ? WHERE id = ?")
+                                ->execute([$hubInvoice['id'], $localSubIdForInv]);
+                        }
+                    }
+                }
+            } catch (Throwable $e) {
+                error_log('billing-success Hub error: ' . $e->getMessage());
+            }
+        }
+    } catch (Throwable $e) {
+        error_log('billing-success Stripe verify error: ' . $e->getMessage());
+    }
+}
+
 // Razveljavi session cache da se naroč. takoj osveži
 unset($_SESSION['_sub_cached_at']);
 refresh_subscription_session($pdo);

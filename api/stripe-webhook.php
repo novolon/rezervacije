@@ -9,6 +9,7 @@ require_once '../includes/db.php';
 require_once '../includes/stripe_helper.php';
 require_once '../includes/affiliate_helper.php';
 require_once '../includes/discount_helper.php';
+require_once '../includes/racunhub.php';
 
 // Raw payload pred session startom
 $payload   = file_get_contents('php://input');
@@ -108,6 +109,22 @@ function handle_checkout_completed(PDO $pdo, array $obj): void {
     // Posodobi users.subscription_status
     $pdo->prepare("UPDATE users SET subscription_status = 'active' WHERE id = ?")
         ->execute([$userId]);
+
+    // Potrditveni email ob aktivaciji naročnine
+    try {
+        require_once __DIR__ . '/../includes/mailer.php';
+        require_once __DIR__ . '/../includes/plans.php';
+        $uStmt = $pdo->prepare("SELECT email, full_name FROM users WHERE id = ? LIMIT 1");
+        $uStmt->execute([$userId]);
+        $uData = $uStmt->fetch();
+        if ($uData) {
+            $planName = PLANS[$planSlug]['name'] ?? ucfirst($planSlug);
+            $price    = (float)(PLANS[$planSlug][$billingCycle . '_price'] ?? 0);
+            send_plan_changed_email($uData['email'], $uData['full_name'], $planName, $billingCycle, $price);
+        }
+    } catch (Throwable $e) {
+        error_log('checkout_completed email error: ' . $e->getMessage());
+    }
 }
 
 function handle_invoice_paid(PDO $pdo, array $invoice): void {
@@ -118,8 +135,9 @@ function handle_invoice_paid(PDO $pdo, array $invoice): void {
     $sub = stripe_request('GET', "/subscriptions/{$subscriptionId}");
     if (!isset($sub['current_period_end'], $sub['metadata']['user_id'])) return;
 
-    $endsAt = date('Y-m-d H:i:s', (int)$sub['current_period_end']);
-    $userId = (int)$sub['metadata']['user_id'];
+    $endsAt        = date('Y-m-d H:i:s', (int)$sub['current_period_end']);
+    $userId        = (int)$sub['metadata']['user_id'];
+    $billingReason = $invoice['billing_reason'] ?? '';
 
     $pdo->prepare("
         UPDATE subscriptions SET status = 'active', ends_at = ?
@@ -129,16 +147,125 @@ function handle_invoice_paid(PDO $pdo, array $invoice): void {
     $pdo->prepare("UPDATE users SET subscription_status = 'active' WHERE id = ?")
         ->execute([$userId]);
 
-    // Pridobi lokalen subscription ID
-    $localSub = $pdo->prepare("SELECT id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1");
-    $localSub->execute([$subscriptionId]);
-    $localSubId = (int)($localSub->fetchColumn() ?: 0);
+    // Apliciraj načrtovano znižanje/preklop ob rednem podaljšanju
+    if ($billingReason === 'subscription_cycle') {
+        $pendingStmt = $pdo->prepare("SELECT id, pending_plan_slug, pending_billing_cycle FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1");
+        $pendingStmt->execute([$subscriptionId]);
+        $pendingRow = $pendingStmt->fetch();
+        if ($pendingRow && ($pendingRow['pending_plan_slug'] || $pendingRow['pending_billing_cycle'])) {
+            $setParts  = [];
+            $setParams = [];
+            if ($pendingRow['pending_plan_slug'])     { $setParts[] = 'plan_slug = ?';     $setParams[] = $pendingRow['pending_plan_slug']; }
+            if ($pendingRow['pending_billing_cycle']) { $setParts[] = 'billing_cycle = ?'; $setParams[] = $pendingRow['pending_billing_cycle']; }
+            $setParts[]  = 'pending_plan_slug = NULL';
+            $setParts[]  = 'pending_billing_cycle = NULL';
+            $setParams[] = $pendingRow['id'];
+            $pdo->prepare("UPDATE subscriptions SET " . implode(', ', $setParts) . " WHERE id = ?")
+                ->execute($setParams);
+        }
+    }
+
+    // Pridobi lokalen subscription ID (morda še ne obstaja pri prvem plačilu)
+    $localStmt = $pdo->prepare("SELECT id FROM subscriptions WHERE stripe_subscription_id = ? LIMIT 1");
+    $localStmt->execute([$subscriptionId]);
+    $localSubId = (int)($localStmt->fetchColumn() ?: 0);
 
     // Affiliate provizija
     affiliate_record_commission($pdo, $userId, $invoice, $localSubId);
 
     // Discount redemption
     discount_record_redemption($pdo, $invoice, $userId, $localSubId);
+
+    // Račun Hub – samo za obnove (subscription_create pokrije billing-success.php
+    // z istim idempotency ključem sub-invoice-{id}, brez duplikatov).
+    if (!empty($invoice['id']) && $billingReason !== 'subscription_create') {
+        try {
+            $userStmt = $pdo->prepare("SELECT full_name, email, company_name, company_address, tax_number, is_vat_registered, vat_id FROM users WHERE id = ? LIMIT 1");
+            $userStmt->execute([$userId]);
+            $userData = $userStmt->fetch();
+
+            if ($userData) {
+                $hubSubData = array_merge($userData, [
+                    'user_id'       => $userId,
+                    'plan_slug'     => $sub['metadata']['plan_slug']     ?? 'basic',
+                    'billing_cycle' => $sub['metadata']['billing_cycle'] ?? 'monthly',
+                ]);
+                hub_issue_subscription_invoice($pdo, $invoice, $hubSubData, $localSubId);
+
+                // Potrditveni email ob nadgradnji ali preklopu na letno
+                if ($billingReason === 'subscription_update') {
+                    try {
+                        require_once __DIR__ . '/../includes/mailer.php';
+                        require_once __DIR__ . '/../includes/plans.php';
+                        $slug  = $hubSubData['plan_slug'];
+                        $cycle = $hubSubData['billing_cycle'];
+                        $pName = PLANS[$slug]['name'] ?? ucfirst($slug);
+                        $prc   = (float)(PLANS[$slug][$cycle . '_price'] ?? 0);
+                        send_plan_changed_email($userData['email'], $userData['full_name'], $pName, $cycle, $prc);
+                    } catch (Throwable $e2) {
+                        error_log('invoice_paid plan_changed email error: ' . $e2->getMessage());
+                    }
+                }
+            }
+        } catch (Throwable $e) {
+            error_log('RacunHub invoice_paid error: ' . $e->getMessage());
+        }
+    }
+}
+
+function hub_issue_subscription_invoice(PDO $pdo, array $stripeInvoice, array $sub, int $localSubId): void
+{
+    require_once __DIR__ . '/../includes/plans.php';
+
+    $planSlug     = $sub['plan_slug']    ?? 'basic';
+    $billingCycle = $sub['billing_cycle'] ?? 'monthly';
+    $planName     = PLANS[$planSlug]['name'] ?? ucfirst($planSlug);
+    $cycleTag     = $billingCycle === 'yearly' ? 'letno' : 'mesecno';
+
+    // Znesek: Stripe vrne v centih
+    $amountPaid  = (int)($stripeInvoice['amount_paid'] ?? 0);
+    $unitPrice   = $amountPaid / 100;
+
+    $today = date('Y-m-d');
+
+    $hub = get_racunhub();
+    $idempotencyKey = 'sub-invoice-' . $stripeInvoice['id'];
+
+    $hubInvoice = $hub->createInvoice($idempotencyKey, [
+        'client' => hub_build_client($sub),
+        'issue_date'     => $today,
+        'due_date'       => $today,
+        'items'          => [[
+            'description' => "Naročnina Rezervacije – {$planName} ({$cycleTag})",
+            'quantity'    => 1,
+            'unit'        => 'kos',
+            'unit_price'  => $unitPrice,
+        ]],
+        'source_app'     => 'rezervacije',
+        'reference'      => $stripeInvoice['id'],
+        'payment_method' => 'stripe',
+        'mark_paid'      => true,
+        'paid_date'      => $today,
+        'category'       => 'Rezble',
+        'tags'           => [$cycleTag, $planSlug],
+    ]);
+
+    if (!empty($hubInvoice['id'])) {
+        $userId = (int)($sub['user_id'] ?? 0);
+
+        if ($userId) {
+            $pdo->prepare("INSERT IGNORE INTO subscription_invoices
+                (user_id, subscription_id, hub_invoice_id, stripe_invoice_id, plan_slug, billing_cycle)
+                VALUES (?, ?, ?, ?, ?, ?)")
+                ->execute([$userId, $localSubId, $hubInvoice['id'], $stripeInvoice['id'] ?? null, $planSlug, $billingCycle]);
+        }
+
+        // Ohrani tudi na subscription vrstici (backwards compat)
+        if ($localSubId) {
+            $pdo->prepare("UPDATE subscriptions SET hub_invoice_id = ? WHERE id = ?")
+                ->execute([$hubInvoice['id'], $localSubId]);
+        }
+    }
 }
 
 function handle_invoice_failed(PDO $pdo, array $invoice): void {

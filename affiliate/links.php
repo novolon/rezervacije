@@ -127,11 +127,12 @@ require_once '../includes/html_head.php';
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M6 18 18 6"/></svg>
             </button>
         </div>
-        <canvas id="qr-canvas" style="width:200px;height:200px;image-rendering:pixelated;border-radius:8px"></canvas>
+        <div id="qr-canvas" style="display:inline-block;border-radius:8px;overflow:hidden;line-height:0"></div>
         <p style="font-size:11px;color:var(--ink-mute);margin:12px 0 0">Shranite sliko z desnim klikom → Shrani sliko</p>
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <script>
 const BASE     = <?= json_encode(BASE_PATH) ?>;
 const REF      = <?= json_encode($aff['ref_code'] ?? '') ?>;
@@ -195,15 +196,22 @@ function buildTexts(code, pct, comboLink) {
     document.getElementById('txt-long').textContent  = long;
 }
 
+let _qrRendered = false;
 function openQr() {
     const modal = document.getElementById('qr-modal');
     modal.style.display = 'flex';
-    const canvas = document.getElementById('qr-canvas');
-    const ctx = canvas.getContext('2d');
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => { canvas.width = img.width; canvas.height = img.height; ctx.drawImage(img, 0, 0); };
-    img.src = 'https://chart.googleapis.com/chart?chs=200x200&cht=qr&chl=' + encodeURIComponent(REF_LINK) + '&choe=UTF-8';
+    if (_qrRendered) return;
+    _qrRendered = true;
+    const el = document.getElementById('qr-canvas');
+    el.innerHTML = '';
+    new QRCode(el, {
+        text:         REF_LINK,
+        width:        200,
+        height:       200,
+        colorDark:    '#1B4332',
+        colorLight:   '#ffffff',
+        correctLevel: QRCode.CorrectLevel.H,
+    });
 }
 function closeQr() { document.getElementById('qr-modal').style.display = 'none'; }
 document.getElementById('qr-modal').style.display = 'none';
