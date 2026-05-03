@@ -537,4 +537,118 @@
     function escapeAttr(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     }
+
+    // ── AI: Translate all ───────────────────────────────────────────────────
+    const aiStatusEl = document.getElementById('bk-ai-status');
+    function aiStatus(text, color) {
+        if (!aiStatusEl) return;
+        aiStatusEl.textContent = text || '';
+        aiStatusEl.style.color = color || 'var(--color-muted)';
+    }
+
+    const aiTranslateBtn = document.getElementById('bk-ai-translate-all');
+    if (aiTranslateBtn) {
+        aiTranslateBtn.addEventListener('click', async () => {
+            if (!postId) { alert('Najprej shrani članek.'); return; }
+            const overwrite = confirm('Prevedi v vse jezike (razen master).\n\nOK = prepiši obstoječe prevode\nCancel = preskoči obstoječe (priporočeno za prvi prevod)');
+            // Cancel pomeni skip, ne odpoved!
+            const really = confirm('Začnem prevod? Lahko traja 30-90 sekund.');
+            if (!really) return;
+            aiTranslateBtn.disabled = true;
+            aiStatus('Prevajam... (pribl. 30-90s)', '');
+            try {
+                const res = await API.post('/api/blog.php?action=ai_translate_post', {
+                    post_id: postId,
+                    overwrite: overwrite,
+                });
+                aiStatus(`Končano: ${res.ok_count} ok, ${res.error_count} napak, ${res.skipped} preskočeni.`, 'var(--color-success, #2F7D52)');
+                // Reload post da osvežimo translation cache
+                if (typeof loadPostIfNeeded === 'function') {
+                    setTimeout(() => location.reload(), 1500);
+                }
+            } catch (e) {
+                aiStatus('Napaka: ' + (e.message || 'neznana'), 'var(--color-danger, #B34822)');
+            } finally {
+                aiTranslateBtn.disabled = false;
+            }
+        });
+    }
+
+    // ── AI: Suggest tags ────────────────────────────────────────────────────
+    const aiTagsBtn = document.getElementById('bk-ai-suggest-tags');
+    if (aiTagsBtn) {
+        aiTagsBtn.addEventListener('click', async () => {
+            const title = els.title.value.trim();
+            const md    = mde ? mde.value() : els.contentTA.value;
+            if (!title || !md) { alert('Najprej vpiši naslov + vsebino.'); return; }
+            aiTagsBtn.disabled = true;
+            aiStatus('Generiram tage...', '');
+            try {
+                const res = await API.post('/api/blog.php?action=ai_suggest_tags', {
+                    title, content_md: md, lang: activeLang,
+                });
+                if (!res.tags || !res.tags.length) {
+                    aiStatus('AI ni vrnil tagov.', 'var(--color-danger, #B34822)');
+                    return;
+                }
+                const accepted = prompt('AI predlaga tage (loči z vejicami, lahko popraviš):\n\n' + res.tags.join(', '), res.tags.join(', '));
+                if (!accepted) { aiStatus('Preklicano.', ''); return; }
+                const names = accepted.split(',').map(s => s.trim()).filter(Boolean);
+                aiStatus('Dodajam tage...', '');
+                let added = 0;
+                for (const name of names) {
+                    const slug = name.toLowerCase()
+                        .replace(/[čć]/g, 'c').replace(/[šś]/g, 's').replace(/[žź]/g, 'z').replace(/đ/g, 'd')
+                        .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+                    if (!slug) continue;
+                    try {
+                        const r = await API.post('/api/blog.php?action=save_tag', { id: 0, slug, names: { [activeLang]: name } });
+                        const tagId = r && r.id;
+                        if (!tagId) continue;
+                        const picker = document.getElementById('bk-tags-picker');
+                        if (picker.querySelector('input[value="' + tagId + '"]')) {
+                            picker.querySelector('input[value="' + tagId + '"]').checked = true;
+                        } else {
+                            const lbl = document.createElement('label');
+                            lbl.className = 'bk-tag-chip';
+                            lbl.innerHTML = '<input type="checkbox" value="' + tagId + '" checked> ' + name.replace(/</g, '&lt;');
+                            picker.appendChild(lbl);
+                        }
+                        added++;
+                    } catch (_) {}
+                }
+                aiStatus(`Dodanih ${added} tagov. Klikni "Shrani meta" za zapis.`, 'var(--color-success, #2F7D52)');
+            } catch (e) {
+                aiStatus('Napaka: ' + (e.message || ''), 'var(--color-danger, #B34822)');
+            } finally {
+                aiTagsBtn.disabled = false;
+            }
+        });
+    }
+
+    // ── AI: Generate single image ───────────────────────────────────────────
+    const aiImgBtn = document.getElementById('bk-ai-generate-image');
+    if (aiImgBtn) {
+        aiImgBtn.addEventListener('click', async () => {
+            const promptText = prompt('Opis slike za DALL-E 3 (ANGLEŠKO za boljše rezultate):\n\nPrimer: "Bustling Italian restaurant interior at golden hour, warm wooden tables, server greeting guests at host stand"');
+            if (!promptText) return;
+            const altText = prompt('Alt text (v jeziku članka, ' + activeLang.toUpperCase() + '):', promptText.substring(0, 100));
+            if (!altText) return;
+            aiImgBtn.disabled = true;
+            aiStatus('Generiram sliko (10-20s)...', '');
+            try {
+                // Hibrid: kličemo direkten endpoint, ki interno pokliče OpenAI
+                const res = await API.post('/api/blog.php?action=ai_generate_image_single', {
+                    prompt: promptText,
+                    alt: altText,
+                    lang: activeLang,
+                });
+                aiStatus('Slika dodana v knjižnico (ID #' + res.id + '). Lahko jo izbereš v media pickerju.', 'var(--color-success, #2F7D52)');
+            } catch (e) {
+                aiStatus('Napaka: ' + (e.message || ''), 'var(--color-danger, #B34822)');
+            } finally {
+                aiImgBtn.disabled = false;
+            }
+        });
+    }
 })();

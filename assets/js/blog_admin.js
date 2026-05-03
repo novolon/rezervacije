@@ -128,17 +128,25 @@
                 topicsBody.innerHTML = '<tr><td colspan="6" class="table-empty">Vrsta je prazna.</td></tr>';
                 return;
             }
-            topicsBody.innerHTML = rows.map(r => ''
+            topicsBody.innerHTML = rows.map(r => {
+                const isGenerated = r.status === 'generated' && r.gen_post_id;
+                const generateBtn = isGenerated
+                    ? '<a href="' + BASE + '/pages/blog_editor.php?id=' + r.gen_post_id + '" class="btn btn-outline btn-sm" style="font-size:12px;padding:3px 8px">Odpri →</a>'
+                    : '<button type="button" class="btn btn-primary btn-sm" data-action="generate-topic" data-id="' + r.id + '" style="font-size:12px;padding:3px 8px">✨ Generiraj</button>';
+                return ''
                 + '<tr>'
                 + '<td><div style="font-weight:600">' + escapeHtml(r.topic) + '</div>' + (r.brief ? '<div style="font-size:12px;color:var(--color-muted);margin-top:2px">' + escapeHtml(r.brief.substring(0, 100)) + '</div>' : '') + '</td>'
                 + '<td>' + escapeHtml(r.target_keyword || '—') + '</td>'
                 + '<td>' + (r.desired_lang || 'sl').toUpperCase() + '</td>'
                 + '<td>' + (r.scheduled_for || '—') + '</td>'
                 + '<td><span class="bk-status-pill">' + r.status + '</span>' + (r.gen_post_id ? ' <a href="' + BASE + '/pages/blog_editor.php?id=' + r.gen_post_id + '" style="font-size:12px">→ ' + escapeHtml(r.gen_title || ('#' + r.gen_post_id)) + '</a>' : '') + '</td>'
-                + '<td><button type="button" class="btn-icon" data-action="edit-topic" data-id="' + r.id + '">✎</button> '
-                    + '<button type="button" class="btn-icon danger" data-action="delete-topic" data-id="' + r.id + '">🗑</button></td>'
-                + '</tr>'
-            ).join('');
+                + '<td style="white-space:nowrap">'
+                + generateBtn + ' '
+                + '<button type="button" class="btn-icon" data-action="edit-topic" data-id="' + r.id + '">✎</button> '
+                + '<button type="button" class="btn-icon danger" data-action="delete-topic" data-id="' + r.id + '">🗑</button>'
+                + '</td>'
+                + '</tr>';
+            }).join('');
         } catch (e) {
             topicsBody.innerHTML = '<tr><td colspan="6" class="table-empty">Napaka: ' + escapeHtml(e.message || '') + '</td></tr>';
         }
@@ -148,6 +156,7 @@
     topicsBody.addEventListener('click', async (e) => {
         const editBtn = e.target.closest('button[data-action="edit-topic"]');
         const delBtn  = e.target.closest('button[data-action="delete-topic"]');
+        const genBtn  = e.target.closest('button[data-action="generate-topic"]');
         if (editBtn) {
             try {
                 const all = await API.get('/api/blog.php?action=list_topics');
@@ -160,7 +169,63 @@
             await API.post('/api/blog.php?action=delete_topic', { id: parseInt(delBtn.dataset.id, 10) });
             loadTopics();
         }
+        if (genBtn) {
+            await runGenerateFromTopic(parseInt(genBtn.dataset.id, 10), genBtn);
+        }
     });
+
+    async function runGenerateFromTopic(topicId, btn) {
+        if (!confirm('Generiraj članek + slike za to temo?\n\nClaude napiše članek (~10s), nato DALL-E ustvari hero + 2 inline slike (~30s skupaj).\nStrošek: ~$0.30 (DALL-E standard quality).')) return;
+        const status = document.getElementById('bk-ai-topics-status');
+        const original = btn ? btn.innerHTML : '';
+        if (btn) { btn.disabled = true; btn.innerHTML = 'Generiram...'; }
+        if (status) { status.textContent = 'Generiram članek + slike (lahko traja 30-90s)...'; status.style.color = ''; }
+        try {
+            const res = await API.post('/api/blog.php?action=ai_generate', { topic_id: topicId });
+            if (status) {
+                status.innerHTML = '✓ Generirano: <strong>' + escapeHtml(res.title) + '</strong> — <a href="' + res.editor_url + '">Odpri v editorju →</a>';
+                status.style.color = 'var(--color-success, #2F7D52)';
+            }
+            loadTopics();
+            loadStats();
+        } catch (e) {
+            if (status) {
+                status.textContent = 'Napaka: ' + (e.message || '');
+                status.style.color = 'var(--color-danger, #B34822)';
+            }
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = original; }
+        }
+    }
+
+    // ── AI: Suggest topics (20 idej) ────────────────────────────────────────
+    const aiSuggestBtn = document.getElementById('bk-ai-suggest-topics-btn');
+    if (aiSuggestBtn) {
+        aiSuggestBtn.addEventListener('click', async () => {
+            const status = document.getElementById('bk-ai-topics-status');
+            if (!confirm('Claude predlaga 20 idej za blog članke (na podlagi Rezble funkcionalnosti). Trajanje: ~15-30s. Strošek: ~$0.05.\n\nIdeje se vstavijo direktno v vrsto.')) return;
+            aiSuggestBtn.disabled = true;
+            aiSuggestBtn.textContent = 'Generiram ideje...';
+            if (status) { status.textContent = 'Claude razmišlja...'; status.style.color = ''; }
+            try {
+                const res = await API.post('/api/blog.php?action=ai_suggest_topics', { count: 20, persist: true });
+                if (status) {
+                    status.textContent = '✓ Dodanih ' + (res.inserted_ids ? res.inserted_ids.length : res.count) + ' idej v vrsto.';
+                    status.style.color = 'var(--color-success, #2F7D52)';
+                }
+                loadTopics();
+                loadStats();
+            } catch (e) {
+                if (status) {
+                    status.textContent = 'Napaka: ' + (e.message || '');
+                    status.style.color = 'var(--color-danger, #B34822)';
+                }
+            } finally {
+                aiSuggestBtn.disabled = false;
+                aiSuggestBtn.innerHTML = '✨ Predlagaj 20 idej z AI';
+            }
+        });
+    }
 
     function openTopicModal(t) {
         const html = `

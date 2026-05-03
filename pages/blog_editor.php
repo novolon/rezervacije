@@ -229,9 +229,11 @@ window.BLOG_TAGS       = <?= json_encode($tagsAll, JSON_UNESCAPED_UNICODE) ?>;
 
         <div class="bk-side-card">
             <h3>AI</h3>
-            <p style="font-size:13px;color:var(--color-muted);margin:0 0 8px">Faza 3: integracija Anthropic API.</p>
-            <button type="button" class="btn btn-outline" disabled style="width:100%">✨ Generiraj draft</button>
-            <button type="button" class="btn btn-outline" disabled style="width:100%;margin-top:6px">🌐 Prevedi v vse jezike</button>
+            <p style="font-size:13px;color:var(--color-muted);margin:0 0 8px">Claude + DALL-E 3.</p>
+            <button type="button" class="btn btn-outline" id="bk-ai-translate-all" style="width:100%">🌐 Prevedi v vse jezike</button>
+            <button type="button" class="btn btn-outline" id="bk-ai-suggest-tags" style="width:100%;margin-top:6px">🏷️ Predlagaj tage</button>
+            <button type="button" class="btn btn-outline" id="bk-ai-generate-image" style="width:100%;margin-top:6px">🖼️ Generiraj sliko z AI</button>
+            <p id="bk-ai-status" style="font-size:12px;color:var(--color-muted);margin:8px 0 0;min-height:14px"></p>
         </div>
     </aside>
 </div>

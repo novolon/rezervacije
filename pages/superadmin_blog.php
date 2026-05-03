@@ -127,12 +127,16 @@ window.BLOG_LANGS = ['sl','en','de','it','fr','hr','es','pt'];
     <div class="admin-card">
         <div class="admin-card-header">
             <h2>Teme za AI generacijo</h2>
-            <button class="btn btn-primary" id="bk-new-topic">+ Nova tema</button>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-outline" id="bk-ai-suggest-topics-btn">✨ Predlagaj 20 idej z AI</button>
+                <button class="btn btn-primary" id="bk-new-topic">+ Nova tema</button>
+            </div>
         </div>
         <p style="padding:0 24px 12px;color:var(--color-muted);font-size:13.5px;margin:0">
-            Cron <code>cron/blog_ai_drafter.php</code> dnevno vzame najstarejšo aktivno temo in ustvari osnutek.
-            Faza 3 doda Anthropic API integracijo.
+            Klikni <strong>✨ Predlagaj</strong> da Claude predlaga ideje za članke (na podlagi Rezble funkcionalnosti). Za vsako temo lahko nato klikneš
+            <strong>Generiraj</strong> — AI napiše članek + ustvari hero + inline slike z DALL-E 3, ki ga nato urediš v editorju.
         </p>
+        <p id="bk-ai-topics-status" style="padding:0 24px 12px;font-size:13px;min-height:16px;margin:0"></p>
         <div class="admin-table-wrap">
             <table class="admin-table">
                 <thead>

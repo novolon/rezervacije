@@ -759,9 +759,507 @@ if ($action === 'stats') {
     json_response(true, $out);
 }
 
-// AI placeholder (Faza 3)
-if ($action === 'ai_generate' || $action === 'ai_translate') {
-    json_response(false, null, 'AI generacija na voljo v Fazi 3 (po dodatku ANTHROPIC_API_KEY v config.php).', 501);
+// ─────────────────────────────────────────────────────────────────
+// AI endpointi (Faza 3) — Anthropic Claude + OpenAI DALL-E 3
+// ─────────────────────────────────────────────────────────────────
+require_once __DIR__ . '/../includes/blog_anthropic.php';
+require_once __DIR__ . '/../includes/blog_openai.php';
+
+/**
+ * Helper: AI category_hint → blog_categories.id (ali NULL).
+ * AI vrne enega od: operations | guest-experience | marketing | technology | growth
+ */
+function _bk_category_id_by_hint(PDO $pdo, $hint) {
+    static $map = [
+        'operations'      => 'operativa',
+        'guest-experience'=> 'goste',
+        'marketing'       => 'marketing-gostincev',
+        'technology'      => 'tehnologija',
+        'growth'          => 'marketing-gostincev', // growth + marketing dela isto kategorijo za zdaj
+    ];
+    if (!$hint || !isset($map[$hint])) return null;
+    $stmt = $pdo->prepare("SELECT id FROM blog_categories WHERE slug = ? LIMIT 1");
+    $stmt->execute([$map[$hint]]);
+    $id = $stmt->fetchColumn();
+    return $id ? (int)$id : null;
+}
+
+/**
+ * Helper: za vsak tag name → najdi obstoječ ali ustvari nov, vrne tag_id.
+ * @param string[] $tagNames  (v $masterLang)
+ */
+function _bk_resolve_tag_ids(PDO $pdo, array $tagNames, $masterLang) {
+    $ids = [];
+    foreach ($tagNames as $name) {
+        $name = trim((string)$name);
+        if ($name === '') continue;
+        $slug = blog_slug($name);
+        if ($slug === '') continue;
+        // Obstaja po slug?
+        $stmt = $pdo->prepare("SELECT id FROM blog_tags WHERE slug = ?");
+        $stmt->execute([$slug]);
+        $tagId = $stmt->fetchColumn();
+        if (!$tagId) {
+            $pdo->prepare("INSERT INTO blog_tags (slug) VALUES (?)")->execute([$slug]);
+            $tagId = (int)$pdo->lastInsertId();
+            // Translation za master jezik
+            $pdo->prepare("INSERT IGNORE INTO blog_tag_translations (tag_id, lang_code, name) VALUES (?, ?, ?)")
+                ->execute([$tagId, $masterLang, $name]);
+        }
+        $ids[] = (int)$tagId;
+    }
+    return array_unique($ids);
+}
+
+/**
+ * Helper: poišči media ID-je referencirane v markdown vsebini (![...](media:N)).
+ */
+function _bk_extract_media_ids_from_md($md) {
+    if (preg_match_all('/!\[[^\]]*\]\(media:(\d+)\)/', $md, $m)) {
+        return array_unique(array_map('intval', $m[1]));
+    }
+    return [];
+}
+
+// ── 1. SUGGEST TOPICS ────────────────────────────────────────────
+if ($action === 'ai_suggest_topics' && $method === 'POST') {
+    $body  = $body ?? get_body();
+    $count = max(10, min(30, (int)($body['count'] ?? 20)));
+    $persist = !empty($body['persist']); // true = vstavi v topic_queue, false = samo vrni preview
+
+    try {
+        // Naloži obstoječe teme za "izogibanje"
+        $existing = [];
+        $rows = $pdo->query("SELECT topic FROM blog_topic_queue ORDER BY created_at DESC LIMIT 60")->fetchAll();
+        foreach ($rows as $r) $existing[] = $r['topic'];
+        // Plus naslovi že objavljenih master prevodov
+        $rows2 = $pdo->query(
+            "SELECT t.title FROM blog_post_translations t
+             JOIN blog_posts p ON p.id = t.post_id
+             WHERE t.lang_code = p.master_lang
+             ORDER BY p.id DESC LIMIT 60"
+        )->fetchAll();
+        foreach ($rows2 as $r) $existing[] = $r['title'];
+
+        $topics = blog_ai_suggest_topics($count, $existing);
+
+        $insertedIds = [];
+        if ($persist) {
+            $stmt = $pdo->prepare(
+                "INSERT INTO blog_topic_queue (topic, brief, target_keyword, desired_lang, desired_word_count, notes, created_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)"
+            );
+            foreach ($topics as $t) {
+                $topic = trim((string)($t['topic'] ?? ''));
+                if ($topic === '') continue;
+                $lang = $t['desired_lang'] ?? 'en';
+                if (!in_array($lang, BLOG_LANGS, true)) $lang = 'en';
+                $stmt->execute([
+                    mb_substr($topic, 0, 500),
+                    $t['brief']             ?? null,
+                    $t['target_keyword']    ?? null,
+                    $lang,
+                    (int)($t['desired_word_count'] ?? 700),
+                    !empty($t['category_hint']) ? ('category_hint:' . $t['category_hint']) : null,
+                    (int)$session['user_id'],
+                ]);
+                $insertedIds[] = (int)$pdo->lastInsertId();
+            }
+        }
+        json_response(true, [
+            'topics'        => $topics,
+            'inserted_ids'  => $insertedIds,
+            'count'         => count($topics),
+        ]);
+    } catch (Throwable $e) {
+        error_log('blog ai_suggest_topics: ' . $e->getMessage());
+        json_response(false, null, 'AI predlogi spodleteli: ' . $e->getMessage(), 500);
+    }
+}
+
+// ── 2. GENERATE ARTICLE ──────────────────────────────────────────
+if ($action === 'ai_generate' && $method === 'POST') {
+    $body = $body ?? get_body();
+
+    @set_time_limit(300);  // generacija + slike trajajo ~30-90s
+    @ini_set('max_execution_time', '300');
+
+    // Vir teme: lahko iz queue (topic_id) ali direktno iz body
+    $topicId = (int)($body['topic_id'] ?? 0);
+    $topic = ''; $brief = ''; $targetKeyword = ''; $lang = 'en';
+    $wordCount = 700; $categoryHint = null;
+
+    if ($topicId) {
+        $tStmt = $pdo->prepare("SELECT * FROM blog_topic_queue WHERE id = ? LIMIT 1");
+        $tStmt->execute([$topicId]);
+        $tq = $tStmt->fetch();
+        if (!$tq) json_response(false, null, 'Tema ne obstaja.', 404);
+        if ($tq['status'] === 'generated' && !empty($tq['generated_post_id'])) {
+            json_response(false, null, 'Tema je že bila generirana (post #' . $tq['generated_post_id'] . ').', 409);
+        }
+        $topic         = $tq['topic'];
+        $brief         = $tq['brief'] ?? '';
+        $targetKeyword = $tq['target_keyword'] ?? '';
+        $lang          = $tq['desired_lang'] ?: 'en';
+        $wordCount     = (int)$tq['desired_word_count'] ?: 700;
+        if (!empty($tq['notes']) && preg_match('/category_hint:([\w-]+)/', $tq['notes'], $m)) {
+            $categoryHint = $m[1];
+        }
+    } else {
+        $topic         = trim($body['topic'] ?? '');
+        $brief         = $body['brief'] ?? '';
+        $targetKeyword = $body['target_keyword'] ?? '';
+        $lang          = $body['lang'] ?? 'en';
+        $wordCount     = (int)($body['word_count'] ?? 700);
+        $categoryHint  = $body['category_hint'] ?? null;
+    }
+    if ($topic === '') json_response(false, null, 'Manjka tema.', 400);
+    if (!in_array($lang, BLOG_LANGS, true)) $lang = 'en';
+
+    $maxInline    = max(0, min(3, (int)($body['max_inline_images'] ?? 2)));
+    $generateImgs = $body['generate_images'] ?? true; // false → samo besedilo, brez DALL-E
+    $imgQuality   = $body['image_quality'] ?? 'standard'; // standard | hd
+
+    try {
+        // 1) Generiraj članek
+        $article = blog_ai_generate_article($topic, $lang, [
+            'brief'             => $brief,
+            'target_keyword'    => $targetKeyword,
+            'word_count'        => $wordCount,
+            'max_inline_images' => $generateImgs ? $maxInline : 0,
+        ]);
+        if ($categoryHint && empty($article['category_hint'])) $article['category_hint'] = $categoryHint;
+
+        // 2) Generiraj slike
+        $heroMediaId = null;
+        $contentMd   = $article['content_md'];
+
+        if ($generateImgs) {
+            // Hero
+            if (!empty($article['hero_image']['prompt'])) {
+                $heroMeta = blog_openai_generate_image(
+                    $article['hero_image']['prompt'],
+                    $article['hero_image']['alt']     ?? $article['title'],
+                    $article['hero_image']['caption'] ?? '',
+                    $lang,
+                    (int)$session['user_id'],
+                    ['quality' => $imgQuality]
+                );
+                $heroMediaId = (int)$heroMeta['id'];
+            }
+            // Inline
+            $inline = $article['inline_images'] ?? [];
+            foreach ($inline as $img) {
+                $idx = (int)($img['index'] ?? 0);
+                if ($idx < 1 || empty($img['prompt'])) continue;
+                if ($idx > $maxInline) continue; // safety guard
+
+                $imgMeta = blog_openai_generate_image(
+                    $img['prompt'],
+                    $img['alt']     ?? '',
+                    $img['caption'] ?? '',
+                    $lang,
+                    (int)$session['user_id'],
+                    ['quality' => $imgQuality]
+                );
+                $alt   = str_replace(["\r","\n",'"','`'], ' ', $img['alt'] ?? '');
+                $repl  = '![' . $alt . '](media:' . (int)$imgMeta['id'] . ')';
+                $contentMd = str_replace('<!--IMG:' . $idx . '-->', $repl, $contentMd);
+            }
+            // Pošlji še morebitne neaktivirane placeholderje v "delete" — brez slike
+            $contentMd = preg_replace('/^\s*<!--IMG:\d+-->\s*$/m', '', $contentMd);
+        }
+
+        // 3) Slug unikatnost
+        $slug = !empty($article['slug']) ? $article['slug'] : blog_slug($article['title']);
+        $check = $pdo->prepare("SELECT 1 FROM blog_post_translations WHERE lang_code = ? AND slug = ?");
+        $check->execute([$lang, $slug]);
+        if ($check->fetchColumn()) $slug .= '-' . substr(md5(microtime(true)), 0, 6);
+
+        // 4) Render markdown za content_html + TOC + reading_time
+        $rendered = blog_render_md($contentMd, $lang);
+
+        // 5) Insert post + translation (transakcija)
+        $pdo->beginTransaction();
+
+        $catId = _bk_category_id_by_hint($pdo, $article['category_hint'] ?? $categoryHint);
+
+        $insP = $pdo->prepare(
+            "INSERT INTO blog_posts
+             (master_lang, category_id, hero_media_id, status, ai_generated, ai_topic, ai_prompt, ai_model, created_by)
+             VALUES (?, ?, ?, 'draft', 1, ?, ?, ?, ?)"
+        );
+        $insP->execute([
+            $lang,
+            $catId,
+            $heroMediaId,
+            mb_substr($topic, 0, 255),
+            $brief !== '' ? mb_substr($brief, 0, 1000) : null,
+            BLOG_AI_MODEL_GENERATE,
+            (int)$session['user_id'],
+        ]);
+        $postId = (int)$pdo->lastInsertId();
+
+        $insT = $pdo->prepare(
+            "INSERT INTO blog_post_translations
+             (post_id, lang_code, slug, title, excerpt, content_md, content_html,
+              meta_title, meta_description, table_of_contents, reading_time_minutes,
+              word_count, status, ai_translated)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 0)"
+        );
+        $insT->execute([
+            $postId,
+            $lang,
+            $slug,
+            mb_substr($article['title'], 0, 255),
+            $article['excerpt'] ?? null,
+            $contentMd,
+            $rendered['html'],
+            $article['meta_title']       ?? null,
+            $article['meta_description'] ?? null,
+            json_encode($rendered['toc'], JSON_UNESCAPED_UNICODE),
+            $rendered['reading_time'],
+            $rendered['word_count'],
+        ]);
+
+        // Tagi
+        if (!empty($article['tags']) && is_array($article['tags'])) {
+            $tagIds = _bk_resolve_tag_ids($pdo, $article['tags'], $lang);
+            $tagStmt = $pdo->prepare("INSERT IGNORE INTO blog_post_tags (post_id, tag_id) VALUES (?, ?)");
+            foreach ($tagIds as $tagId) $tagStmt->execute([$postId, $tagId]);
+        }
+
+        // Topic queue marker
+        if ($topicId) {
+            $pdo->prepare("UPDATE blog_topic_queue SET status='generated', generated_post_id = ? WHERE id = ?")
+                ->execute([$postId, $topicId]);
+        }
+
+        $pdo->commit();
+
+        json_response(true, [
+            'post_id'       => $postId,
+            'master_lang'   => $lang,
+            'slug'          => $slug,
+            'title'         => $article['title'],
+            'hero_media_id' => $heroMediaId,
+            'inline_count'  => $generateImgs ? count($article['inline_images'] ?? []) : 0,
+            'word_count'    => $rendered['word_count'],
+            'reading_time'  => $rendered['reading_time'],
+            'editor_url'    => BASE_PATH . '/pages/blog_editor.php?id=' . $postId,
+        ]);
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        error_log('blog ai_generate: ' . $e->getMessage());
+        json_response(false, null, 'AI generacija članka spodletela: ' . $e->getMessage(), 500);
+    }
+}
+
+// ── 3. TRANSLATE POST → vsi/izbrani jeziki ───────────────────────
+if ($action === 'ai_translate_post' && $method === 'POST') {
+    $body = $body ?? get_body();
+    $postId = (int)($body['post_id'] ?? 0);
+    if (!$postId) json_response(false, null, 'post_id obvezen.', 400);
+
+    @set_time_limit(420);
+    @ini_set('max_execution_time', '420');
+
+    $post = _bk_load_post($pdo, $postId);
+    if (!$post) json_response(false, null, 'Članek ne obstaja.', 404);
+
+    $masterLang = $post['master_lang'];
+    $masterTr   = $post['translations'][$masterLang] ?? null;
+    if (!$masterTr) json_response(false, null, 'Manjka master prevod (' . $masterLang . ').', 400);
+
+    // Cilji: če body['target_langs'] poslan, uporabi to; sicer vsi BLOG_LANGS razen master
+    $targetLangs = $body['target_langs'] ?? null;
+    if (!is_array($targetLangs) || empty($targetLangs)) {
+        $targetLangs = array_values(array_filter(BLOG_LANGS, function($l) use ($masterLang) {
+            return $l !== $masterLang;
+        }));
+    } else {
+        $targetLangs = array_values(array_filter($targetLangs, function($l) use ($masterLang) {
+            return in_array($l, BLOG_LANGS, true) && $l !== $masterLang;
+        }));
+    }
+    if (empty($targetLangs)) json_response(false, null, 'Ni veljavnih ciljnih jezikov.', 400);
+
+    $overwriteExisting = !empty($body['overwrite']); // privzeto: že obstoječih ne prepiše
+
+    $results = [];
+    foreach ($targetLangs as $tl) {
+        try {
+            // Preveri obstoječ prevod
+            $existsStmt = $pdo->prepare("SELECT id, status FROM blog_post_translations WHERE post_id = ? AND lang_code = ?");
+            $existsStmt->execute([$postId, $tl]);
+            $existing = $existsStmt->fetch();
+            if ($existing && !$overwriteExisting) {
+                $results[] = ['lang' => $tl, 'status' => 'skipped', 'reason' => 'already_exists'];
+                continue;
+            }
+
+            $translated = blog_ai_translate_translation($masterTr, $masterLang, $tl);
+
+            // Slug unikatnost
+            $slug = !empty($translated['slug']) ? $translated['slug'] : blog_slug($translated['title']);
+            $checkSlug = $pdo->prepare(
+                "SELECT id FROM blog_post_translations WHERE lang_code = ? AND slug = ? AND post_id <> ? LIMIT 1"
+            );
+            $checkSlug->execute([$tl, $slug, $postId]);
+            if ($checkSlug->fetchColumn()) $slug .= '-' . substr(md5(microtime(true)), 0, 6);
+
+            $contentMd = $translated['content_md'];
+            $rendered  = blog_render_md($contentMd, $tl);
+
+            $pdo->beginTransaction();
+            if ($existing) {
+                $pdo->prepare(
+                    "UPDATE blog_post_translations
+                     SET slug = ?, title = ?, excerpt = ?, content_md = ?, content_html = ?,
+                         meta_title = ?, meta_description = ?,
+                         table_of_contents = ?, reading_time_minutes = ?, word_count = ?,
+                         status = 'draft', ai_translated = 1
+                     WHERE id = ?"
+                )->execute([
+                    $slug,
+                    mb_substr($translated['title'], 0, 255),
+                    $translated['excerpt'] ?? null,
+                    $contentMd, $rendered['html'],
+                    $translated['meta_title']       ?? null,
+                    $translated['meta_description'] ?? null,
+                    json_encode($rendered['toc'], JSON_UNESCAPED_UNICODE),
+                    $rendered['reading_time'],
+                    $rendered['word_count'],
+                    (int)$existing['id'],
+                ]);
+                $trId = (int)$existing['id'];
+            } else {
+                $pdo->prepare(
+                    "INSERT INTO blog_post_translations
+                     (post_id, lang_code, slug, title, excerpt, content_md, content_html,
+                      meta_title, meta_description, table_of_contents, reading_time_minutes,
+                      word_count, status, ai_translated)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 1)"
+                )->execute([
+                    $postId, $tl, $slug,
+                    mb_substr($translated['title'], 0, 255),
+                    $translated['excerpt'] ?? null,
+                    $contentMd, $rendered['html'],
+                    $translated['meta_title']       ?? null,
+                    $translated['meta_description'] ?? null,
+                    json_encode($rendered['toc'], JSON_UNESCAPED_UNICODE),
+                    $rendered['reading_time'],
+                    $rendered['word_count'],
+                ]);
+                $trId = (int)$pdo->lastInsertId();
+            }
+            $pdo->prepare("UPDATE blog_posts SET updated_at = NOW() WHERE id = ?")->execute([$postId]);
+            $pdo->commit();
+
+            $results[] = ['lang' => $tl, 'status' => 'ok', 'translation_id' => $trId, 'slug' => $slug];
+        } catch (Throwable $e) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            error_log('blog ai_translate_post[' . $tl . ']: ' . $e->getMessage());
+            $results[] = ['lang' => $tl, 'status' => 'error', 'error' => $e->getMessage()];
+        }
+    }
+
+    // Prevedi alt/caption za referencirane medije (hero + inline)
+    try {
+        $mediaIds = _bk_extract_media_ids_from_md($masterTr['content_md']);
+        if (!empty($post['hero_media_id'])) $mediaIds[] = (int)$post['hero_media_id'];
+        $mediaIds = array_unique($mediaIds);
+        if (!empty($mediaIds)) {
+            $okLangs = array_values(array_filter(array_map(function($r) {
+                return $r['status'] === 'ok' ? $r['lang'] : null;
+            }, $results)));
+            if (!empty($okLangs)) {
+                $in = implode(',', array_map('intval', $mediaIds));
+                $mStmt = $pdo->query("SELECT id, alt_translations, caption_translations FROM blog_media WHERE id IN ($in)");
+                while ($m = $mStmt->fetch()) {
+                    $alts = $m['alt_translations']     ? json_decode($m['alt_translations'], true)     : [];
+                    $caps = $m['caption_translations'] ? json_decode($m['caption_translations'], true) : [];
+                    $sourceAlt = $alts[$masterLang] ?? '';
+                    $sourceCap = $caps[$masterLang] ?? '';
+                    if ($sourceAlt === '' && $sourceCap === '') continue;
+                    // Prevedi samo v jezike, ki še nimajo alta (oz. če overwrite)
+                    $needLangs = array_values(array_filter($okLangs, function($lc) use ($alts, $overwriteExisting) {
+                        return $overwriteExisting || empty($alts[$lc]);
+                    }));
+                    if (empty($needLangs)) continue;
+                    $tr = blog_ai_translate_media_alts($sourceAlt, $sourceCap, $masterLang, $needLangs);
+                    foreach ($needLangs as $lc) {
+                        if (!empty($tr['alt'][$lc]))     $alts[$lc] = $tr['alt'][$lc];
+                        if (!empty($tr['caption'][$lc])) $caps[$lc] = $tr['caption'][$lc];
+                    }
+                    $pdo->prepare("UPDATE blog_media SET alt_translations = ?, caption_translations = ? WHERE id = ?")
+                        ->execute([
+                            $alts ? json_encode($alts, JSON_UNESCAPED_UNICODE) : null,
+                            $caps ? json_encode($caps, JSON_UNESCAPED_UNICODE) : null,
+                            (int)$m['id'],
+                        ]);
+                }
+            }
+        }
+    } catch (Throwable $e) {
+        // Prevod alt-ov ne sme blokirati uspešnih prevodov posta
+        error_log('blog ai_translate_post media alts: ' . $e->getMessage());
+    }
+
+    $okCount = 0; $errCount = 0; $skipCount = 0;
+    foreach ($results as $r) {
+        if ($r['status'] === 'ok') $okCount++;
+        elseif ($r['status'] === 'error') $errCount++;
+        else $skipCount++;
+    }
+    json_response(true, [
+        'post_id'      => $postId,
+        'results'      => $results,
+        'ok_count'     => $okCount,
+        'error_count'  => $errCount,
+        'skipped'      => $skipCount,
+    ]);
+}
+
+// ── 4a. GENERATE SINGLE IMAGE (z user promptom) ──────────────────
+if ($action === 'ai_generate_image_single' && $method === 'POST') {
+    $body   = $body ?? get_body();
+    $prompt = trim($body['prompt'] ?? '');
+    $alt    = trim($body['alt']    ?? '');
+    $lang   = $body['lang'] ?? 'sl';
+    if ($prompt === '') json_response(false, null, 'prompt obvezen.', 400);
+    if (!in_array($lang, BLOG_LANGS, true)) $lang = 'sl';
+    @set_time_limit(120);
+    try {
+        $meta = blog_openai_generate_image(
+            $prompt,
+            $alt !== '' ? $alt : $prompt,
+            '',
+            $lang,
+            (int)$session['user_id'],
+            ['quality' => $body['quality'] ?? 'standard']
+        );
+        json_response(true, $meta);
+    } catch (Throwable $e) {
+        error_log('blog ai_generate_image_single: ' . $e->getMessage());
+        json_response(false, null, 'Generacija slike spodletela: ' . $e->getMessage(), 500);
+    }
+}
+
+// ── 4. SUGGEST TAGS ──────────────────────────────────────────────
+if ($action === 'ai_suggest_tags' && $method === 'POST') {
+    $body  = $body ?? get_body();
+    $title = trim($body['title'] ?? '');
+    $md    = $body['content_md'] ?? '';
+    $lang  = $body['lang'] ?? 'sl';
+    if ($title === '' || $md === '') json_response(false, null, 'title in content_md obvezna.', 400);
+    if (!in_array($lang, BLOG_LANGS, true)) $lang = 'sl';
+    try {
+        $tags = blog_ai_suggest_tags($title, $md, $lang);
+        json_response(true, ['tags' => $tags]);
+    } catch (Throwable $e) {
+        json_response(false, null, 'AI predlogi tagov spodleteli: ' . $e->getMessage(), 500);
+    }
 }
 
 json_response(false, null, 'Neznana akcija: ' . $action, 400);
