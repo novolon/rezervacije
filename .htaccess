@@ -1,0 +1,64 @@
+# ─── Rezervacije SaaS – URL rewriting ────────────────────────────────────────
+# Pravila za blog "Booked", sitemap.xml in robots.txt.
+#
+# DEV:  app je v podmapi /rezervacije-saas/  →  RewriteBase /rezervacije-saas/
+# PROD: app je v korenski mapi               →  RewriteBase /
+# (Spremeni RewriteBase pred deploy-em na produkcijo.)
+# ─────────────────────────────────────────────────────────────────────────────
+
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteBase /rezervacije-saas/
+
+# ── Static / preflight: ne rewrite-aj obstoječih datotek/map ─────────────────
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# ── Sitemap & robots ─────────────────────────────────────────────────────────
+RewriteRule ^sitemap\.xml$ sitemap.php [L]
+
+# ── Booked feed (RSS) ────────────────────────────────────────────────────────
+RewriteRule ^booked/feed-([a-z]{2})\.xml$ blog/feed.php?lang=$1 [L,QSA]
+RewriteRule ^([a-z]{2})/booked/feed\.xml$ blog/feed.php?lang=$1 [L,QSA]
+
+# ── Booked listing ───────────────────────────────────────────────────────────
+RewriteRule ^booked/?$               blog/index.php          [L,QSA]
+RewriteRule ^([a-z]{2})/booked/?$    blog/index.php?lang=$1  [L,QSA]
+
+# ── Booked kategorije ────────────────────────────────────────────────────────
+RewriteRule ^booked/c/([a-z0-9-]+)/?$              blog/category.php?slug=$1            [L,QSA]
+RewriteRule ^([a-z]{2})/booked/c/([a-z0-9-]+)/?$   blog/category.php?lang=$1&slug=$2    [L,QSA]
+
+# ── Booked tagi ──────────────────────────────────────────────────────────────
+RewriteRule ^booked/t/([a-z0-9-]+)/?$              blog/tag.php?slug=$1                 [L,QSA]
+RewriteRule ^([a-z]{2})/booked/t/([a-z0-9-]+)/?$   blog/tag.php?lang=$1&slug=$2         [L,QSA]
+
+# ── Booked avtor ─────────────────────────────────────────────────────────────
+RewriteRule ^booked/avtor/([a-z0-9-]+)/?$              blog/author.php?slug=$1          [L,QSA]
+RewriteRule ^([a-z]{2})/booked/author/([a-z0-9-]+)/?$  blog/author.php?lang=$1&slug=$2  [L,QSA]
+
+# ── Booked single post (mora biti zadnja blog ruta) ──────────────────────────
+RewriteRule ^booked/([a-z0-9-]+)/?$              blog/post.php?slug=$1            [L,QSA]
+RewriteRule ^([a-z]{2})/booked/([a-z0-9-]+)/?$   blog/post.php?lang=$1&slug=$2    [L,QSA]
+</IfModule>
+
+# ── Security: zavrni dostop do dot-fileov in conf-ov ─────────────────────────
+<FilesMatch "^\.|\.(sql|log|md|example\.php)$">
+    Require all denied
+</FilesMatch>
+<Files "config.php">
+    Require all denied
+</Files>
+
+# ── Cache headers za statične datoteke ───────────────────────────────────────
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/jpeg          "access plus 1 year"
+    ExpiresByType image/png           "access plus 1 year"
+    ExpiresByType image/webp          "access plus 1 year"
+    ExpiresByType image/svg+xml       "access plus 1 month"
+    ExpiresByType text/css            "access plus 7 days"
+    ExpiresByType application/javascript "access plus 7 days"
+    ExpiresByType application/rss+xml "access plus 1 hour"
+</IfModule>

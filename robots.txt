@@ -1,0 +1,12 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /pages/
+Disallow: /cron/
+Disallow: /includes/
+Disallow: /sql/
+Disallow: /uploads/blog/_tmp/
+Disallow: /login.php
+Disallow: /register.php
+
+Sitemap: https://app.rezervacije.si/sitemap.xml

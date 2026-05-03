@@ -19,3 +19,21 @@ Thumbs.db
 
 # Rezble design bundle (reference only, ni production)
 design-reference/
+
+# Blog reference HTML (6MB Magic Patterns export, samo lokalna referenca)
+blog-reference/
+
+# Claude Code lokalne nastavitve (per-developer)
+.claude/
+
+# Sitemap runtime cache
+sitemap.xml.cache
+
+# User uploads (per-environment)
+uploads/
+
+# Lokalni test/debug skripti (lahko vsebujejo kredenciale)
+test-racun.php
+
+# Claude Code bootstrap (ni project-related)
+install.cmd
