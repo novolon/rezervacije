@@ -71,6 +71,7 @@ $fullName = $_SESSION['full_name'];
         <button class="admin-tab" data-tab="sa-disc-codes">Kode za popust</button>
         <button class="admin-tab" data-tab="sa-system"><?= t('superadmin.tab_system') ?></button>
         <a href="<?= BASE_PATH ?>/pages/gdpr.php" class="admin-tab" style="text-decoration:none"><?= t('superadmin.tab_gdpr') ?></a>
+        <a href="<?= BASE_PATH ?>/pages/superadmin_blog.php" class="admin-tab" style="text-decoration:none">Booked</a>
     </div>
 
     <!-- Panel: Admini -->

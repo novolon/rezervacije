@@ -1,0 +1,540 @@
+/* ============================================================================
+ * Booked editor – urejanje članka z EasyMDE + lang tabs + autosave.
+ * ============================================================================ */
+(function () {
+    'use strict';
+
+    const BASE = (window.APP_STATE && APP_STATE.base) || '';
+
+    let postId = window.BLOG_POST_ID || 0;
+    const _urlLang = new URLSearchParams(location.search).get('lang');
+    let activeLang = (_urlLang && BLOG_LANGS.includes(_urlLang)) ? _urlLang : 'sl';
+    let mde = null;
+    let translationsCache = {};   // lang_code -> translation object
+    let postCache = null;         // post object (master_lang, category, etc.)
+    let saveTimer = null;
+    let isLoading = false;
+
+    const els = {
+        title:        document.getElementById('bk-title'),
+        slug:         document.getElementById('bk-slug'),
+        excerpt:      document.getElementById('bk-excerpt'),
+        metaTitle:    document.getElementById('bk-meta-title'),
+        metaDesc:     document.getElementById('bk-meta-description'),
+        readingTime:  document.getElementById('bk-reading-time'),
+        contentTA:    document.getElementById('bk-content'),
+        masterLang:   document.getElementById('bk-master-lang'),
+        category:     document.getElementById('bk-category'),
+        author:       document.getElementById('bk-author'),
+        tags:         document.getElementById('bk-tags-picker'),
+        heroPreview:  document.getElementById('bk-hero-preview'),
+        statusBadge:  document.getElementById('bk-post-status-badge'),
+        autosave:     document.getElementById('bk-autosave-status'),
+        editorTitle:  document.getElementById('bk-editor-title'),
+        metaTitleLen: document.getElementById('bk-meta-title-len'),
+        metaDescLen:  document.getElementById('bk-meta-desc-len'),
+    };
+
+    let heroMediaId = null;
+    let _mediaPickerCallback = null;
+
+    // ── Init EasyMDE (čakaj, da se library naloži) ──────────────────────────
+    function initEditor() {
+        if (typeof EasyMDE === 'undefined') {
+            setTimeout(initEditor, 100);
+            return;
+        }
+        mde = new EasyMDE({
+            element: els.contentTA,
+            spellChecker: false,
+            autofocus: false,
+            status: ['lines','words'],
+            minHeight: '500px',
+            placeholder: '## Začni s podnaslovom\n\nNapiši uvodni odstavek...',
+            toolbar: [
+                'bold','italic','heading-2','heading-3','|',
+                'quote','unordered-list','ordered-list','|',
+                'link','image','code','horizontal-rule','|',
+                {
+                    name: 'cta',
+                    action: function () {
+                        const type = prompt('Tip CTA-ja: register / pricing / demo / subscribe', 'register');
+                        if (!type) return;
+                        const cm = mde.codemirror;
+                        const pos = cm.getCursor();
+                        cm.replaceRange('\n\n[cta:' + type.trim() + ']\n\n', pos);
+                    },
+                    className: 'fa fa-bullhorn',
+                    title: 'Vstavi CTA shortcode',
+                },
+                {
+                    name: 'media',
+                    action: function () {
+                        openMediaPicker((m) => {
+                            const cm = mde.codemirror;
+                            const pos = cm.getCursor();
+                            const alt = (m.alt_translations && m.alt_translations[activeLang]) || (m.alt_translations && m.alt_translations.sl) || '';
+                            cm.replaceRange('![' + alt + '](media:' + m.id + ')', pos);
+                        });
+                    },
+                    className: 'fa fa-picture-o',
+                    title: 'Vstavi sliko iz knjižnice',
+                },
+                '|','preview','side-by-side','fullscreen'
+            ],
+        });
+        mde.codemirror.on('change', onContentChanged);
+        loadPostIfNeeded();
+    }
+    initEditor();
+
+    // ── Load (existing) ─────────────────────────────────────────────────────
+    async function loadPostIfNeeded() {
+        if (!postId) {
+            // Nov članek — prikaži prazen form, ustvarjen bo ob prvem save-u
+            updateLangTabsFromCache();
+            return;
+        }
+        try {
+            isLoading = true;
+            const post = await API.get('/api/blog.php?action=get_post&id=' + postId);
+            postCache = post;
+            translationsCache = post.translations || {};
+            heroMediaId = post.hero_media_id ? parseInt(post.hero_media_id, 10) : null;
+            if (post.hero_media) renderHeroPreview(post.hero_media);
+
+            // Sidebar
+            els.masterLang.value = post.master_lang || 'sl';
+            els.category.value   = post.category_id || '';
+            els.author.value     = post.author_id || '';
+            const tagIds = (post.tag_ids || []).map(String);
+            els.tags.querySelectorAll('input[type=checkbox]').forEach(cb => {
+                cb.checked = tagIds.includes(cb.value);
+            });
+            renderStatusBadge(post.status);
+            updateViewLink();
+            els.editorTitle.textContent = 'Urejam: ' + (translationsCache[post.master_lang]?.title || '#' + postId);
+
+            // Aktiven jezik = URL param ali master
+            activeLang = (_urlLang && BLOG_LANGS.includes(_urlLang)) ? _urlLang : (post.master_lang || 'sl');
+            document.querySelectorAll('.bk-lang-tab').forEach(t => {
+                t.classList.toggle('active', t.dataset.lang === activeLang);
+            });
+            document.getElementById('bk-active-lang').value = activeLang;
+            populateFormForLang(activeLang);
+            updateLangTabsFromCache();
+        } catch (e) {
+            alert('Napaka pri nalaganju: ' + e.message);
+        } finally { isLoading = false; }
+    }
+
+    // ── Lang tabs ───────────────────────────────────────────────────────────
+    document.getElementById('bk-lang-tabs').addEventListener('click', (e) => {
+        const tab = e.target.closest('.bk-lang-tab');
+        if (!tab) return;
+        const lang = tab.dataset.lang;
+        if (lang === activeLang) return;
+        // Auto-save trenutni form
+        captureCurrentFormToCache();
+        // Preklopi
+        document.querySelectorAll('.bk-lang-tab').forEach(t => t.classList.toggle('active', t === tab));
+        activeLang = lang;
+        document.getElementById('bk-active-lang').value = lang;
+        populateFormForLang(lang);
+        updateViewLink();
+    });
+
+    function captureCurrentFormToCache() {
+        if (!activeLang) return;
+        const tr = translationsCache[activeLang] || { lang_code: activeLang };
+        tr.title            = els.title.value;
+        tr.slug             = els.slug.value;
+        tr.excerpt          = els.excerpt.value;
+        tr.meta_title       = els.metaTitle.value;
+        tr.meta_description = els.metaDesc.value;
+        tr.content_md       = mde ? mde.value() : els.contentTA.value;
+        translationsCache[activeLang] = tr;
+    }
+
+    function populateFormForLang(lang) {
+        const tr = translationsCache[lang] || { lang_code: lang };
+        els.title.value        = tr.title || '';
+        els.slug.value         = tr.slug || '';
+        els.excerpt.value      = tr.excerpt || '';
+        els.metaTitle.value    = tr.meta_title || '';
+        els.metaDesc.value     = tr.meta_description || '';
+        els.readingTime.value  = tr.reading_time_minutes ? (tr.reading_time_minutes + ' min') : '';
+        if (mde) mde.value(tr.content_md || '');
+        else els.contentTA.value = tr.content_md || '';
+        updateMetaCounters();
+    }
+
+    function updateLangTabsFromCache() {
+        const TR_LABEL = { draft: '—', pending_review: '⏳', approved: '✓', rejected: '✗' };
+        BLOG_LANGS.forEach(lc => {
+            const span = document.querySelector('[data-status-for="' + lc + '"]');
+            if (!span) return;
+            const tr = translationsCache[lc];
+            if (!tr) {
+                span.textContent = '—';
+                span.style.color = '#8a948e';
+            } else {
+                span.textContent = TR_LABEL[tr.status] || '?';
+                span.style.color = tr.status === 'approved' ? '#2f7d52'
+                                : tr.status === 'pending_review' ? '#c8542b'
+                                : tr.status === 'rejected' ? '#b3392a'
+                                : '#5a655e';
+            }
+        });
+    }
+
+    // ── Autosave on change ──────────────────────────────────────────────────
+    function onContentChanged() {
+        if (isLoading) return;
+        if (saveTimer) clearTimeout(saveTimer);
+        els.autosave.textContent = '~';
+        saveTimer = setTimeout(saveTranslation, 1500);
+    }
+    [els.title, els.slug, els.excerpt, els.metaTitle, els.metaDesc].forEach(el => {
+        if (!el) return;
+        el.addEventListener('input', onContentChanged);
+    });
+    els.metaTitle.addEventListener('input', updateMetaCounters);
+    els.metaDesc.addEventListener('input',  updateMetaCounters);
+    function updateMetaCounters() {
+        if (els.metaTitleLen) els.metaTitleLen.textContent = (els.metaTitle.value || '').length;
+        if (els.metaDescLen)  els.metaDescLen.textContent  = (els.metaDesc.value  || '').length;
+    }
+
+    // Auto slug iz title (samo če slug prazen)
+    els.title.addEventListener('blur', () => {
+        if (!els.slug.value && els.title.value) {
+            els.slug.value = slugify(els.title.value);
+        }
+    });
+
+    function slugify(s) {
+        const map = {'č':'c','ć':'c','š':'s','ž':'z','đ':'d','á':'a','à':'a','â':'a','ä':'a','é':'e','è':'e','í':'i','ó':'o','ö':'o','ú':'u','ü':'u','ñ':'n'};
+        return String(s).toLowerCase().replace(/[čćšžđáàâäéèíóöúüñ]/g, c => map[c] || c)
+            .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 80);
+    }
+
+    // ── Save translation ────────────────────────────────────────────────────
+    async function saveTranslation() {
+        if (isLoading) return;
+        if (!els.title.value.trim()) { els.autosave.textContent = '⚠'; return; }
+
+        // Ustvari post če še ne obstaja
+        if (!postId) {
+            try {
+                const body = {
+                    master_lang: els.masterLang.value || activeLang,
+                    title: els.title.value.trim(),
+                    slug:  els.slug.value.trim(),
+                    excerpt: els.excerpt.value,
+                    content_md: mde ? mde.value() : els.contentTA.value,
+                    meta_title: els.metaTitle.value,
+                    meta_description: els.metaDesc.value,
+                    category_id: els.category.value || null,
+                    author_id: els.author.value || null,
+                    hero_media_id: heroMediaId,
+                };
+                const res = await API.post('/api/blog.php?action=create_post', body);
+                postId = res.id;
+                window.BLOG_POST_ID = postId;
+                document.getElementById('bk-post-id').value = postId;
+                history.replaceState(null, '', BASE + '/pages/blog_editor.php?id=' + postId);
+                els.autosave.textContent = '✓ shranjeno';
+                els.editorTitle.textContent = 'Urejam: ' + body.title;
+                // Po create-u, naloži cache
+                await loadPostIfNeeded();
+                return;
+            } catch (e) {
+                els.autosave.textContent = '⚠ ' + e.message;
+                return;
+            }
+        }
+
+        // Posodobi obstoječi post
+        try {
+            els.autosave.textContent = '…';
+            const body = {
+                post_id: postId,
+                lang_code: activeLang,
+                title:    els.title.value.trim(),
+                slug:     els.slug.value.trim() || slugify(els.title.value),
+                excerpt:  els.excerpt.value,
+                meta_title: els.metaTitle.value,
+                meta_description: els.metaDesc.value,
+                content_md: mde ? mde.value() : els.contentTA.value,
+            };
+            const res = await API.post('/api/blog.php?action=save_translation', body);
+            // Posodobi local cache
+            captureCurrentFormToCache();
+            translationsCache[activeLang].id = res.translation_id;
+            translationsCache[activeLang].slug = res.slug;
+            translationsCache[activeLang].reading_time_minutes = res.reading_time_minutes;
+            translationsCache[activeLang].word_count = res.word_count;
+            translationsCache[activeLang].status = translationsCache[activeLang].status || 'draft';
+            els.slug.value = res.slug;
+            els.readingTime.value = res.reading_time_minutes + ' min · ' + res.word_count + ' besed';
+            els.autosave.textContent = '✓ shranjeno · ' + new Date().toLocaleTimeString('sl-SI', { hour: '2-digit', minute: '2-digit' });
+            updateLangTabsFromCache();
+            updateViewLink();
+        } catch (e) {
+            els.autosave.textContent = '⚠ ' + e.message;
+        }
+    }
+    document.getElementById('bk-save-btn').addEventListener('click', saveTranslation);
+
+    // Approve / reject translation
+    document.getElementById('bk-approve-translation').addEventListener('click', async () => {
+        const tr = translationsCache[activeLang];
+        if (!tr || !tr.id) { alert('Najprej shrani prevod.'); return; }
+        await API.post('/api/blog.php?action=change_translation_status', { translation_id: tr.id, status: 'approved' });
+        tr.status = 'approved';
+        updateLangTabsFromCache();
+        els.autosave.textContent = '✓ odobreno';
+    });
+    document.getElementById('bk-reject-translation').addEventListener('click', async () => {
+        const tr = translationsCache[activeLang];
+        if (!tr || !tr.id) { alert('Najprej shrani prevod.'); return; }
+        await API.post('/api/blog.php?action=change_translation_status', { translation_id: tr.id, status: 'rejected' });
+        tr.status = 'rejected';
+        updateLangTabsFromCache();
+    });
+
+    // ── Save meta (sidebar) ─────────────────────────────────────────────────
+    document.getElementById('bk-save-meta').addEventListener('click', async () => {
+        if (!postId) { alert('Najprej shrani članek.'); return; }
+        const tagIds = Array.from(els.tags.querySelectorAll('input[type=checkbox]:checked')).map(cb => parseInt(cb.value, 10));
+        try {
+            await API.post('/api/blog.php?action=save_post_meta', {
+                post_id: postId,
+                category_id: els.category.value || null,
+                author_id:   els.author.value || null,
+                hero_media_id: heroMediaId,
+                tag_ids: tagIds,
+            });
+            els.autosave.textContent = '✓ meta shranjena';
+        } catch (e) { alert(e.message); }
+    });
+
+    // ── Status actions ──────────────────────────────────────────────────────
+    document.getElementById('bk-publish-btn').addEventListener('click', async () => {
+        if (!postId) { alert('Najprej shrani.'); return; }
+        if (!confirm('Objavi takoj? Prevodi v drugih jezikih, ki niso "approved", ne bodo prikazani.')) return;
+        try {
+            // Shrani meta (hero, kategorija, avtor, tagi) pred objavo
+            const tagIds = Array.from(els.tags.querySelectorAll('input[type=checkbox]:checked')).map(cb => parseInt(cb.value, 10));
+            await API.post('/api/blog.php?action=save_post_meta', {
+                post_id: postId,
+                category_id: els.category.value || null,
+                author_id:   els.author.value || null,
+                hero_media_id: heroMediaId,
+                tag_ids: tagIds,
+            });
+            await API.post('/api/blog.php?action=change_post_status', {
+                post_id: postId, status: 'published',
+            });
+            if (postCache) postCache.status = 'published';
+            renderStatusBadge('published');
+            updateViewLink();
+            els.autosave.textContent = '✓ objavljeno';
+        } catch (e) { alert(e.message); }
+    });
+
+    document.getElementById('bk-pending-btn').addEventListener('click', async () => {
+        if (!postId) { alert('Najprej shrani.'); return; }
+        await API.post('/api/blog.php?action=change_post_status', { post_id: postId, status: 'pending_review' });
+        renderStatusBadge('pending_review');
+    });
+
+    document.getElementById('bk-archive-btn').addEventListener('click', async () => {
+        if (!postId) return;
+        if (!confirm('Arhiviraj članek?')) return;
+        await API.post('/api/blog.php?action=change_post_status', { post_id: postId, status: 'archived' });
+        renderStatusBadge('archived');
+    });
+
+    document.getElementById('bk-schedule-btn').addEventListener('click', () => {
+        if (!postId) { alert('Najprej shrani.'); return; }
+        document.getElementById('bk-schedule-modal').hidden = false;
+    });
+    document.querySelectorAll('[data-close-modal]').forEach(b => b.addEventListener('click', () => {
+        b.closest('.bk-modal').hidden = true;
+    }));
+    document.getElementById('bk-confirm-schedule').addEventListener('click', async () => {
+        const dt = document.getElementById('bk-schedule-datetime').value;
+        if (!dt) { alert('Izberi datum.'); return; }
+        await API.post('/api/blog.php?action=change_post_status', {
+            post_id: postId, status: 'scheduled', scheduled_at: dt.replace('T', ' ') + ':00',
+        });
+        renderStatusBadge('scheduled');
+        document.getElementById('bk-schedule-modal').hidden = true;
+    });
+
+    function updateViewLink() {
+        const link = document.getElementById('bk-view-post-link');
+        if (!link) return;
+        const tr = translationsCache[activeLang];
+        const status = postCache && postCache.status;
+        if (tr && tr.slug && status === 'published') {
+            link.href = BASE + (activeLang === 'sl' ? '/booked/' : '/' + activeLang + '/booked/') + tr.slug;
+            link.style.display = '';
+        } else {
+            link.style.display = 'none';
+        }
+    }
+
+    function renderStatusBadge(status) {
+        const map = {
+            draft:          { label: 'Osnutek',     bg: '#F4F1EA', fg: '#5A655E' },
+            pending_review: { label: 'V pregledu',  bg: '#FAE8DF', fg: '#B34822' },
+            scheduled:      { label: 'Zakazano',    bg: '#E6ECE7', fg: '#2C3A30' },
+            published:      { label: 'Objavljeno',  bg: '#D1FADF', fg: '#2F7D52' },
+            archived:       { label: 'Arhivirano',  bg: '#F4F1EA', fg: '#8A948E' },
+        }[status] || { label: status, bg: '#eee', fg: '#000' };
+        els.statusBadge.textContent = map.label;
+        els.statusBadge.style.background = map.bg;
+        els.statusBadge.style.color = map.fg;
+        els.statusBadge.dataset.status = status;
+    }
+
+    // ── Hero image picker ───────────────────────────────────────────────────
+    document.getElementById('bk-pick-hero').addEventListener('click', () => {
+        openMediaPicker((m) => {
+            heroMediaId = m.id;
+            renderHeroPreview(m);
+            els.autosave.textContent = '~ (klikni Shrani meta)';
+        });
+    });
+    document.getElementById('bk-clear-hero').addEventListener('click', () => {
+        heroMediaId = null;
+        renderHeroPreview(null);
+    });
+
+    function renderHeroPreview(media) {
+        if (media) {
+            els.heroPreview.innerHTML = '<img src="' + escapeAttr(media.preview_url) + '" alt="" style="width:100%;height:auto;display:block;border-radius:10px">';
+        } else if (!heroMediaId) {
+            els.heroPreview.innerHTML = '<div class="bk-hero-empty">Brez slike</div>';
+        }
+    }
+
+    // ── Media picker modal ──────────────────────────────────────────────────
+    function _renderPickerGrid(grid, rows, onPick) {
+        const modal = document.getElementById('bk-media-modal');
+        if (!rows || rows.length === 0) {
+            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--color-muted)">Knjižnica je prazna. Naloži sliko zgoraj.</div>';
+            return;
+        }
+        grid.innerHTML = rows.map(m => `
+            <div class="bk-media-item" data-id="${m.id}" style="background:${m.dominant_color || '#eee'};cursor:pointer">
+                <img src="${escapeAttr(m.preview_url)}" alt="" loading="lazy">
+            </div>`).join('');
+        grid.querySelectorAll('.bk-media-item').forEach(el => {
+            el.addEventListener('click', () => {
+                const id = parseInt(el.dataset.id, 10);
+                const media = rows.find(x => x.id == id);
+                if (media) {
+                    if (typeof onPick === 'function') onPick(media);
+                    modal.hidden = true;
+                }
+            });
+        });
+    }
+
+    async function openMediaPicker(onPick) {
+        _mediaPickerCallback = onPick;
+        const modal = document.getElementById('bk-media-modal');
+        const grid  = document.getElementById('bk-modal-media-grid');
+        modal.hidden = false;
+        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--color-muted)">Nalagam...</div>';
+        try {
+            const rows = await API.get('/api/blog_media.php?action=list');
+            _renderPickerGrid(grid, rows, onPick);
+        } catch (e) {
+            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:var(--color-danger)">Napaka.</div>';
+        }
+    }
+
+    const modalUpload    = document.getElementById('bk-modal-upload');
+    const modalUploadBtn = document.getElementById('bk-modal-upload-btn');
+    if (modalUploadBtn) modalUploadBtn.addEventListener('click', () => modalUpload.click());
+    if (modalUpload) modalUpload.addEventListener('change', async () => {
+        const file = modalUpload.files && modalUpload.files[0];
+        if (!file) return;
+        const fd = new FormData();
+        fd.append('file', file);
+        modalUploadBtn.textContent = 'Nalagam...';
+        try {
+            const res = await fetch(BASE + '/api/blog_media.php?action=upload', { method: 'POST', body: fd, credentials: 'same-origin' });
+            const json = await res.json();
+            if (!json.success) throw new Error(json.error || 'Napaka.');
+            const grid = document.getElementById('bk-modal-media-grid');
+            const rows = await API.get('/api/blog_media.php?action=list');
+            _renderPickerGrid(grid, rows, _mediaPickerCallback);
+        } catch (e) {
+            alert('Napaka: ' + e.message);
+        } finally {
+            modalUploadBtn.textContent = '+ Naloži novo sliko';
+            modalUpload.value = '';
+        }
+    });
+
+    // ── Inline tag kreacija ─────────────────────────────────────────────────
+    const newTagInput = document.getElementById('bk-new-tag-input');
+    const addTagBtn   = document.getElementById('bk-add-tag-btn');
+    if (addTagBtn && newTagInput) {
+        const doAddTag = async () => {
+            const name = newTagInput.value.trim();
+            if (!name) return;
+            const slug = name.toLowerCase()
+                .replace(/[čć]/g, 'c').replace(/[šś]/g, 's').replace(/[žź]/g, 'z').replace(/đ/g, 'd')
+                .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+            try {
+                const res = await API.post('/api/blog.php?action=save_tag', { id: 0, slug, names: { sl: name } });
+                const tagId = res && res.id;
+                if (!tagId) throw new Error('Ni ID-ja.');
+                const picker = document.getElementById('bk-tags-picker');
+                const lbl = document.createElement('label');
+                lbl.className = 'bk-tag-chip';
+                lbl.innerHTML = '<input type="checkbox" value="' + tagId + '" checked> ' + name.replace(/</g, '&lt;');
+                picker.appendChild(lbl);
+                newTagInput.value = '';
+            } catch (e) { alert('Napaka: ' + e.message); }
+        };
+        addTagBtn.addEventListener('click', doAddTag);
+        newTagInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); doAddTag(); } });
+    }
+
+    // ── Kopiraj vsebino iz drugega jezika ───────────────────────────────────
+    const copyFromBtn  = document.getElementById('bk-copy-lang-btn');
+    const copyFromSel  = document.getElementById('bk-copy-from-lang');
+    if (copyFromBtn && copyFromSel) {
+        copyFromBtn.addEventListener('click', () => {
+            const fromLang = copyFromSel.value;
+            if (fromLang === activeLang) { alert('Izberi drug jezik kot je aktiven.'); return; }
+            captureCurrentFormToCache();
+            const src = translationsCache[fromLang];
+            if (!src || !src.title) { alert('Jezik ' + fromLang.toUpperCase() + ' nima shranjene vsebine.'); return; }
+            if (!confirm('Prepiši vsa polja aktivnega jezika ' + activeLang.toUpperCase() + ' z vsebino iz ' + fromLang.toUpperCase() + '?')) return;
+            const current = translationsCache[activeLang] || { lang_code: activeLang };
+            translationsCache[activeLang] = {
+                ...current,
+                title:            src.title,
+                excerpt:          src.excerpt,
+                meta_title:       src.meta_title,
+                meta_description: src.meta_description,
+                content_md:       src.content_md,
+            };
+            populateFormForLang(activeLang);
+            onContentChanged();
+        });
+    }
+
+    function escapeAttr(s) {
+        return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+})();
