@@ -152,8 +152,44 @@ function blog_ai_extract_json($text) {
         $candidate = substr($text, $first, $last - $first + 1);
         $parsed = json_decode($candidate, true);
         if (is_array($parsed)) return $parsed;
+        // Še poskusi popravo: nadomesti literalne newline znotraj string vrednosti
+        $repaired = blog_ai_repair_json_strings($candidate);
+        if ($repaired !== null) {
+            $parsed2 = json_decode($repaired, true);
+            if (is_array($parsed2)) return $parsed2;
+        }
     }
-    throw new RuntimeException('AI ni vrnil veljavnega JSON-a. Začetek odgovora: ' . substr($text, 0, 200));
+    // Diagnoza: log surove odzive (utf8mb4 char len)
+    error_log('blog_ai_extract_json FAIL (raw, first 800 chars): ' . substr($text, 0, 800));
+    error_log('blog_ai_extract_json json_last_error: ' . json_last_error_msg());
+    throw new RuntimeException('AI ni vrnil veljavnega JSON-a. Začetek: ' . substr($text, 0, 200));
+}
+
+/**
+ * Heuristični popravek: literalne nove vrstice znotraj JSON string vrednosti
+ * (med " in ") nadomesti z \n. Pomaga, ko AI včasih ne escape-a.
+ * Vrne null, če sploh ne vsebuje stringov ali se ne da popraviti.
+ */
+function blog_ai_repair_json_strings($s) {
+    $out = '';
+    $inStr = false;
+    $escape = false;
+    $len = strlen($s);
+    for ($i = 0; $i < $len; $i++) {
+        $c = $s[$i];
+        if ($escape) {
+            $out .= $c; $escape = false; continue;
+        }
+        if ($c === '\\') { $out .= $c; $escape = true; continue; }
+        if ($c === '"') { $inStr = !$inStr; $out .= $c; continue; }
+        if ($inStr) {
+            if ($c === "\n")      { $out .= '\\n'; continue; }
+            if ($c === "\r")      { $out .= '\\r'; continue; }
+            if ($c === "\t")      { $out .= '\\t'; continue; }
+        }
+        $out .= $c;
+    }
+    return $out;
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -354,21 +390,35 @@ PROMPT;
         $userPrompt
     );
 
-    $text = blog_ai_call(BLOG_AI_MODEL_TRANSLATE, [
-        ['role' => 'user', 'content' => $userPrompt],
-    ], [
-        'system'      => 'You are an expert localizer for hospitality SaaS marketing content. You translate blog articles preserving structure, tone, and SEO intent. Output strict JSON only.',
-        'max_tokens'  => 8000,
-        'temperature' => 0.3,
-    ]);
-    $data = blog_ai_extract_json($text);
+    $system = 'You are an expert localizer for hospitality SaaS marketing content. You translate blog articles preserving structure, tone, and SEO intent. CRITICAL: Output STRICT JSON only — no markdown fences, no commentary before or after, no thinking-out-loud. The very first character of your response MUST be { and the last character must be }. All newlines inside string values MUST be escaped as \\n.';
 
-    foreach (['title','slug','content_md'] as $required) {
-        if (empty($data[$required])) {
-            throw new RuntimeException('Prevod manjka polje: ' . $required);
+    // 2 poskusa — če prvi vrne neparseljiv JSON, ponovi s strožjim opozorilom
+    $attempts = 2;
+    $lastError = null;
+    for ($a = 1; $a <= $attempts; $a++) {
+        try {
+            $effSystem = $a === 1 ? $system : ($system . ' Your previous response was malformed. Return ONLY a single, valid JSON object. Make sure to escape all special characters within string values.');
+            $text = blog_ai_call(BLOG_AI_MODEL_TRANSLATE, [
+                ['role' => 'user', 'content' => $userPrompt],
+            ], [
+                'system'     => $effSystem,
+                'max_tokens' => 8000,
+            ]);
+            $data = blog_ai_extract_json($text);
+
+            foreach (['title','slug','content_md'] as $required) {
+                if (empty($data[$required])) {
+                    throw new RuntimeException('Prevod manjka polje: ' . $required);
+                }
+            }
+            return $data;
+        } catch (Throwable $e) {
+            $lastError = $e;
+            error_log('blog_ai_translate_translation attempt ' . $a . '/' . $attempts . ' [' . $sourceLang . '→' . $targetLang . ']: ' . $e->getMessage());
+            if ($a < $attempts) usleep(500000); // 0.5s pause
         }
     }
-    return $data;
+    throw $lastError;
 }
 
 /* ─────────────────────────────────────────────────────────────────

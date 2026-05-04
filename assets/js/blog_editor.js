@@ -570,6 +570,7 @@
             if (!confirm(`Začnem zaporeden prevod v ${targets.length} jezikov? Vsak ~10-15s, skupaj ~${targets.length * 12}s.`)) return;
             aiTranslateBtn.disabled = true;
             let ok = 0, err = 0, skip = 0;
+            const errorDetails = [];
             try {
                 for (let i = 0; i < targets.length; i++) {
                     const lang = targets[i];
@@ -583,13 +584,29 @@
                         ok   += (res.ok_count     || 0);
                         err  += (res.error_count  || 0);
                         skip += (res.skipped      || 0);
+                        if (res.results && res.results.length) {
+                            for (const r of res.results) {
+                                if (r.status === 'error') {
+                                    errorDetails.push(r.lang.toUpperCase() + ': ' + (r.error || 'neznana'));
+                                }
+                            }
+                        }
                     } catch (e) {
                         err++;
-                        // ne prekini cele zanke zaradi enega jezika
+                        errorDetails.push(lang.toUpperCase() + ': ' + (e.message || 'mrežna napaka'));
                     }
                 }
-                aiStatus(`Končano: ${ok} ok, ${err} napak, ${skip} preskočeni. Osvežujem...`, 'var(--color-success, #2F7D52)');
-                setTimeout(() => location.reload(), 1500);
+                if (err > 0) {
+                    aiStatus(`Končano: ${ok} ok, ${err} napak, ${skip} preskočeni.\n\nNapake:\n` + errorDetails.join('\n'), 'var(--color-danger, #B34822)');
+                    if (aiStatusEl) {
+                        aiStatusEl.style.whiteSpace = 'pre-line';
+                        aiStatusEl.style.minHeight  = 'auto';
+                    }
+                    // ne reload-aj samodejno, da uporabnik vidi napake
+                } else {
+                    aiStatus(`Končano: ${ok} ok, ${skip} preskočeni. Osvežujem...`, 'var(--color-success, #2F7D52)');
+                    setTimeout(() => location.reload(), 1500);
+                }
             } finally {
                 aiTranslateBtn.disabled = false;
             }

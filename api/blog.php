@@ -1232,8 +1232,11 @@ if ($action === 'ai_translate_post' && $method === 'POST') {
 
             $translated = blog_ai_translate_translation($masterTr, $masterLang, $tl);
 
-            // Slug unikatnost
-            $slug = !empty($translated['slug']) ? $translated['slug'] : blog_slug($translated['title']);
+            // Slug: vedno sanitiziraj prek blog_slug() ne glede na to, kaj je AI vrnil.
+            // (AI včasih vrne slug z diakritiko ali presledki, kar lahko ne ustreza shemi.)
+            $rawSlug = !empty($translated['slug']) ? $translated['slug'] : $translated['title'];
+            $slug    = blog_slug($rawSlug);
+            if ($slug === '' || $slug === 'post') $slug = blog_slug($translated['title']);
             $checkSlug = $pdo->prepare(
                 "SELECT id FROM blog_post_translations WHERE lang_code = ? AND slug = ? AND post_id <> ? LIMIT 1"
             );
