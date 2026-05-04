@@ -550,24 +550,32 @@
     if (aiTranslateBtn) {
         aiTranslateBtn.addEventListener('click', async () => {
             if (!postId) { alert('Najprej shrani članek.'); return; }
-            const overwrite = confirm('Prevedi v vse jezike (razen master).\n\nOK = prepiši obstoječe prevode\nCancel = preskoči obstoječe (priporočeno za prvi prevod)');
-            // Cancel pomeni skip, ne odpoved!
-            const really = confirm('Začnem prevod? Lahko traja 30-90 sekund.');
-            if (!really) return;
+            const masterLang = (postCache && postCache.master_lang) || 'sl';
+            const targets = BLOG_LANGS.filter(l => l !== masterLang);
+            const overwrite = confirm('Prepišem že obstoječe prevode?\n\nOK = prepiši\nCancel = preskoči obstoječe (priporočeno za prvi prevod)');
+            if (!confirm(`Začnem zaporeden prevod v ${targets.length} jezikov? Vsak ~10-15s, skupaj ~${targets.length * 12}s.`)) return;
             aiTranslateBtn.disabled = true;
-            aiStatus('Prevajam... (pribl. 30-90s)', '');
+            let ok = 0, err = 0, skip = 0;
             try {
-                const res = await API.post('/api/blog.php?action=ai_translate_post', {
-                    post_id: postId,
-                    overwrite: overwrite,
-                });
-                aiStatus(`Končano: ${res.ok_count} ok, ${res.error_count} napak, ${res.skipped} preskočeni.`, 'var(--color-success, #2F7D52)');
-                // Reload post da osvežimo translation cache
-                if (typeof loadPostIfNeeded === 'function') {
-                    setTimeout(() => location.reload(), 1500);
+                for (let i = 0; i < targets.length; i++) {
+                    const lang = targets[i];
+                    aiStatus(`${i+1}/${targets.length} · Prevajam ${lang.toUpperCase()}...`, '');
+                    try {
+                        const res = await API.post('/api/blog.php?action=ai_translate_post', {
+                            post_id: postId,
+                            target_langs: [lang],
+                            overwrite: overwrite,
+                        });
+                        ok   += (res.ok_count     || 0);
+                        err  += (res.error_count  || 0);
+                        skip += (res.skipped      || 0);
+                    } catch (e) {
+                        err++;
+                        // ne prekini cele zanke zaradi enega jezika
+                    }
                 }
-            } catch (e) {
-                aiStatus('Napaka: ' + (e.message || 'neznana'), 'var(--color-danger, #B34822)');
+                aiStatus(`Končano: ${ok} ok, ${err} napak, ${skip} preskočeni. Osvežujem...`, 'var(--color-success, #2F7D52)');
+                setTimeout(() => location.reload(), 1500);
             } finally {
                 aiTranslateBtn.disabled = false;
             }

@@ -93,7 +93,7 @@ function blog_ai_call($model, array $messages, array $opts = []) {
         'messages'   => $messages,
     ];
     if (!empty($opts['system'])) $payload['system'] = $opts['system'];
-    if (isset($opts['temperature'])) $payload['temperature'] = $opts['temperature'];
+    // temperature je deprecated za Claude 4.x modele — namerno izpuščeno.
 
     $ch = curl_init(BLOG_AI_API_URL);
     curl_setopt_array($ch, [

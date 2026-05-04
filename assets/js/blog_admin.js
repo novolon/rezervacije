@@ -175,24 +175,71 @@
     });
 
     async function runGenerateFromTopic(topicId, btn) {
-        if (!confirm('Generiraj članek + slike za to temo?\n\nClaude napiše članek (~10s), nato DALL-E ustvari hero + 2 inline slike (~30s skupaj).\nStrošek: ~$0.30 (DALL-E standard quality).')) return;
+        if (!confirm('Generiraj članek + slike za to temo?\n\nKoraka: 1) Claude napiše članek (~15s), 2) DALL-E ustvari hero + inline slike (vsaka ~15s).\nStrošek: ~$0.30 (DALL-E standard quality).')) return;
         const status = document.getElementById('bk-ai-topics-status');
         const original = btn ? btn.innerHTML : '';
         if (btn) { btn.disabled = true; btn.innerHTML = 'Generiram...'; }
-        if (status) { status.textContent = 'Generiram članek + slike (lahko traja 30-90s)...'; status.style.color = ''; }
+
+        const setStatus = (text, color) => {
+            if (!status) return;
+            status.textContent = text;
+            status.style.color = color || '';
+        };
+
         try {
+            // 1) Tekst
+            setStatus('1/N · Generiram članek (Claude)...');
             const res = await API.post('/api/blog.php?action=ai_generate', { topic_id: topicId });
+            const postId = res.post_id;
+            const editorUrl = res.editor_url;
+            const lang = res.master_lang;
+            const prompts = res.image_prompts || { hero: null, inline: [] };
+
+            // 2) Hero
+            const totalImgs = (prompts.hero ? 1 : 0) + (prompts.inline ? prompts.inline.length : 0);
+            let imgN = 0;
+            if (prompts.hero) {
+                imgN++;
+                setStatus(`2/${1 + totalImgs} · Generiram hero sliko (DALL-E)...`);
+                try {
+                    await API.post('/api/blog.php?action=ai_apply_post_image', {
+                        post_id: postId, role: 'hero',
+                        prompt: prompts.hero.prompt,
+                        alt:    prompts.hero.alt,
+                        caption: prompts.hero.caption || '',
+                        lang,
+                    });
+                } catch (e) {
+                    setStatus('Hero slika ni uspela (' + (e.message || '') + '). Lahko jo dodaš ročno v editorju.', 'var(--color-danger, #B34822)');
+                }
+            }
+
+            // 3) Inline slike (zaporedno)
+            for (const img of (prompts.inline || [])) {
+                imgN++;
+                setStatus(`${1 + imgN}/${1 + totalImgs} · Generiram inline sliko #${img.index} (DALL-E)...`);
+                try {
+                    await API.post('/api/blog.php?action=ai_apply_post_image', {
+                        post_id: postId, role: 'inline', index: img.index,
+                        prompt: img.prompt,
+                        alt:    img.alt,
+                        caption: img.caption || '',
+                        lang,
+                    });
+                } catch (e) {
+                    setStatus(`Inline #${img.index} ni uspela (` + (e.message || '') + '). Druge slike nadaljujem...', 'var(--color-danger, #B34822)');
+                }
+            }
+
+            // 4) Done
             if (status) {
-                status.innerHTML = '✓ Generirano: <strong>' + escapeHtml(res.title) + '</strong> — <a href="' + res.editor_url + '">Odpri v editorju →</a>';
+                status.innerHTML = '✓ Generirano: <strong>' + escapeHtml(res.title) + '</strong> — <a href="' + editorUrl + '">Odpri v editorju →</a>';
                 status.style.color = 'var(--color-success, #2F7D52)';
             }
             loadTopics();
             loadStats();
         } catch (e) {
-            if (status) {
-                status.textContent = 'Napaka: ' + (e.message || '');
-                status.style.color = 'var(--color-danger, #B34822)';
-            }
+            setStatus('Napaka: ' + (e.message || ''), 'var(--color-danger, #B34822)');
         } finally {
             if (btn) { btn.disabled = false; btn.innerHTML = original; }
         }

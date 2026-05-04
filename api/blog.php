@@ -917,7 +917,9 @@ if ($action === 'ai_generate' && $method === 'POST') {
     if (!in_array($lang, BLOG_LANGS, true)) $lang = 'en';
 
     $maxInline    = max(0, min(3, (int)($body['max_inline_images'] ?? 2)));
-    $generateImgs = $body['generate_images'] ?? true; // false → samo besedilo, brez DALL-E
+    // Default: defer (text only). Frontend nato pokliče ai_apply_post_image za vsako sliko posebej,
+    // tako da se izognemo gateway timeout-u na Synology (~60s).
+    $generateImgs = isset($body['generate_images']) ? (bool)$body['generate_images'] : false;
     $imgQuality   = $body['image_quality'] ?? 'standard'; // standard | hd
 
     try {
@@ -1037,6 +1039,28 @@ if ($action === 'ai_generate' && $method === 'POST') {
 
         $pdo->commit();
 
+        // Pripravi image_prompts za frontend, da naredi sequence klicev na ai_apply_post_image
+        $imagePrompts = null;
+        if (!$generateImgs) {
+            $imagePrompts = [
+                'hero'   => !empty($article['hero_image']['prompt']) ? [
+                    'prompt'  => $article['hero_image']['prompt'],
+                    'alt'     => $article['hero_image']['alt']     ?? $article['title'],
+                    'caption' => $article['hero_image']['caption'] ?? '',
+                ] : null,
+                'inline' => array_values(array_filter(array_map(function($img) use ($maxInline) {
+                    $idx = (int)($img['index'] ?? 0);
+                    if ($idx < 1 || $idx > $maxInline || empty($img['prompt'])) return null;
+                    return [
+                        'index'   => $idx,
+                        'prompt'  => $img['prompt'],
+                        'alt'     => $img['alt']     ?? '',
+                        'caption' => $img['caption'] ?? '',
+                    ];
+                }, $article['inline_images'] ?? []))),
+            ];
+        }
+
         json_response(true, [
             'post_id'       => $postId,
             'master_lang'   => $lang,
@@ -1047,11 +1071,96 @@ if ($action === 'ai_generate' && $method === 'POST') {
             'word_count'    => $rendered['word_count'],
             'reading_time'  => $rendered['reading_time'],
             'editor_url'    => BASE_PATH . '/pages/blog_editor.php?id=' . $postId,
+            'image_prompts' => $imagePrompts, // null če smo slike že generirali sinhrono
         ]);
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         error_log('blog ai_generate: ' . $e->getMessage());
         json_response(false, null, 'AI generacija članka spodletela: ' . $e->getMessage(), 500);
+    }
+}
+
+// ── 2b. APPLY ONE IMAGE TO POST (deferred image gen za ai_generate) ─
+if ($action === 'ai_apply_post_image' && $method === 'POST') {
+    $body   = $body ?? get_body();
+    $postId = (int)($body['post_id'] ?? 0);
+    $role   = $body['role'] ?? '';        // 'hero' | 'inline'
+    $idx    = (int)($body['index']  ?? 0); // 1..N za inline
+    $prompt = trim($body['prompt'] ?? '');
+    $alt    = trim($body['alt']    ?? '');
+    $caption= trim($body['caption']?? '');
+    $lang   = $body['lang'] ?? '';
+    if (!$postId || $prompt === '' || !in_array($role, ['hero','inline'], true)) {
+        json_response(false, null, 'post_id, prompt in role obvezni.', 400);
+    }
+
+    @set_time_limit(120);
+
+    // Naloži post + master translation
+    $post = _bk_load_post($pdo, $postId);
+    if (!$post) json_response(false, null, 'Članek ne obstaja.', 404);
+    $masterLang = $post['master_lang'];
+    if (!$lang || !in_array($lang, BLOG_LANGS, true)) $lang = $masterLang;
+
+    try {
+        // 1) Generiraj sliko
+        $meta = blog_openai_generate_image(
+            $prompt,
+            $alt !== '' ? $alt : $prompt,
+            $caption,
+            $lang,
+            (int)$session['user_id'],
+            ['quality' => $body['quality'] ?? 'standard']
+        );
+        $mediaId = (int)$meta['id'];
+
+        // 2) Apliciraj na post
+        if ($role === 'hero') {
+            $pdo->prepare("UPDATE blog_posts SET hero_media_id = ? WHERE id = ?")
+                ->execute([$mediaId, $postId]);
+            json_response(true, [
+                'media_id'      => $mediaId,
+                'role'          => 'hero',
+                'preview_url'   => $meta['preview_url'],
+                'dominant_color'=> $meta['dominant_color'],
+            ]);
+        }
+
+        // inline: zamenjaj <!--IMG:N--> v master translation content_md
+        if ($idx < 1) json_response(false, null, 'index obvezen za inline (1..N).', 400);
+        $tStmt = $pdo->prepare("SELECT id, content_md FROM blog_post_translations WHERE post_id = ? AND lang_code = ?");
+        $tStmt->execute([$postId, $masterLang]);
+        $tr = $tStmt->fetch();
+        if (!$tr) json_response(false, null, 'Master translation ne obstaja.', 404);
+
+        $altClean = str_replace(["\r","\n",'"','`'], ' ', $alt !== '' ? $alt : $prompt);
+        $repl     = '![' . $altClean . '](media:' . $mediaId . ')';
+        $newMd    = str_replace('<!--IMG:' . $idx . '-->', $repl, $tr['content_md']);
+
+        $rendered = blog_render_md($newMd, $masterLang);
+        $pdo->prepare(
+            "UPDATE blog_post_translations
+             SET content_md = ?, content_html = ?, table_of_contents = ?,
+                 reading_time_minutes = ?, word_count = ?
+             WHERE id = ?"
+        )->execute([
+            $newMd, $rendered['html'],
+            json_encode($rendered['toc'], JSON_UNESCAPED_UNICODE),
+            $rendered['reading_time'],
+            $rendered['word_count'],
+            (int)$tr['id'],
+        ]);
+        $pdo->prepare("UPDATE blog_posts SET updated_at = NOW() WHERE id = ?")->execute([$postId]);
+
+        json_response(true, [
+            'media_id'    => $mediaId,
+            'role'        => 'inline',
+            'index'       => $idx,
+            'preview_url' => $meta['preview_url'],
+        ]);
+    } catch (Throwable $e) {
+        error_log('blog ai_apply_post_image: ' . $e->getMessage());
+        json_response(false, null, 'Generacija slike spodletela: ' . $e->getMessage(), 500);
     }
 }
 
