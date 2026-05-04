@@ -136,7 +136,9 @@ if ($action === 'unsubscribe') {
     if ($row) {
         $pdo->prepare("UPDATE blog_subscribers SET unsubscribed_at = NOW() WHERE id = ?")->execute([(int)$row['id']]);
     }
-    echo '<!DOCTYPE html><meta charset="UTF-8"><body style="font-family:Inter,sans-serif;padding:40px;text-align:center"><h1>Odjavljen/a</h1><p>Hvala. Ne bomo več pošiljali sporočil.</p></body>';
+    $listingUrl = blog_listing_url($row['lang_code'] ?? 'sl');
+    header('Location: ' . $listingUrl . '?unsubscribed=1');
+    exit;
     exit;
 }
 

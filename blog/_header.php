@@ -94,3 +94,62 @@ $bkBase        = blog_base_url();
         </div>
     </div>
 </header>
+
+<?php
+// ── Subscribe / unsubscribe success modal (po confirm linkih iz emaila) ──
+$_bk_modal_show = false; $_bk_modal_key = '';
+if (!empty($_GET['subscribed'])) {
+    $_bk_modal_show = true;
+    $_bk_modal_key  = 'success';
+} elseif (!empty($_GET['unsubscribed'])) {
+    $_bk_modal_show = true;
+    $_bk_modal_key  = 'unsubscribed_modal';
+}
+if ($_bk_modal_show):
+    $_bk_modal_title = $_bk_modal_key === 'success'
+        ? t('booked.subscribe.success_modal.title')
+        : t('booked.subscribe.unsubscribed_modal.title');
+    $_bk_modal_text  = $_bk_modal_key === 'success'
+        ? t('booked.subscribe.success_modal.text')
+        : t('booked.subscribe.unsubscribed_modal.text');
+    $_bk_modal_close = $_bk_modal_key === 'success'
+        ? t('booked.subscribe.success_modal.close')
+        : t('booked.subscribe.unsubscribed_modal.close');
+?>
+<div id="bk-subscribe-modal" role="dialog" aria-modal="true" aria-labelledby="bk-subscribe-modal-title"
+     style="position:fixed;inset:0;background:rgba(20,18,15,.55);z-index:9998;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(4px)">
+    <div style="background:#fff;border-radius:18px;padding:32px 28px;max-width:440px;width:100%;text-align:center;box-shadow:0 24px 60px rgba(0,0,0,.25);position:relative">
+        <div style="width:64px;height:64px;border-radius:999px;background:#D1FADF;margin:0 auto 16px;display:flex;align-items:center;justify-content:center">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#2F7D52" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <?php if ($_bk_modal_key === 'success'): ?>
+                    <path d="M20 6 9 17l-5-5"/>
+                <?php else: ?>
+                    <path d="M18 6 6 18M6 6l12 12"/>
+                <?php endif; ?>
+            </svg>
+        </div>
+        <h2 id="bk-subscribe-modal-title" style="font:600 22px/1.25 'Source Serif 4',serif;margin:0 0 12px;color:var(--ink,#1a1a1a)"><?= $_bk_modal_title ?></h2>
+        <p style="font-size:14.5px;line-height:1.55;color:var(--text-2,#5a5a5a);margin:0 0 24px"><?= $_bk_modal_text ?></p>
+        <button type="button" id="bk-subscribe-modal-close" class="btn btn-primary" style="width:100%;justify-content:center"><?= $_bk_modal_close ?></button>
+    </div>
+</div>
+<script>
+(function(){
+    var modal = document.getElementById('bk-subscribe-modal');
+    if (!modal) return;
+    function close(){
+        modal.style.display = 'none';
+        // Odstrani query param brez reload-a
+        try {
+            var u = new URL(location.href);
+            u.searchParams.delete('subscribed');
+            u.searchParams.delete('unsubscribed');
+            history.replaceState(null, '', u.toString());
+        } catch(_){}
+    }
+    document.getElementById('bk-subscribe-modal-close').addEventListener('click', close);
+    modal.addEventListener('click', function(e){ if (e.target === modal) close(); });
+    document.addEventListener('keydown', function(e){ if (e.key === 'Escape') close(); });
+})();
+</script>
+<?php endif; ?>

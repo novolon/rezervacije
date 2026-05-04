@@ -93,23 +93,41 @@ function blog_render_cta(string $type, string $args = '', string $lang = 'sl'): 
  */
 /**
  * GDPR consent checkbox za subscribe forme. Vsebuje povezavo na pages/privacy.php.
+ *
+ * Lang ključ booked.subscribe.gdpr.label podpira {link_open} in {link_close}
+ * placeholdere za poljubno postavitev linka znotraj prevedene fraze.
  */
 function blog_render_subscribe_gdpr(string $idPrefix = 'bksub'): string {
-    $base = blog_base_url();
+    $base       = blog_base_url();
     $checkboxId = $idPrefix . '-gdpr-' . substr(md5(microtime(true)), 0, 4);
     $privacyUrl = $base . '/pages/privacy.php';
-    $linkText   = t('booked.subscribe.gdpr.link_text');
-    $label      = t('booked.subscribe.gdpr.label');
-    // Zamenjaj besedo "Politiko zasebnosti" / lokaliziran link_text z linkom na privacy stran.
-    $labelLinked = preg_replace(
-        '/' . preg_quote($linkText, '/') . '/u',
-        '<a href="' . htmlspecialchars($privacyUrl, ENT_QUOTES) . '" target="_blank" rel="noopener" style="text-decoration:underline">' . htmlspecialchars($linkText, ENT_QUOTES) . '</a>',
-        $label,
-        1
-    );
+
+    $rawLabel = t_raw('booked.subscribe.gdpr.label');
+    // Vstavi link okrog besede med {link_open} in {link_close}
+    if (strpos($rawLabel, '{link_open}') !== false) {
+        $linkOpen  = '<a href="' . htmlspecialchars($privacyUrl, ENT_QUOTES) . '" target="_blank" rel="noopener" style="text-decoration:underline">';
+        $linkClose = '</a>';
+        // HTML escape ostalih delov, ohrani samo naš link tag
+        $parts = preg_split('/(\{link_open\}|\{link_close\})/', $rawLabel);
+        $built = '';
+        $inLink = false;
+        foreach ($parts as $part) {
+            if ($part === '{link_open}') { $built .= $linkOpen; $inLink = true; continue; }
+            if ($part === '{link_close}') { $built .= $linkClose; $inLink = false; continue; }
+            $built .= htmlspecialchars($part, ENT_QUOTES, 'UTF-8');
+        }
+        $labelHtml = $built;
+    } else {
+        // Fallback: na koncu samo dodaj povezavo na privacy
+        $labelHtml = htmlspecialchars($rawLabel, ENT_QUOTES, 'UTF-8')
+            . ' <a href="' . htmlspecialchars($privacyUrl, ENT_QUOTES) . '" target="_blank" rel="noopener" style="text-decoration:underline">'
+            . htmlspecialchars(t_raw('booked.subscribe.gdpr.link_text'), ENT_QUOTES, 'UTF-8')
+            . '</a>';
+    }
+
     return '<label for="' . $checkboxId . '" class="bk-gdpr-consent" style="display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.4;margin-top:8px;color:var(--text-2,inherit)">'
         . '<input type="checkbox" id="' . $checkboxId . '" name="gdpr_consent" value="1" required style="margin-top:2px;flex-shrink:0">'
-        . '<span>' . $labelLinked . '</span>'
+        . '<span>' . $labelHtml . '</span>'
         . '</label>';
 }
 
@@ -163,6 +181,8 @@ function blog_render_subscribe_footer(string $lang = 'sl'): string {
         . '<button type="submit" class="btn btn-primary btn-sm">' . t('booked.subscribe.cta') . '</button>'
         . '</div>'
         . blog_render_subscribe_gdpr('footer')
+        . '<p class="bk-success" hidden style="font-size:13px;color:#9ee2b3;margin:4px 0 0">' . t('booked.subscribe.confirm_sent') . '</p>'
+        . '<p class="bk-error" hidden style="font-size:13px;color:#ffb9a7;margin:4px 0 0"></p>'
         . '</form>';
 }
 
