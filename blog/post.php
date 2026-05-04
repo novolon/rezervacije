@@ -118,6 +118,19 @@ $tags = $tagsStmt->fetchAll();
 $hreflangs = blog_post_hreflangs($postId, $tr['master_lang']);
 $canonical = blog_absolute_url(blog_post_url($tr['slug'], $lang));
 
+// V preview načinu vrni hreflangs za VSE prevode (tudi draft), s ?preview=1 dodatkom,
+// da lahko superadmin preklaplja jezike znotraj predogleda.
+if ($isPreview) {
+    $allTrStmt = $pdo->prepare("SELECT lang_code, slug FROM blog_post_translations WHERE post_id = ?");
+    $allTrStmt->execute([$postId]);
+    $previewHreflangs = [];
+    foreach ($allTrStmt->fetchAll() as $r) {
+        if (!empty($r['slug'])) {
+            $previewHreflangs[$r['lang_code']] = blog_post_url($r['slug'], $r['lang_code']) . '?preview=1';
+        }
+    }
+}
+
 $ogImage = '';
 if ($hero && !empty($hero['variants'])) {
     $variants = is_string($hero['variants']) ? json_decode($hero['variants'], true) : $hero['variants'];
@@ -189,7 +202,8 @@ $bk = [
     'canonical'   => $canonical,
     'og_image'    => $ogImage,
     'og_type'     => 'article',
-    'hreflangs'   => $isPreview ? [] : $hreflangs, // brez hreflang povezav v preview
+    'hreflangs'   => $isPreview ? [] : $hreflangs, // SEO: brez hreflang link tagov v preview (noindex)
+    'lang_switcher_urls' => $isPreview ? ($previewHreflangs ?? []) : $hreflangs, // UI switcher
     'jsonld'      => $isPreview ? '' : $jsonld,    // brez JSON-LD v preview
     'robots'      => $isPreview ? 'noindex,nofollow' : 'index,follow',
 ];

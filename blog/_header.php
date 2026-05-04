@@ -24,6 +24,7 @@ $bkCanonical   = $bk['canonical']   ?? '';
 $bkOgImage     = $bk['og_image']    ?? '';
 $bkOgType      = $bk['og_type']     ?? 'website';
 $bkHreflangs   = $bk['hreflangs']   ?? [];
+$bkLangUrls    = $bk['lang_switcher_urls'] ?? $bkHreflangs; // UI switcher; lahko vsebuje preview-only URL-je
 $bkJsonLd      = $bk['jsonld']      ?? '';
 $bkRobots      = $bk['robots']      ?? 'index,follow';
 $bkBase        = blog_base_url();
@@ -73,12 +74,19 @@ $bkBase        = blog_base_url();
                 </summary>
                 <div class="dropdown" style="position:absolute;right:0;top:calc(100% + 4px);min-width:120px;padding:6px;z-index:60">
                     <?php foreach (BLOG_LANGS as $lc):
-                        $url = $_SERVER['REQUEST_URI'] ?? '/';
-                        $sep = (strpos($url, '?') === false) ? '?' : '&';
-                        $url = preg_replace('/([?&])lang=[a-z]{2}/', '$1lang=' . $lc, $url, 1, $cnt);
-                        if (!$cnt) $url .= $sep . 'lang=' . $lc;
+                        // Switcher povezavo postavi klicalna stran (lang_switcher_urls / hreflangs).
+                        // Če prevod ne obstaja, padi nazaj na listing v ciljnem jeziku.
+                        $url = $bkLangUrls[$lc] ?? '';
+                        if (!$url) $url = blog_listing_url($lc);
+                        // Pretvori absolute (https://app.rezervacije.si/...) v relative na isti domeni
+                        $url = preg_replace('#^https?://[^/]+#', '', $url);
+                        $hasTranslation = !empty($bkLangUrls[$lc]);
                     ?>
-                        <a href="<?= htmlspecialchars($url, ENT_QUOTES) ?>" style="display:block;padding:8px 12px;border-radius:6px;font-size:13.5px;color:<?= $lc === $bkLang ? 'var(--ink)' : 'var(--text-2)' ?>;font-weight:<?= $lc === $bkLang ? 600 : 500 ?>"><?= strtoupper($lc) ?></a>
+                        <a href="<?= htmlspecialchars($url, ENT_QUOTES) ?>"
+                           style="display:block;padding:8px 12px;border-radius:6px;font-size:13.5px;color:<?= $lc === $bkLang ? 'var(--ink)' : 'var(--text-2)' ?>;font-weight:<?= $lc === $bkLang ? 600 : 500 ?>"
+                           title="<?= $hasTranslation ? '' : 'Prevod ne obstaja — vodi na seznam v tem jeziku' ?>">
+                            <?= strtoupper($lc) ?><?= $hasTranslation ? '' : ' ↗' ?>
+                        </a>
                     <?php endforeach; ?>
                 </div>
             </details>
