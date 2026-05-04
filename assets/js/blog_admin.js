@@ -174,8 +174,28 @@
         }
     });
 
+    function pickProvider() {
+        // Hitra izbira: prompt z 'd' ali 'u'
+        const choice = prompt(
+            'Kateri ponudnik slik?\n\n' +
+            '  d  =  DALL-E 3 (AI ustvari, ~$0.30/članek)\n' +
+            '  u  =  Unsplash (brezplačne stock fotografije, prvi zadetek)\n' +
+            '  s  =  brez slik (samo besedilo)\n\n' +
+            'Vpiši črko:', 'd'
+        );
+        if (choice === null) return null; // cancel
+        const c = choice.trim().toLowerCase();
+        if (c === 'u' || c === 'unsplash') return 'unsplash';
+        if (c === 's' || c === 'skip')     return 'skip';
+        return 'dalle';
+    }
+
     async function runGenerateFromTopic(topicId, btn) {
-        if (!confirm('Generiraj članek + slike za to temo?\n\nKoraka: 1) Claude napiše članek (~15s), 2) DALL-E ustvari hero + inline slike (vsaka ~15s).\nStrošek: ~$0.30 (DALL-E standard quality).')) return;
+        const provider = pickProvider();
+        if (provider === null) return;
+        const providerLabel = provider === 'unsplash' ? 'Unsplash' : (provider === 'skip' ? 'brez slik' : 'DALL-E 3');
+        const costLine = provider === 'unsplash' ? 'Brezplačno (Unsplash).' : (provider === 'skip' ? 'Brez slik.' : 'Strošek: ~$0.30 (DALL-E standard quality).');
+
         const status = document.getElementById('bk-ai-topics-status');
         const original = btn ? btn.innerHTML : '';
         if (btn) { btn.disabled = true; btn.innerHTML = 'Generiram...'; }
@@ -188,52 +208,84 @@
 
         try {
             // 1) Tekst
-            setStatus('1/N · Generiram članek (Claude)...');
+            setStatus(`1/N · Generiram članek (Claude)... · slike: ${providerLabel}`);
             const res = await API.post('/api/blog.php?action=ai_generate', { topic_id: topicId });
             const postId = res.post_id;
             const editorUrl = res.editor_url;
             const lang = res.master_lang;
             const prompts = res.image_prompts || { hero: null, inline: [] };
 
-            // 2) Hero
-            const totalImgs = (prompts.hero ? 1 : 0) + (prompts.inline ? prompts.inline.length : 0);
-            let imgN = 0;
-            if (prompts.hero) {
-                imgN++;
-                setStatus(`2/${1 + totalImgs} · Generiram hero sliko (DALL-E)...`);
-                try {
-                    await API.post('/api/blog.php?action=ai_apply_post_image', {
-                        post_id: postId, role: 'hero',
-                        prompt: prompts.hero.prompt,
-                        alt:    prompts.hero.alt,
-                        caption: prompts.hero.caption || '',
-                        lang,
-                    });
-                } catch (e) {
-                    setStatus('Hero slika ni uspela (' + (e.message || '') + '). Lahko jo dodaš ročno v editorju.', 'var(--color-danger, #B34822)');
+            if (provider === 'skip') {
+                if (status) {
+                    status.innerHTML = '✓ Generirano (brez slik): <strong>' + escapeHtml(res.title) + '</strong> — <a href="' + editorUrl + '">Odpri v editorju →</a>';
+                    status.style.color = 'var(--color-success, #2F7D52)';
                 }
+                loadTopics(); loadStats();
+                return;
             }
 
-            // 3) Inline slike (zaporedno)
+            const totalImgs = (prompts.hero ? 1 : 0) + (prompts.inline ? prompts.inline.length : 0);
+            let imgN = 0;
+
+            // Helper: za Unsplash potrebujemo iskalno query iz prompta (prvih 4-5 besed)
+            const queryFromPrompt = (p) => (p || '').replace(/[^a-zA-Z0-9\s]/g, ' ').split(/\s+/).filter(Boolean).slice(0, 5).join(' ');
+
+            // Helper: apply 1 sliko (hero ali inline) na post
+            const applyImage = async (role, index, imgPrompts) => {
+                if (provider === 'unsplash') {
+                    // 1) iskanje prvega zadetka
+                    const q = queryFromPrompt(imgPrompts.prompt);
+                    let photo = null;
+                    try {
+                        const sr = await API.post('/api/blog.php?action=unsplash_search', { query: q, per_page: 3, orientation: 'landscape' });
+                        photo = sr.photos && sr.photos[0];
+                    } catch (e) {
+                        throw new Error('Unsplash search "' + q + '": ' + (e.message || ''));
+                    }
+                    if (!photo) throw new Error('Unsplash brez zadetkov za "' + q + '"');
+                    const body = {
+                        post_id: postId, role,
+                        provider: 'unsplash',
+                        unsplash_id: photo.id,
+                        alt: imgPrompts.alt || '',
+                        caption: imgPrompts.caption || '',
+                        lang,
+                    };
+                    if (role === 'inline') body.index = index;
+                    return await API.post('/api/blog.php?action=ai_apply_post_image', body);
+                }
+                // DALL-E
+                const body = {
+                    post_id: postId, role,
+                    provider: 'dalle',
+                    prompt: imgPrompts.prompt,
+                    alt:    imgPrompts.alt || '',
+                    caption: imgPrompts.caption || '',
+                    lang,
+                };
+                if (role === 'inline') body.index = index;
+                return await API.post('/api/blog.php?action=ai_apply_post_image', body);
+            };
+
+            // 2) Hero
+            if (prompts.hero) {
+                imgN++;
+                setStatus(`2/${1 + totalImgs} · Pridobivam hero sliko (${providerLabel})...`);
+                try { await applyImage('hero', null, prompts.hero); }
+                catch (e) { setStatus('Hero ni uspela: ' + (e.message || '') + '. Nadaljujem.', 'var(--color-danger, #B34822)'); }
+            }
+
+            // 3) Inline
             for (const img of (prompts.inline || [])) {
                 imgN++;
-                setStatus(`${1 + imgN}/${1 + totalImgs} · Generiram inline sliko #${img.index} (DALL-E)...`);
-                try {
-                    await API.post('/api/blog.php?action=ai_apply_post_image', {
-                        post_id: postId, role: 'inline', index: img.index,
-                        prompt: img.prompt,
-                        alt:    img.alt,
-                        caption: img.caption || '',
-                        lang,
-                    });
-                } catch (e) {
-                    setStatus(`Inline #${img.index} ni uspela (` + (e.message || '') + '). Druge slike nadaljujem...', 'var(--color-danger, #B34822)');
-                }
+                setStatus(`${1 + imgN}/${1 + totalImgs} · Pridobivam inline #${img.index} (${providerLabel})...`);
+                try { await applyImage('inline', img.index, img); }
+                catch (e) { setStatus(`Inline #${img.index} ni uspela: ` + (e.message || '') + '. Nadaljujem.', 'var(--color-danger, #B34822)'); }
             }
 
             // 4) Done
             if (status) {
-                status.innerHTML = '✓ Generirano: <strong>' + escapeHtml(res.title) + '</strong> — <a href="' + editorUrl + '">Odpri v editorju →</a>';
+                status.innerHTML = '✓ Generirano (' + providerLabel + '): <strong>' + escapeHtml(res.title) + '</strong> — <a href="' + editorUrl + '">Odpri v editorju →</a>';
                 status.style.color = 'var(--color-success, #2F7D52)';
             }
             loadTopics();

@@ -254,6 +254,61 @@ window.BLOG_TAGS       = <?= json_encode($tagsAll, JSON_UNESCAPED_UNICODE) ?>;
     </div>
 </div>
 
+<!-- AI image picker modal -->
+<div id="bk-ai-image-modal" class="bk-modal" hidden>
+    <div class="bk-modal__content" style="max-width:920px">
+        <div class="bk-modal__header">
+            <h3>Pridobi sliko z AI</h3>
+            <button type="button" class="bk-modal__close" data-close-modal>×</button>
+        </div>
+        <div class="bk-modal__body">
+            <div class="bk-tabs" style="display:flex;gap:8px;border-bottom:1px solid var(--cream-2);margin-bottom:14px">
+                <button type="button" class="bk-aip-tab active" data-aip-tab="dalle" style="padding:8px 16px;background:none;border:none;border-bottom:2px solid var(--color-primary, #c8542b);font-weight:600;cursor:pointer">🎨 DALL-E 3 (AI ustvari)</button>
+                <button type="button" class="bk-aip-tab" data-aip-tab="unsplash" style="padding:8px 16px;background:none;border:none;border-bottom:2px solid transparent;color:var(--color-muted);cursor:pointer">📷 Unsplash (stock fotografije)</button>
+            </div>
+
+            <!-- DALL-E pane -->
+            <div class="bk-aip-pane" data-aip-pane="dalle">
+                <p style="font-size:12.5px;color:var(--color-muted);margin:0 0 10px">DALL-E 3 standard quality 1792×1024 (~$0.08). Prompt v <strong>angleščini</strong> za boljše rezultate.</p>
+                <label class="bk-side-field">DALL-E prompt (angleščina)
+                    <textarea id="bk-aip-dalle-prompt" rows="3" class="bk-input" placeholder="Bustling Italian restaurant interior at golden hour, warm wooden tables, server greeting guests at host stand, editorial photography, shallow depth of field"></textarea>
+                </label>
+                <label class="bk-side-field">Alt text (v jeziku članka)
+                    <input type="text" id="bk-aip-dalle-alt" class="bk-input" placeholder="Strežnik pozdravlja goste pri vhodu v restavracijo">
+                </label>
+                <label class="bk-side-field">Caption (kratek opis pod sliko)
+                    <input type="text" id="bk-aip-dalle-caption" class="bk-input" placeholder="Kratek stavek, ki pojasni, zakaj je slika tukaj">
+                </label>
+                <button type="button" class="btn btn-primary" id="bk-aip-dalle-go" style="width:100%;margin-top:10px">Generiraj z DALL-E 3</button>
+            </div>
+
+            <!-- Unsplash pane -->
+            <div class="bk-aip-pane" data-aip-pane="unsplash" hidden>
+                <p style="font-size:12.5px;color:var(--color-muted);margin:0 0 10px">Brezplačne stock fotografije (Unsplash). Iskanje v <strong>angleščini</strong>.</p>
+                <div style="display:flex;gap:8px;margin-bottom:12px">
+                    <input type="text" id="bk-aip-unsplash-q" class="bk-input" placeholder="restaurant interior" style="flex:1">
+                    <button type="button" class="btn btn-primary" id="bk-aip-unsplash-search">Išči</button>
+                </div>
+                <div id="bk-aip-unsplash-results" class="bk-media-grid" style="grid-template-columns:repeat(3,1fr);gap:10px;min-height:120px">
+                    <div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--color-muted);font-size:13px">Vpiši iskalno besedo zgoraj.</div>
+                </div>
+                <div id="bk-aip-unsplash-finalize" hidden style="margin-top:14px;padding:14px;background:#f7f4ee;border-radius:10px">
+                    <p style="font-size:13px;margin:0 0 8px">Izbrano: <strong id="bk-aip-unsplash-photographer"></strong></p>
+                    <label class="bk-side-field">Alt text (v jeziku članka)
+                        <input type="text" id="bk-aip-unsplash-alt" class="bk-input">
+                    </label>
+                    <label class="bk-side-field">Caption (Photo by ... Unsplash bo dodano avtomatsko)
+                        <input type="text" id="bk-aip-unsplash-caption" class="bk-input">
+                    </label>
+                    <button type="button" class="btn btn-primary" id="bk-aip-unsplash-go" style="width:100%;margin-top:8px">Prenesi izbrano fotografijo</button>
+                </div>
+            </div>
+
+            <p id="bk-aip-status" style="margin-top:14px;font-size:13px;min-height:18px"></p>
+        </div>
+    </div>
+</div>
+
 <div id="bk-schedule-modal" class="bk-modal" hidden>
     <div class="bk-modal__content" style="max-width:420px">
         <div class="bk-modal__header">

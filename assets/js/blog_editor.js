@@ -648,28 +648,140 @@
         });
     }
 
-    // ── AI: Generate single image ───────────────────────────────────────────
+    // ── AI: Image picker modal (DALL-E + Unsplash) ─────────────────────────
     const aiImgBtn = document.getElementById('bk-ai-generate-image');
-    if (aiImgBtn) {
-        aiImgBtn.addEventListener('click', async () => {
-            const promptText = prompt('Opis slike za DALL-E 3 (ANGLEŠKO za boljše rezultate):\n\nPrimer: "Bustling Italian restaurant interior at golden hour, warm wooden tables, server greeting guests at host stand"');
-            if (!promptText) return;
-            const altText = prompt('Alt text (v jeziku članka, ' + activeLang.toUpperCase() + '):', promptText.substring(0, 100));
-            if (!altText) return;
-            aiImgBtn.disabled = true;
-            aiStatus('Generiram sliko (10-20s)...', '');
-            try {
-                // Hibrid: kličemo direkten endpoint, ki interno pokliče OpenAI
-                const res = await API.post('/api/blog.php?action=ai_generate_image_single', {
-                    prompt: promptText,
-                    alt: altText,
-                    lang: activeLang,
+    const aipModal = document.getElementById('bk-ai-image-modal');
+    if (aiImgBtn && aipModal) {
+        const aipStatus = document.getElementById('bk-aip-status');
+        const setAipStatus = (text, color) => {
+            if (!aipStatus) return;
+            aipStatus.textContent = text || '';
+            aipStatus.style.color = color || '';
+        };
+
+        aiImgBtn.addEventListener('click', () => {
+            setAipStatus('');
+            aipModal.hidden = false;
+        });
+
+        // Tab switching
+        aipModal.querySelectorAll('.bk-aip-tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                aipModal.querySelectorAll('.bk-aip-tab').forEach(t => {
+                    t.classList.remove('active');
+                    t.style.borderBottomColor = 'transparent';
+                    t.style.color = 'var(--color-muted)';
+                    t.style.fontWeight = '400';
                 });
-                aiStatus('Slika dodana v knjižnico (ID #' + res.id + '). Lahko jo izbereš v media pickerju.', 'var(--color-success, #2F7D52)');
+                tab.classList.add('active');
+                tab.style.borderBottomColor = 'var(--color-primary, #c8542b)';
+                tab.style.color = '';
+                tab.style.fontWeight = '600';
+                const target = tab.dataset.aipTab;
+                aipModal.querySelectorAll('.bk-aip-pane').forEach(p => {
+                    p.hidden = p.dataset.aipPane !== target;
+                });
+            });
+        });
+
+        // DALL-E generate
+        const dalleGo = document.getElementById('bk-aip-dalle-go');
+        dalleGo.addEventListener('click', async () => {
+            const promptText = document.getElementById('bk-aip-dalle-prompt').value.trim();
+            const altText    = document.getElementById('bk-aip-dalle-alt').value.trim();
+            const captText   = document.getElementById('bk-aip-dalle-caption').value.trim();
+            if (!promptText) { setAipStatus('Vpiši DALL-E prompt.', 'var(--color-danger, #B34822)'); return; }
+            dalleGo.disabled = true;
+            setAipStatus('Generiram sliko z DALL-E (10-20s)...', '');
+            try {
+                const res = await API.post('/api/blog.php?action=ai_generate_image_single', {
+                    provider: 'dalle',
+                    prompt: promptText,
+                    alt:     altText,
+                    caption: captText,
+                    lang:    activeLang,
+                });
+                setAipStatus('✓ Slika dodana v knjižnico (ID #' + res.id + '). Izbereš jo lahko v media pickerju.', 'var(--color-success, #2F7D52)');
+                aiStatus('Slika #' + res.id + ' shranjena (DALL-E).', 'var(--color-success, #2F7D52)');
             } catch (e) {
-                aiStatus('Napaka: ' + (e.message || ''), 'var(--color-danger, #B34822)');
+                setAipStatus('Napaka: ' + (e.message || ''), 'var(--color-danger, #B34822)');
             } finally {
-                aiImgBtn.disabled = false;
+                dalleGo.disabled = false;
+            }
+        });
+
+        // Unsplash search
+        let _unsplashSelected = null;
+        const unsplashSearchBtn = document.getElementById('bk-aip-unsplash-search');
+        const unsplashQ         = document.getElementById('bk-aip-unsplash-q');
+        const unsplashResults   = document.getElementById('bk-aip-unsplash-results');
+        const unsplashFinalize  = document.getElementById('bk-aip-unsplash-finalize');
+
+        const runUnsplashSearch = async () => {
+            const q = unsplashQ.value.trim();
+            if (!q) return;
+            unsplashSearchBtn.disabled = true;
+            unsplashResults.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--color-muted)">Iščem...</div>';
+            unsplashFinalize.hidden = true;
+            _unsplashSelected = null;
+            try {
+                const res = await API.post('/api/blog.php?action=unsplash_search', {
+                    query: q, per_page: 9, orientation: 'landscape',
+                });
+                if (!res.photos || !res.photos.length) {
+                    unsplashResults.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--color-muted)">Brez zadetkov za "' + escapeAttr(q) + '".</div>';
+                    return;
+                }
+                unsplashResults.innerHTML = res.photos.map(p => `
+                    <div class="bk-media-item" data-photo-id="${escapeAttr(p.id)}" data-photographer="${escapeAttr(p.photographer.name)}" data-description="${escapeAttr(p.description || '')}" style="background:${escapeAttr(p.color || '#eee')};cursor:pointer;border-radius:8px;overflow:hidden;aspect-ratio:16/10">
+                        <img src="${escapeAttr(p.small)}" alt="${escapeAttr(p.description || '')}" loading="lazy" style="width:100%;height:100%;object-fit:cover;display:block">
+                        <div style="padding:6px 8px;background:rgba(0,0,0,.5);color:#fff;font-size:11px;position:relative;margin-top:-28px;width:100%">${escapeAttr(p.photographer.name)}</div>
+                    </div>`).join('');
+                unsplashResults.querySelectorAll('.bk-media-item').forEach(el => {
+                    el.addEventListener('click', () => {
+                        _unsplashSelected = {
+                            id:           el.dataset.photoId,
+                            photographer: el.dataset.photographer,
+                            description:  el.dataset.description,
+                        };
+                        document.getElementById('bk-aip-unsplash-photographer').textContent = el.dataset.photographer;
+                        document.getElementById('bk-aip-unsplash-alt').value     = el.dataset.description || '';
+                        document.getElementById('bk-aip-unsplash-caption').value = '';
+                        unsplashFinalize.hidden = false;
+                        unsplashFinalize.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    });
+                });
+            } catch (e) {
+                unsplashResults.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:24px;color:var(--color-danger, #B34822)">Napaka: ' + escapeAttr(e.message || '') + '</div>';
+            } finally {
+                unsplashSearchBtn.disabled = false;
+            }
+        };
+        unsplashSearchBtn.addEventListener('click', runUnsplashSearch);
+        unsplashQ.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); runUnsplashSearch(); } });
+
+        // Unsplash apply
+        const unsplashGo = document.getElementById('bk-aip-unsplash-go');
+        unsplashGo.addEventListener('click', async () => {
+            if (!_unsplashSelected) return;
+            const altText  = document.getElementById('bk-aip-unsplash-alt').value.trim();
+            const captText = document.getElementById('bk-aip-unsplash-caption').value.trim();
+            unsplashGo.disabled = true;
+            setAipStatus('Prenašam fotografijo z Unsplash (~5s)...', '');
+            try {
+                const res = await API.post('/api/blog.php?action=ai_generate_image_single', {
+                    provider:    'unsplash',
+                    unsplash_id: _unsplashSelected.id,
+                    alt:         altText,
+                    caption:     captText,
+                    lang:        activeLang,
+                });
+                setAipStatus('✓ Slika #' + res.id + ' (' + _unsplashSelected.photographer + ') dodana v knjižnico.', 'var(--color-success, #2F7D52)');
+                aiStatus('Slika #' + res.id + ' shranjena (Unsplash).', 'var(--color-success, #2F7D52)');
+            } catch (e) {
+                setAipStatus('Napaka: ' + (e.message || ''), 'var(--color-danger, #B34822)');
+            } finally {
+                unsplashGo.disabled = false;
             }
         });
     }

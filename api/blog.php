@@ -764,6 +764,7 @@ if ($action === 'stats') {
 // ─────────────────────────────────────────────────────────────────
 require_once __DIR__ . '/../includes/blog_anthropic.php';
 require_once __DIR__ . '/../includes/blog_openai.php';
+require_once __DIR__ . '/../includes/blog_unsplash.php';
 
 /**
  * Helper: AI category_hint → blog_categories.id (ali NULL).
@@ -1084,36 +1085,55 @@ if ($action === 'ai_generate' && $method === 'POST') {
 
 // ── 2b. APPLY ONE IMAGE TO POST (deferred image gen za ai_generate) ─
 if ($action === 'ai_apply_post_image' && $method === 'POST') {
-    $body   = $body ?? get_body();
-    $postId = (int)($body['post_id'] ?? 0);
-    $role   = $body['role'] ?? '';        // 'hero' | 'inline'
-    $idx    = (int)($body['index']  ?? 0); // 1..N za inline
-    $prompt = trim($body['prompt'] ?? '');
-    $alt    = trim($body['alt']    ?? '');
-    $caption= trim($body['caption']?? '');
-    $lang   = $body['lang'] ?? '';
-    if (!$postId || $prompt === '' || !in_array($role, ['hero','inline'], true)) {
-        json_response(false, null, 'post_id, prompt in role obvezni.', 400);
+    $body     = $body ?? get_body();
+    $postId   = (int)($body['post_id'] ?? 0);
+    $role     = $body['role'] ?? '';        // 'hero' | 'inline'
+    $idx      = (int)($body['index']  ?? 0); // 1..N za inline
+    $provider = $body['provider'] ?? 'dalle'; // 'dalle' | 'unsplash'
+    $prompt   = trim($body['prompt']      ?? '');
+    $alt      = trim($body['alt']         ?? '');
+    $caption  = trim($body['caption']     ?? '');
+    $unsplashId = trim($body['unsplash_id'] ?? '');
+    $lang     = $body['lang'] ?? '';
+    if (!$postId || !in_array($role, ['hero','inline'], true)) {
+        json_response(false, null, 'post_id in role obvezna.', 400);
+    }
+    if ($provider === 'unsplash' && $unsplashId === '') {
+        json_response(false, null, 'unsplash_id obvezen za provider=unsplash.', 400);
+    }
+    if ($provider === 'dalle' && $prompt === '') {
+        json_response(false, null, 'prompt obvezen za provider=dalle.', 400);
     }
 
     @set_time_limit(120);
 
-    // Naloži post + master translation
     $post = _bk_load_post($pdo, $postId);
     if (!$post) json_response(false, null, 'Članek ne obstaja.', 404);
     $masterLang = $post['master_lang'];
     if (!$lang || !in_array($lang, BLOG_LANGS, true)) $lang = $masterLang;
 
     try {
-        // 1) Generiraj sliko
-        $meta = blog_openai_generate_image(
-            $prompt,
-            $alt !== '' ? $alt : $prompt,
-            $caption,
-            $lang,
-            (int)$session['user_id'],
-            ['quality' => $body['quality'] ?? 'standard']
-        );
+        // 1) Generiraj/pridobi sliko po providerju
+        if ($provider === 'unsplash') {
+            $meta = blog_unsplash_download_and_save(
+                $unsplashId,
+                $alt !== '' ? $alt : $prompt,
+                $caption,
+                $lang,
+                (int)$session['user_id']
+            );
+            // Unsplash baka attribution v caption — uporabi "caption_with_attribution"
+            $caption = $meta['caption_with_attribution'] ?? $caption;
+        } else {
+            $meta = blog_openai_generate_image(
+                $prompt,
+                $alt !== '' ? $alt : $prompt,
+                $caption,
+                $lang,
+                (int)$session['user_id'],
+                ['quality' => $body['quality'] ?? 'standard']
+            );
+        }
         $mediaId = (int)$meta['id'];
 
         // 2) Apliciraj na post
@@ -1335,26 +1355,56 @@ if ($action === 'ai_translate_post' && $method === 'POST') {
 
 // ── 4a. GENERATE SINGLE IMAGE (z user promptom) ──────────────────
 if ($action === 'ai_generate_image_single' && $method === 'POST') {
-    $body   = $body ?? get_body();
-    $prompt = trim($body['prompt'] ?? '');
-    $alt    = trim($body['alt']    ?? '');
-    $lang   = $body['lang'] ?? 'sl';
-    if ($prompt === '') json_response(false, null, 'prompt obvezen.', 400);
+    $body     = $body ?? get_body();
+    $provider = $body['provider'] ?? 'dalle'; // 'dalle' | 'unsplash'
+    $prompt   = trim($body['prompt']      ?? '');
+    $alt      = trim($body['alt']         ?? '');
+    $caption  = trim($body['caption']     ?? '');
+    $unsplashId = trim($body['unsplash_id'] ?? '');
+    $lang     = $body['lang'] ?? 'sl';
     if (!in_array($lang, BLOG_LANGS, true)) $lang = 'sl';
+    if ($provider === 'dalle' && $prompt === '')   json_response(false, null, 'prompt obvezen.', 400);
+    if ($provider === 'unsplash' && $unsplashId === '') json_response(false, null, 'unsplash_id obvezen.', 400);
     @set_time_limit(120);
     try {
-        $meta = blog_openai_generate_image(
-            $prompt,
-            $alt !== '' ? $alt : $prompt,
-            '',
-            $lang,
-            (int)$session['user_id'],
-            ['quality' => $body['quality'] ?? 'standard']
-        );
+        if ($provider === 'unsplash') {
+            $meta = blog_unsplash_download_and_save(
+                $unsplashId,
+                $alt !== '' ? $alt : $prompt,
+                $caption,
+                $lang,
+                (int)$session['user_id']
+            );
+        } else {
+            $meta = blog_openai_generate_image(
+                $prompt,
+                $alt !== '' ? $alt : $prompt,
+                $caption,
+                $lang,
+                (int)$session['user_id'],
+                ['quality' => $body['quality'] ?? 'standard']
+            );
+        }
         json_response(true, $meta);
     } catch (Throwable $e) {
         error_log('blog ai_generate_image_single: ' . $e->getMessage());
         json_response(false, null, 'Generacija slike spodletela: ' . $e->getMessage(), 500);
+    }
+}
+
+// ── 4b. UNSPLASH SEARCH (vrne array thumb-ov za picker) ──────────
+if ($action === 'unsplash_search' && in_array($method, ['GET','POST'], true)) {
+    $body  = ($method === 'POST') ? ($body ?? get_body()) : [];
+    $query = trim($body['query']  ?? $_GET['query'] ?? $_GET['q'] ?? '');
+    $perPage = (int)($body['per_page'] ?? $_GET['per_page'] ?? 8);
+    $orientation = $body['orientation'] ?? $_GET['orientation'] ?? 'landscape';
+    if ($query === '') json_response(false, null, 'query obvezen.', 400);
+    try {
+        $rows = blog_unsplash_search($query, $perPage, $orientation);
+        json_response(true, ['photos' => $rows]);
+    } catch (Throwable $e) {
+        error_log('blog unsplash_search: ' . $e->getMessage());
+        json_response(false, null, 'Unsplash iskanje spodletelo: ' . $e->getMessage(), 500);
     }
 }
 
