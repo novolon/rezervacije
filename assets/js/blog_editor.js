@@ -112,6 +112,13 @@
                 cb.checked = tagIds.includes(cb.value);
             });
             renderStatusBadge(post.status);
+
+            // Datum objave (back-date)
+            const dtInput = document.getElementById('bk-published-at');
+            if (dtInput && post.published_at) {
+                // MySQL format "YYYY-MM-DD HH:MM:SS" → datetime-local format "YYYY-MM-DDTHH:MM"
+                dtInput.value = post.published_at.replace(' ', 'T').substring(0, 16);
+            }
             updateViewLink();
             els.editorTitle.textContent = 'Urejam: ' + (translationsCache[post.master_lang]?.title || '#' + postId);
 
@@ -349,6 +356,46 @@
         await API.post('/api/blog.php?action=change_post_status', { post_id: postId, status: 'pending_review' });
         renderStatusBadge('pending_review');
     });
+
+    // Datum objave (back-date)
+    const updateDateBtn = document.getElementById('bk-update-date-btn');
+    const clearDateBtn  = document.getElementById('bk-clear-date-btn');
+    const dtInput       = document.getElementById('bk-published-at');
+    const dateStatusEl  = document.getElementById('bk-date-status');
+    if (updateDateBtn && dtInput) {
+        updateDateBtn.addEventListener('click', async () => {
+            if (!postId) { alert('Najprej shrani članek.'); return; }
+            const dt = dtInput.value;
+            if (!dt) { dateStatusEl.textContent = 'Vpiši datum.'; dateStatusEl.style.color = 'var(--color-danger, #B34822)'; return; }
+            dateStatusEl.textContent = 'Posodabljam...'; dateStatusEl.style.color = '';
+            updateDateBtn.disabled = true;
+            try {
+                const isoDt = dt.replace('T', ' ') + ':00';
+                const status = (postCache && postCache.status) || 'draft';
+                // Če post še ni published, ga publish-amo z izbranim datumom; sicer samo posodobimo published_at.
+                const newStatus = status === 'published' ? 'published' : 'published';
+                await API.post('/api/blog.php?action=change_post_status', {
+                    post_id: postId, status: newStatus, published_at: isoDt,
+                });
+                if (postCache) { postCache.status = 'published'; postCache.published_at = isoDt; }
+                renderStatusBadge('published');
+                updateViewLink();
+                dateStatusEl.textContent = '✓ Datum posodobljen.';
+                dateStatusEl.style.color = 'var(--color-success, #2F7D52)';
+            } catch (e) {
+                dateStatusEl.textContent = 'Napaka: ' + (e.message || '');
+                dateStatusEl.style.color = 'var(--color-danger, #B34822)';
+            } finally {
+                updateDateBtn.disabled = false;
+            }
+        });
+    }
+    if (clearDateBtn && dtInput) {
+        clearDateBtn.addEventListener('click', () => {
+            dtInput.value = '';
+            if (dateStatusEl) { dateStatusEl.textContent = 'Polje počisteno (klikni "Posodobi datum" za potrditev na NULL).'; dateStatusEl.style.color = 'var(--color-muted)'; }
+        });
+    }
 
     document.getElementById('bk-archive-btn').addEventListener('click', async () => {
         if (!postId) return;

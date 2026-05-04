@@ -425,11 +425,44 @@
                 </div>
                 ${langInputs}
             </div>
+            ${c.id ? '<div style="margin-top:14px;padding:12px;background:#f7f4ee;border-radius:8px;font-size:13px"><button type="button" class="btn btn-outline btn-sm" id="c-ai-translate">✨ Samodejno prevedi ime + opis v vse jezike</button> <span id="c-ai-status" style="margin-left:10px;color:var(--color-muted)"></span></div>' : ''}
             <div style="margin-top:18px;display:flex;gap:8px;justify-content:flex-end">
                 <button type="button" class="btn btn-outline" data-modal-close>Prekliči</button>
                 <button type="button" class="btn btn-primary" id="c-save">Shrani</button>
             </div>`;
         const m = openModal(html);
+
+        if (c.id) {
+            const aiBtn = m.querySelector('#c-ai-translate');
+            const aiSt  = m.querySelector('#c-ai-status');
+            aiBtn.addEventListener('click', async () => {
+                const overwrite = confirm('Prepiši obstoječe prevode? OK = prepiši vse, Cancel = samo manjkajoči.');
+                aiBtn.disabled = true; aiSt.textContent = 'Prevajam...';
+                try {
+                    const sourceLang = names.sl ? 'sl' : (names.en ? 'en' : (Object.keys(names)[0] || 'sl'));
+                    const res = await API.post('/api/blog.php?action=ai_translate_category', {
+                        category_id: c.id, source_lang: sourceLang, overwrite,
+                    });
+                    aiSt.textContent = `✓ Prevedel ${res.translated} jezikov. Osvežujem...`;
+                    aiSt.style.color = 'var(--color-success, #2F7D52)';
+                    const all = await API.get('/api/blog.php?action=list_categories');
+                    const fresh = (all || []).find(x => x.id == c.id);
+                    if (fresh) {
+                        BLOG_LANGS.forEach(lc => {
+                            const nInp = m.querySelector(`[data-lang-name="${lc}"]`);
+                            const dInp = m.querySelector(`[data-lang-desc="${lc}"]`);
+                            if (nInp) nInp.value = (fresh.names         || {})[lc] || '';
+                            if (dInp) dInp.value = (fresh.descriptions  || {})[lc] || '';
+                        });
+                    }
+                } catch (e) {
+                    aiSt.textContent = 'Napaka: ' + (e.message || '');
+                    aiSt.style.color = 'var(--color-danger, #B34822)';
+                } finally {
+                    aiBtn.disabled = false;
+                }
+            });
+        }
         m.querySelector('#c-save').addEventListener('click', async () => {
             const namesObj = {}, descsObj = {};
             BLOG_LANGS.forEach(lc => {
@@ -502,11 +535,44 @@
                 <label class="admin-field"><span>Slug *</span><input type="text" id="tg-slug" value="${escapeAttr(t.slug || '')}" required></label>
                 ${BLOG_LANGS.map(lc => `<label class="admin-field"><span>Ime (${lc.toUpperCase()})</span><input type="text" data-lang-name="${lc}" value="${escapeAttr(names[lc] || '')}"></label>`).join('')}
             </div>
+            ${t.id ? '<div style="margin-top:14px;padding:12px;background:#f7f4ee;border-radius:8px;font-size:13px"><button type="button" class="btn btn-outline btn-sm" id="tg-ai-translate">✨ Samodejno prevedi v vse jezike</button> <span id="tg-ai-status" style="margin-left:10px;color:var(--color-muted)"></span></div>' : ''}
             <div style="margin-top:18px;display:flex;gap:8px;justify-content:flex-end">
                 <button type="button" class="btn btn-outline" data-modal-close>Prekliči</button>
                 <button type="button" class="btn btn-primary" id="tg-save">Shrani</button>
             </div>`;
         const m = openModal(html);
+
+        if (t.id) {
+            const aiBtn = m.querySelector('#tg-ai-translate');
+            const aiSt  = m.querySelector('#tg-ai-status');
+            aiBtn.addEventListener('click', async () => {
+                const overwrite = confirm('Prepiši obstoječe prevode? OK = prepiši vse, Cancel = samo manjkajoči.');
+                aiBtn.disabled = true; aiSt.textContent = 'Prevajam...';
+                try {
+                    const sourceLang = names.sl ? 'sl' : (names.en ? 'en' : (Object.keys(names)[0] || 'sl'));
+                    const res = await API.post('/api/blog.php?action=ai_translate_tag', {
+                        tag_id: t.id, source_lang: sourceLang, overwrite,
+                    });
+                    aiSt.textContent = `✓ Prevedel ${res.translated} jezikov. Osvežujem...`;
+                    aiSt.style.color = 'var(--color-success, #2F7D52)';
+                    // Naloži taga znova in osveži vrednosti v modalu
+                    const all = await API.get('/api/blog.php?action=list_tags');
+                    const fresh = (all || []).find(x => x.id == t.id);
+                    if (fresh) {
+                        BLOG_LANGS.forEach(lc => {
+                            const inp = m.querySelector(`[data-lang-name="${lc}"]`);
+                            if (inp) inp.value = (fresh.names || {})[lc] || '';
+                        });
+                    }
+                } catch (e) {
+                    aiSt.textContent = 'Napaka: ' + (e.message || '');
+                    aiSt.style.color = 'var(--color-danger, #B34822)';
+                } finally {
+                    aiBtn.disabled = false;
+                }
+            });
+        }
+
         m.querySelector('#tg-save').addEventListener('click', async () => {
             const namesObj = {};
             BLOG_LANGS.forEach(lc => {
@@ -701,11 +767,59 @@
                         <label class="admin-field"><span>Caption (${lc.toUpperCase()})</span><input type="text" data-cap="${lc}" value="${escapeAttr(caps[lc] || '')}"></label>
                     </div>`).join('')}
             </div>
+            <div style="margin-top:14px;padding:12px;background:#f7f4ee;border-radius:8px;font-size:13px">
+                <button type="button" class="btn btn-outline btn-sm" id="alt-ai-translate">✨ Samodejno prevedi alt + caption v vse jezike</button>
+                <span id="alt-ai-status" style="margin-left:10px;color:var(--color-muted)"></span>
+            </div>
             <div style="margin-top:18px;display:flex;gap:8px;justify-content:flex-end">
                 <button type="button" class="btn btn-outline" data-modal-close>Prekliči</button>
                 <button type="button" class="btn btn-primary" id="alt-save">Shrani</button>
             </div>`;
         const md = openModal(html);
+
+        // AI auto-translate
+        const aiBtn = md.querySelector('#alt-ai-translate');
+        const aiSt  = md.querySelector('#alt-ai-status');
+        aiBtn.addEventListener('click', async () => {
+            // Vzemi trenutne vrednosti iz inputov in shrani jih PREJ, da AI prevaja zadnje vpisano besedilo
+            const altsObj = {}, capsObj = {};
+            BLOG_LANGS.forEach(lc => {
+                const a = md.querySelector(`[data-alt="${lc}"]`).value.trim();
+                const c = md.querySelector(`[data-cap="${lc}"]`).value.trim();
+                if (a) altsObj[lc] = a;
+                if (c) capsObj[lc] = c;
+            });
+            const overwrite = confirm('Prepiši obstoječe prevode? OK = prepiši vse, Cancel = samo manjkajoči.');
+            aiBtn.disabled = true; aiSt.textContent = 'Shranjujem trenutno + prevajam...';
+            try {
+                // 1) Najprej shrani, da AI vidi posodobljene vrednosti
+                await API.post('/api/blog_media.php?action=save_alt', {
+                    id: m.id, alt_translations: altsObj, caption_translations: capsObj,
+                });
+                // 2) Auto-prevod (Sonnet); izvorni jezik = prvi neprazen
+                const sourceLang = altsObj.sl ? 'sl' : (altsObj.en ? 'en' : (Object.keys(altsObj)[0] || 'sl'));
+                const res = await API.post('/api/blog.php?action=ai_translate_media', {
+                    media_id: m.id, source_lang: sourceLang, overwrite,
+                });
+                aiSt.textContent = `✓ Prevedel ${res.translated} jezikov.`;
+                aiSt.style.color = 'var(--color-success, #2F7D52)';
+                // 3) Posodobi inputne vrednosti
+                const newAlts = res.alt || {};
+                const newCaps = res.caption || {};
+                BLOG_LANGS.forEach(lc => {
+                    const aInp = md.querySelector(`[data-alt="${lc}"]`);
+                    const cInp = md.querySelector(`[data-cap="${lc}"]`);
+                    if (aInp) aInp.value = newAlts[lc] || '';
+                    if (cInp) cInp.value = newCaps[lc] || '';
+                });
+            } catch (e) {
+                aiSt.textContent = 'Napaka: ' + (e.message || '');
+                aiSt.style.color = 'var(--color-danger, #B34822)';
+            } finally {
+                aiBtn.disabled = false;
+            }
+        });
+
         md.querySelector('#alt-save').addEventListener('click', async () => {
             const altsObj = {}, capsObj = {};
             BLOG_LANGS.forEach(lc => {

@@ -27,18 +27,24 @@ if ($action === 'subscribe' && $method === 'POST') {
     header('Content-Type: application/json; charset=utf-8');
 
     // Body lahko pride kot form ali JSON
-    $email  = $_POST['email'] ?? '';
-    $lang   = $_POST['lang']  ?? get_lang();
-    $source = $_POST['source'] ?? 'unknown';
+    $email  = $_POST['email']        ?? '';
+    $lang   = $_POST['lang']         ?? get_lang();
+    $source = $_POST['source']       ?? 'unknown';
+    $gdpr   = $_POST['gdpr_consent'] ?? '';
     if (empty($email)) {
-        $body  = get_body();
-        $email = $body['email']  ?? '';
-        $lang  = $body['lang']   ?? $lang;
-        $source = $body['source'] ?? $source;
+        $body   = get_body();
+        $email  = $body['email']        ?? '';
+        $lang   = $body['lang']         ?? $lang;
+        $source = $body['source']       ?? $source;
+        $gdpr   = $body['gdpr_consent'] ?? $gdpr;
     }
     $email = trim(strtolower($email));
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         json_response(false, null, 'Neveljaven email.', 400);
+    }
+    // GDPR consent obvezen
+    if (empty($gdpr) || $gdpr === '0' || strtolower((string)$gdpr) === 'false') {
+        json_response(false, null, t_raw('booked.subscribe.gdpr.required_error'), 400);
     }
     if (!in_array($lang, BLOG_LANGS, true)) $lang = 'sl';
 

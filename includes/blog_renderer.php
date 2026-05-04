@@ -91,6 +91,28 @@ function blog_render_cta(string $type, string $args = '', string $lang = 'sl'): 
 /**
  * Inline newsletter form (cream gradient subscribe).
  */
+/**
+ * GDPR consent checkbox za subscribe forme. Vsebuje povezavo na pages/privacy.php.
+ */
+function blog_render_subscribe_gdpr(string $idPrefix = 'bksub'): string {
+    $base = blog_base_url();
+    $checkboxId = $idPrefix . '-gdpr-' . substr(md5(microtime(true)), 0, 4);
+    $privacyUrl = $base . '/pages/privacy.php';
+    $linkText   = t('booked.subscribe.gdpr.link_text');
+    $label      = t('booked.subscribe.gdpr.label');
+    // Zamenjaj besedo "Politiko zasebnosti" / lokaliziran link_text z linkom na privacy stran.
+    $labelLinked = preg_replace(
+        '/' . preg_quote($linkText, '/') . '/u',
+        '<a href="' . htmlspecialchars($privacyUrl, ENT_QUOTES) . '" target="_blank" rel="noopener" style="text-decoration:underline">' . htmlspecialchars($linkText, ENT_QUOTES) . '</a>',
+        $label,
+        1
+    );
+    return '<label for="' . $checkboxId . '" class="bk-gdpr-consent" style="display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.4;margin-top:8px;color:var(--text-2,inherit)">'
+        . '<input type="checkbox" id="' . $checkboxId . '" name="gdpr_consent" value="1" required style="margin-top:2px;flex-shrink:0">'
+        . '<span>' . $labelLinked . '</span>'
+        . '</label>';
+}
+
 function blog_render_subscribe_inline(string $source = 'inline_post', string $lang = 'sl'): string {
     $base = blog_base_url();
     return '<div class="cta cta-subscribe">'
@@ -101,6 +123,7 @@ function blog_render_subscribe_inline(string $source = 'inline_post', string $la
         . '<input type="hidden" name="lang" value="' . htmlspecialchars($lang, ENT_QUOTES) . '">'
         . '<input type="email" name="email" required placeholder="' . t('booked.subscribe.email_placeholder') . '" class="input">'
         . '<button type="submit" class="btn btn-primary">' . t('booked.subscribe.cta') . '</button>'
+        . blog_render_subscribe_gdpr('inline')
         . '<p class="bk-success" hidden>' . t('booked.subscribe.confirm_sent') . '</p>'
         . '<p class="bk-error" hidden></p>'
         . '</form>'
@@ -120,6 +143,7 @@ function blog_render_subscribe_sidebar(string $lang = 'sl'): string {
         . '<input type="hidden" name="lang" value="' . htmlspecialchars($lang, ENT_QUOTES) . '">'
         . '<input type="email" name="email" required placeholder="' . t('booked.subscribe.email_placeholder') . '" class="input">'
         . '<button type="submit" class="btn btn-primary">' . t('booked.subscribe.cta') . '</button>'
+        . blog_render_subscribe_gdpr('sidebar')
         . '<p class="bk-success" hidden>' . t('booked.subscribe.confirm_sent') . '</p>'
         . '<p class="bk-error" hidden></p>'
         . '</form>'
@@ -131,11 +155,14 @@ function blog_render_subscribe_sidebar(string $lang = 'sl'): string {
  */
 function blog_render_subscribe_footer(string $lang = 'sl'): string {
     $base = blog_base_url();
-    return '<form action="' . htmlspecialchars($base . '/api/blog_subscribe.php', ENT_QUOTES) . '" method="post" data-bk-subscribe class="flex gap-2 max-w-sm" style="display:flex;gap:8px;max-width:24rem">'
+    return '<form action="' . htmlspecialchars($base . '/api/blog_subscribe.php', ENT_QUOTES) . '" method="post" data-bk-subscribe style="display:flex;flex-direction:column;gap:8px;max-width:24rem">'
+        . '<div style="display:flex;gap:8px">'
         . '<input type="hidden" name="source" value="footer">'
         . '<input type="hidden" name="lang" value="' . htmlspecialchars($lang, ENT_QUOTES) . '">'
         . '<input type="email" name="email" required placeholder="' . t('booked.subscribe.email_placeholder') . '" class="input" style="flex:1;background:rgba(255,255,255,.05);border-color:rgba(255,255,255,.15);color:#fff">'
         . '<button type="submit" class="btn btn-primary btn-sm">' . t('booked.subscribe.cta') . '</button>'
+        . '</div>'
+        . blog_render_subscribe_gdpr('footer')
         . '</form>';
 }
 

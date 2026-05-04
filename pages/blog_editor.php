@@ -176,6 +176,19 @@ window.BLOG_TAGS       = <?= json_encode($tagsAll, JSON_UNESCAPED_UNICODE) ?>;
                 <a href="#" id="bk-preview-post-link" class="btn btn-outline" target="_blank" rel="noopener" style="display:none;text-align:center">👁️ Predogled (<span data-preview-lang>SL</span>) ↗</a>
                 <a href="#" id="bk-view-post-link" class="btn btn-outline" target="_blank" rel="noopener" style="display:none;text-align:center">Poglej članek ↗</a>
             </div>
+
+            <details style="margin-top:14px;font-size:13px">
+                <summary style="cursor:pointer;color:var(--color-muted);user-select:none">📅 Datum objave (back-date)</summary>
+                <div style="margin-top:8px;padding:10px;background:#f7f4ee;border-radius:8px">
+                    <label style="display:block;margin-bottom:6px;font-size:12px;color:var(--color-muted)">Spremeni datum objave (lahko v preteklosti):</label>
+                    <input type="datetime-local" id="bk-published-at" class="bk-input" style="width:100%">
+                    <div style="display:flex;gap:6px;margin-top:8px">
+                        <button type="button" class="btn btn-primary btn-sm" id="bk-update-date-btn" style="flex:1">Posodobi datum</button>
+                        <button type="button" class="btn btn-outline btn-sm" id="bk-clear-date-btn">×</button>
+                    </div>
+                    <p id="bk-date-status" style="font-size:11.5px;margin:6px 0 0;min-height:14px;color:var(--color-muted)"></p>
+                </div>
+            </details>
         </div>
 
         <div class="bk-side-card">

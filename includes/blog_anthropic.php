@@ -494,6 +494,67 @@ PROMPT;
 }
 
 /* ─────────────────────────────────────────────────────────────────
+ * 6) TRANSLATE SHORT STRINGS — batch prevod kratkih nizov v več jezikov
+ *    Uporaba: tagi (samo "name"), kategorije (name + description),
+ *    media (alt + caption), ipd.
+ *
+ * @param array  $items        ['key1' => 'source text', 'key2' => '...']
+ * @param string $sourceLang   npr. 'en'
+ * @param array  $targetLangs  npr. ['sl','de','it']
+ * @param string $context      "tag name", "category name", "image alt", ...
+ * @return array  ['key1' => ['sl' => 'prevod', 'de' => '...']]
+ * ───────────────────────────────────────────────────────────────── */
+function blog_ai_translate_short_strings(array $items, $sourceLang, array $targetLangs, $context = 'short string') {
+    if (empty($items)) return [];
+    $targetLangs = array_values(array_unique(array_filter($targetLangs, function($l) use ($sourceLang) {
+        return $l !== $sourceLang;
+    })));
+    if (empty($targetLangs)) return [];
+
+    $sourceLabel = blog_ai_lang_label($sourceLang);
+    $langDescriptions = [];
+    foreach ($targetLangs as $lc) {
+        $langDescriptions[] = '"' . $lc . '" = ' . blog_ai_lang_label($lc);
+    }
+    $langsList = implode(', ', $langDescriptions);
+
+    $payload = json_encode($items, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT);
+    $userPrompt = <<<PROMPT
+You are translating short strings ({$context}) from {$sourceLabel} into multiple languages.
+
+Source language: {$sourceLang} ({$sourceLabel})
+Target languages: {$langsList}
+
+Rules:
+- Translate naturally and idiomatically — not literally.
+- Keep capitalization style (lowercase tags stay lowercase; titlecase categories stay titlecase).
+- Keep brand names UNCHANGED ("Rezble", "Booked").
+- Each translation must fit on one line — no newlines inside values.
+- Output strict JSON only — no markdown fences, no commentary.
+
+Source items (JSON):
+__PAYLOAD_PLACEHOLDER__
+
+Output JSON shape (one entry per source key, with one sub-entry per target lang):
+{
+  "key1": { "sl": "...", "de": "...", ... },
+  "key2": { "sl": "...", "de": "...", ... }
+}
+PROMPT;
+
+    $userPrompt = str_replace('__PAYLOAD_PLACEHOLDER__', $payload, $userPrompt);
+
+    $text = blog_ai_call(BLOG_AI_MODEL_TRANSLATE, [
+        ['role' => 'user', 'content' => $userPrompt],
+    ], [
+        'system'     => 'You translate short marketing strings (tags, categories, captions). Output strict JSON only — first character is { and last is }. All values are single-line strings.',
+        'max_tokens' => 4000,
+    ]);
+    $data = blog_ai_extract_json($text);
+    return is_array($data) ? $data : [];
+}
+
+/* ─────────────────────────────────────────────────────────────────
  * Helper: jezikovne oznake za prompte
  * ───────────────────────────────────────────────────────────────── */
 function blog_ai_lang_label($code) {

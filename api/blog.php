@@ -787,28 +787,56 @@ function _bk_category_id_by_hint(PDO $pdo, $hint) {
 
 /**
  * Helper: za vsak tag name → najdi obstoječ ali ustvari nov, vrne tag_id.
- * @param string[] $tagNames  (v $masterLang)
+ * Pri novih tagih takoj prevede ime v vse blog jezike (Sonnet).
+ *
+ * @param string[] $tagNames    (v $masterLang)
+ * @param bool     $autoTranslate  ali naj pokliče AI prevod za nove tage
  */
-function _bk_resolve_tag_ids(PDO $pdo, array $tagNames, $masterLang) {
+function _bk_resolve_tag_ids(PDO $pdo, array $tagNames, $masterLang, $autoTranslate = true) {
     $ids = [];
+    $newTags = []; // tag_id → name v master jeziku
     foreach ($tagNames as $name) {
         $name = trim((string)$name);
         if ($name === '') continue;
         $slug = blog_slug($name);
         if ($slug === '') continue;
-        // Obstaja po slug?
         $stmt = $pdo->prepare("SELECT id FROM blog_tags WHERE slug = ?");
         $stmt->execute([$slug]);
         $tagId = $stmt->fetchColumn();
         if (!$tagId) {
             $pdo->prepare("INSERT INTO blog_tags (slug) VALUES (?)")->execute([$slug]);
             $tagId = (int)$pdo->lastInsertId();
-            // Translation za master jezik
             $pdo->prepare("INSERT IGNORE INTO blog_tag_translations (tag_id, lang_code, name) VALUES (?, ?, ?)")
                 ->execute([$tagId, $masterLang, $name]);
+            $newTags[(int)$tagId] = $name;
         }
         $ids[] = (int)$tagId;
     }
+
+    // Avto-prevod novih tagov v vse jezike (1 batch klic za vse tage in vse jezike)
+    if ($autoTranslate && !empty($newTags)) {
+        try {
+            $targetLangs = array_values(array_filter(BLOG_LANGS, function($l) use ($masterLang) {
+                return $l !== $masterLang;
+            }));
+            $items = [];
+            foreach ($newTags as $tagId => $name) $items['t' . $tagId] = $name;
+            $translations = blog_ai_translate_short_strings($items, $masterLang, $targetLangs, 'tag name (lowercase, 1-3 words, hospitality blog)');
+            $insStmt = $pdo->prepare("INSERT IGNORE INTO blog_tag_translations (tag_id, lang_code, name) VALUES (?, ?, ?)");
+            foreach ($newTags as $tagId => $_) {
+                $key = 't' . $tagId;
+                if (empty($translations[$key])) continue;
+                foreach ($targetLangs as $lc) {
+                    $val = trim((string)($translations[$key][$lc] ?? ''));
+                    if ($val !== '') $insStmt->execute([$tagId, $lc, mb_substr($val, 0, 120)]);
+                }
+            }
+        } catch (Throwable $e) {
+            // Ne padaj, če AI prevod spodleti — tag obstaja v master jeziku, ostalo lahko ročno
+            error_log('_bk_resolve_tag_ids auto-translate: ' . $e->getMessage());
+        }
+    }
+
     return array_unique($ids);
 }
 
@@ -1408,6 +1436,190 @@ if ($action === 'unsplash_search' && in_array($method, ['GET','POST'], true)) {
     } catch (Throwable $e) {
         error_log('blog unsplash_search: ' . $e->getMessage());
         json_response(false, null, 'Unsplash iskanje spodletelo: ' . $e->getMessage(), 500);
+    }
+}
+
+// ── 4c. AUTO-TRANSLATE TAG ───────────────────────────────────────
+if ($action === 'ai_translate_tag' && $method === 'POST') {
+    $body = $body ?? get_body();
+    $tagId = (int)($body['tag_id'] ?? 0);
+    $sourceLang = $body['source_lang'] ?? '';
+    $overwrite  = !empty($body['overwrite']);
+    if (!$tagId) json_response(false, null, 'tag_id obvezen.', 400);
+    @set_time_limit(60);
+    try {
+        // Naloži obstoječe prevode
+        $stmt = $pdo->prepare("SELECT lang_code, name FROM blog_tag_translations WHERE tag_id = ?");
+        $stmt->execute([$tagId]);
+        $existing = [];
+        foreach ($stmt->fetchAll() as $r) $existing[$r['lang_code']] = $r['name'];
+        if (empty($existing)) json_response(false, null, 'Tag nima nobenega prevoda za izvorni jezik.', 400);
+
+        if (!$sourceLang || !in_array($sourceLang, BLOG_LANGS, true)) {
+            $sourceLang = !empty($existing['sl']) ? 'sl' : (!empty($existing['en']) ? 'en' : array_key_first($existing));
+        }
+        $sourceText = $existing[$sourceLang] ?? null;
+        if (!$sourceText) json_response(false, null, 'Manjka izvorni prevod (' . $sourceLang . ').', 400);
+
+        $targetLangs = array_values(array_filter(BLOG_LANGS, function($l) use ($sourceLang, $existing, $overwrite) {
+            return $l !== $sourceLang && ($overwrite || empty($existing[$l]));
+        }));
+        if (empty($targetLangs)) json_response(true, ['translated' => 0, 'skipped' => count(BLOG_LANGS) - 1]);
+
+        $tr = blog_ai_translate_short_strings(['t' => $sourceText], $sourceLang, $targetLangs, 'tag name (lowercase, 1-3 words, hospitality blog)');
+
+        $insStmt = $pdo->prepare(
+            "INSERT INTO blog_tag_translations (tag_id, lang_code, name) VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE name = VALUES(name)"
+        );
+        $count = 0;
+        foreach ($targetLangs as $lc) {
+            $val = trim((string)($tr['t'][$lc] ?? ''));
+            if ($val === '') continue;
+            $insStmt->execute([$tagId, $lc, mb_substr($val, 0, 120)]);
+            $count++;
+        }
+        json_response(true, ['translated' => $count, 'source_lang' => $sourceLang]);
+    } catch (Throwable $e) {
+        error_log('blog ai_translate_tag: ' . $e->getMessage());
+        json_response(false, null, 'AI prevod taga spodletel: ' . $e->getMessage(), 500);
+    }
+}
+
+// ── 4d. AUTO-TRANSLATE CATEGORY ──────────────────────────────────
+if ($action === 'ai_translate_category' && $method === 'POST') {
+    $body = $body ?? get_body();
+    $catId = (int)($body['category_id'] ?? 0);
+    $sourceLang = $body['source_lang'] ?? '';
+    $overwrite  = !empty($body['overwrite']);
+    if (!$catId) json_response(false, null, 'category_id obvezen.', 400);
+    @set_time_limit(60);
+    try {
+        $stmt = $pdo->prepare("SELECT lang_code, name, description FROM blog_category_translations WHERE category_id = ?");
+        $stmt->execute([$catId]);
+        $existing = [];
+        foreach ($stmt->fetchAll() as $r) {
+            $existing[$r['lang_code']] = ['name' => $r['name'], 'description' => $r['description']];
+        }
+        if (empty($existing)) json_response(false, null, 'Kategorija nima nobenega prevoda.', 400);
+
+        if (!$sourceLang || !in_array($sourceLang, BLOG_LANGS, true)) {
+            $sourceLang = !empty($existing['sl']) ? 'sl' : (!empty($existing['en']) ? 'en' : array_key_first($existing));
+        }
+        $sourceName = $existing[$sourceLang]['name']        ?? '';
+        $sourceDesc = $existing[$sourceLang]['description'] ?? '';
+        if ($sourceName === '') json_response(false, null, 'Manjka izvorno ime.', 400);
+
+        $targetLangs = array_values(array_filter(BLOG_LANGS, function($l) use ($sourceLang) {
+            return $l !== $sourceLang;
+        }));
+        // Filtriraj jezike, ki še nimajo imena (razen ko overwrite)
+        $needNameLangs = array_values(array_filter($targetLangs, function($lc) use ($existing, $overwrite) {
+            return $overwrite || empty($existing[$lc]['name']);
+        }));
+        $needDescLangs = $sourceDesc !== '' ? array_values(array_filter($targetLangs, function($lc) use ($existing, $overwrite) {
+            return $overwrite || empty($existing[$lc]['description']);
+        })) : [];
+
+        $allLangsNeeded = array_unique(array_merge($needNameLangs, $needDescLangs));
+        if (empty($allLangsNeeded)) json_response(true, ['translated' => 0]);
+
+        $items = ['name' => $sourceName];
+        if ($sourceDesc !== '') $items['description'] = $sourceDesc;
+        $tr = blog_ai_translate_short_strings($items, $sourceLang, $allLangsNeeded, 'blog category meta (name + description)');
+
+        // Naloži obstoječe vrednosti za nadgradnjo (UPSERT v MySQL)
+        $insStmt = $pdo->prepare(
+            "INSERT INTO blog_category_translations (category_id, lang_code, name, description)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                name        = COALESCE(VALUES(name),        name),
+                description = COALESCE(VALUES(description), description)"
+        );
+        $count = 0;
+        foreach ($targetLangs as $lc) {
+            $needName = in_array($lc, $needNameLangs, true);
+            $needDesc = in_array($lc, $needDescLangs, true);
+            if (!$needName && !$needDesc) continue;
+            $newName = $needName ? trim((string)($tr['name'][$lc] ?? '')) : '';
+            $newDesc = $needDesc ? trim((string)($tr['description'][$lc] ?? '')) : '';
+            // Če nadgrajujemo samo description, želimo preserve obstoječe ime — INSERT ON DUPLICATE
+            // bo zaradi VALUES(name)=NULL pustilo staro vrednost, ker COALESCE.
+            $finalName = ($needName && $newName !== '')
+                ? mb_substr($newName, 0, 255)
+                : ($existing[$lc]['name'] ?? null);
+            $finalDesc = ($needDesc && $newDesc !== '')
+                ? $newDesc
+                : ($existing[$lc]['description'] ?? null);
+            // Skip če finalName še vedno NULL (ne moremo INSERT brez imena, ker je NOT NULL)
+            if (!$finalName) continue;
+            $insStmt->execute([$catId, $lc, $finalName, $finalDesc]);
+            $count++;
+        }
+        json_response(true, ['translated' => $count, 'source_lang' => $sourceLang]);
+    } catch (Throwable $e) {
+        error_log('blog ai_translate_category: ' . $e->getMessage());
+        json_response(false, null, 'AI prevod kategorije spodletel: ' . $e->getMessage(), 500);
+    }
+}
+
+// ── 4e. AUTO-TRANSLATE MEDIA ALT/CAPTION ─────────────────────────
+if ($action === 'ai_translate_media' && $method === 'POST') {
+    $body = $body ?? get_body();
+    $mediaId = (int)($body['media_id'] ?? 0);
+    $sourceLang = $body['source_lang'] ?? '';
+    $overwrite  = !empty($body['overwrite']);
+    if (!$mediaId) json_response(false, null, 'media_id obvezen.', 400);
+    @set_time_limit(60);
+    try {
+        $stmt = $pdo->prepare("SELECT alt_translations, caption_translations FROM blog_media WHERE id = ?");
+        $stmt->execute([$mediaId]);
+        $row = $stmt->fetch();
+        if (!$row) json_response(false, null, 'Slika ne obstaja.', 404);
+
+        $alts = $row['alt_translations']     ? json_decode($row['alt_translations'], true)     : [];
+        $caps = $row['caption_translations'] ? json_decode($row['caption_translations'], true) : [];
+        if (!is_array($alts)) $alts = [];
+        if (!is_array($caps)) $caps = [];
+
+        if (!$sourceLang || !in_array($sourceLang, BLOG_LANGS, true)) {
+            $sourceLang = !empty($alts['sl']) ? 'sl' : (!empty($alts['en']) ? 'en' : (array_key_first($alts) ?: 'sl'));
+        }
+        $sourceAlt = $alts[$sourceLang] ?? '';
+        $sourceCap = $caps[$sourceLang] ?? '';
+        if ($sourceAlt === '' && $sourceCap === '') json_response(false, null, 'Manjka izvoren alt in caption.', 400);
+
+        $targetLangs = array_values(array_filter(BLOG_LANGS, function($l) use ($sourceLang) {
+            return $l !== $sourceLang;
+        }));
+
+        $tr = blog_ai_translate_media_alts($sourceAlt, $sourceCap, $sourceLang, $targetLangs);
+
+        $count = 0;
+        foreach ($targetLangs as $lc) {
+            if ($sourceAlt !== '' && ($overwrite || empty($alts[$lc])) && !empty($tr['alt'][$lc])) {
+                $alts[$lc] = $tr['alt'][$lc];
+                $count++;
+            }
+            if ($sourceCap !== '' && ($overwrite || empty($caps[$lc])) && !empty($tr['caption'][$lc])) {
+                $caps[$lc] = $tr['caption'][$lc];
+            }
+        }
+        $pdo->prepare("UPDATE blog_media SET alt_translations = ?, caption_translations = ? WHERE id = ?")
+            ->execute([
+                $alts ? json_encode($alts, JSON_UNESCAPED_UNICODE) : null,
+                $caps ? json_encode($caps, JSON_UNESCAPED_UNICODE) : null,
+                $mediaId,
+            ]);
+        json_response(true, [
+            'translated'  => $count,
+            'source_lang' => $sourceLang,
+            'alt'         => $alts,
+            'caption'     => $caps,
+        ]);
+    } catch (Throwable $e) {
+        error_log('blog ai_translate_media: ' . $e->getMessage());
+        json_response(false, null, 'AI prevod slike spodletel: ' . $e->getMessage(), 500);
     }
 }
 
