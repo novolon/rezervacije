@@ -185,9 +185,8 @@ if ($method === 'POST') {
             $confirmUrl = APP_URL . BASE_PATH . '/api/blog_subscribe.php?action=confirm&t=' . urlencode('TEST_TOKEN_BLOG_' . bin2hex(random_bytes(8)));
             $body = email_h('Potrdi prijavo na Booked')
                 . email_p('Hvala za prijavo na Booked newsletter. Potrdi svoj email naslov, da začneš prejemati nove članke.')
-                . '<div style="margin:24px 0">' . email_button('Potrdi naslov', $confirmUrl) . '</div>'
+                . email_button('Potrdi naslov', $confirmUrl)
                 . email_p('Če gumb ne deluje, kopiraj v brskalnik:<br><a href="' . $confirmUrl . '" style="color:#c8542b;word-break:break-all">' . htmlspecialchars($confirmUrl, ENT_QUOTES) . '</a>', true)
-                . email_divider()
                 . email_p('Če nisi sprožil prijave, ignoriraj to sporočilo.', true);
             $html = email_wrap($appName, $body, 'Booked — by ' . $appName);
             return send_email($to, 'Booked — potrdi naslov', $html);
