@@ -11,7 +11,9 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/lang.php';
 require_once __DIR__ . '/../includes/blog_helpers.php';
 
-$lang = get_lang();
+// URL pot je avtoritativna — .htaccess pošlje ?lang=$1, /booked/ default = 'sl'.
+$lang = $_GET['lang'] ?? 'sl';
+if (!in_array($lang, BLOG_LANGS, true)) $lang = 'sl';
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 10;
 $offset  = ($page - 1) * $perPage;

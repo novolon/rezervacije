@@ -12,7 +12,9 @@ require_once __DIR__ . '/../includes/lang.php';
 require_once __DIR__ . '/../includes/blog_helpers.php';
 
 $slug = trim($_GET['slug'] ?? '');
-$lang = $_GET['lang'] ?? get_lang();
+// Pomembno: ne uporabljaj get_lang() (cookie/session) — URL pot je avtoritativna.
+// .htaccess pošlje ?lang=$1 za /{lang}/booked/... rute, /booked/... pa default = 'sl'.
+$lang = $_GET['lang'] ?? 'sl';
 if (!in_array($lang, BLOG_LANGS, true)) $lang = 'sl';
 
 /** Render 404 v Booked stilu (koristno tudi pri napaki slug-a). */

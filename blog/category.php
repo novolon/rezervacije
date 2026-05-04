@@ -9,7 +9,7 @@ require_once __DIR__ . '/../includes/lang.php';
 require_once __DIR__ . '/../includes/blog_helpers.php';
 
 $slug = trim($_GET['slug'] ?? '');
-$lang = $_GET['lang'] ?? get_lang();
+$lang = $_GET['lang'] ?? 'sl';
 if (!in_array($lang, BLOG_LANGS, true)) $lang = 'sl';
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 12;
