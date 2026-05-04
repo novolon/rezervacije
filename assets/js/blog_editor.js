@@ -376,14 +376,28 @@
 
     function updateViewLink() {
         const link = document.getElementById('bk-view-post-link');
-        if (!link) return;
+        const preview = document.getElementById('bk-preview-post-link');
         const tr = translationsCache[activeLang];
         const status = postCache && postCache.status;
-        if (tr && tr.slug && status === 'published') {
-            link.href = BASE + (activeLang === 'sl' ? '/booked/' : '/' + activeLang + '/booked/') + tr.slug;
-            link.style.display = '';
-        } else {
-            link.style.display = 'none';
+        const slug = tr && tr.slug;
+
+        if (link) {
+            if (slug && status === 'published' && tr.status === 'approved') {
+                link.href = BASE + (activeLang === 'sl' ? '/booked/' : '/' + activeLang + '/booked/') + slug;
+                link.style.display = '';
+            } else {
+                link.style.display = 'none';
+            }
+        }
+        if (preview) {
+            const langLabel = preview.querySelector('[data-preview-lang]');
+            if (langLabel) langLabel.textContent = activeLang.toUpperCase();
+            if (slug) {
+                preview.href = BASE + (activeLang === 'sl' ? '/booked/' : '/' + activeLang + '/booked/') + slug + '?preview=1';
+                preview.style.display = '';
+            } else {
+                preview.style.display = 'none';
+            }
         }
     }
 

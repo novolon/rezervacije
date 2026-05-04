@@ -246,7 +246,10 @@ IMAGES — for the hero image and each placeholder, write a vivid, specific DALL
 - Specify: scene, subject, lighting, mood, composition, style ("editorial photography", "warm natural light", "shallow depth of field", "documentary-style")
 - Avoid: text, logos, faces of identifiable people, brand marks
 - Hospitality-relevant where possible: restaurant interior, host stand, table setting, server with tablet, kitchen team huddle, bustling dining room, owner reviewing dashboard on laptop
-- Each image needs an alt text in {$langLabel} (descriptive, ≤120 chars).
+- Each image needs an ALT text in {$langLabel} (descriptive, ≤120 chars).
+- Each image needs a CAPTION in {$langLabel} (REQUIRED, never empty): one short sentence (max ≤140 chars) that adds context to the image — link it to the surrounding article content. The caption is shown publicly under the image, so it must be a useful, complete sentence (not a duplicate of the alt). Examples:
+  * "Spletni rezervacijski sistem omogoča gostom rezervacijo 24/7 — brez klicev v gostinski lokal."
+  * "Avtomatska SMS opomnika pošljeta sporočilo 24 ur in 2 uri pred rezervacijo."
 
 Adhere strictly to the FACTS. Do NOT invent features Rezble does not have.
 
@@ -264,14 +267,14 @@ OUTPUT — return STRICT JSON only, no markdown fences, no commentary:
   "hero_image": {
     "prompt": "English DALL-E prompt",
     "alt": "Alt text in {$langLabel}",
-    "caption": "Optional short caption in {$langLabel} or empty"
+    "caption": "REQUIRED short sentence in {$langLabel} — never empty"
   },
   "inline_images": [
     {
       "index": 1,
       "prompt": "English DALL-E prompt",
       "alt": "Alt text in {$langLabel}",
-      "caption": ""
+      "caption": "REQUIRED short sentence in {$langLabel} — never empty"
     }
     // up to {$maxInlineImgs} entries
   ]

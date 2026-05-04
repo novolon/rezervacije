@@ -41,16 +41,33 @@ if ($slug === '' || !preg_match('/^[a-z0-9-]{2,200}$/', $slug)) {
 
 $pdo = getDB();
 
-$stmt = $pdo->prepare(
-    "SELECT t.*, p.master_lang, p.published_at, p.scheduled_at, p.status AS post_status,
-            p.category_id, p.author_id, p.hero_media_id, p.id AS post_id_master, p.view_count AS post_views
-     FROM blog_post_translations t
-     JOIN blog_posts p ON p.id = t.post_id
-     WHERE t.slug = ? AND t.lang_code = ?
-       AND t.status = 'approved' AND p.status = 'published'
-       AND (p.published_at IS NULL OR p.published_at <= NOW())
-     LIMIT 1"
-);
+// Preview mode: superadmin lahko z ?preview=1 pogleda nepotrjene/neobjavljene članke.
+if (session_status() === PHP_SESSION_NONE) {
+    @session_start();
+}
+$isPreview = !empty($_GET['preview']) && (($_SESSION['role'] ?? '') === 'superadmin');
+
+if ($isPreview) {
+    $stmt = $pdo->prepare(
+        "SELECT t.*, p.master_lang, p.published_at, p.scheduled_at, p.status AS post_status,
+                p.category_id, p.author_id, p.hero_media_id, p.id AS post_id_master, p.view_count AS post_views
+         FROM blog_post_translations t
+         JOIN blog_posts p ON p.id = t.post_id
+         WHERE t.slug = ? AND t.lang_code = ?
+         LIMIT 1"
+    );
+} else {
+    $stmt = $pdo->prepare(
+        "SELECT t.*, p.master_lang, p.published_at, p.scheduled_at, p.status AS post_status,
+                p.category_id, p.author_id, p.hero_media_id, p.id AS post_id_master, p.view_count AS post_views
+         FROM blog_post_translations t
+         JOIN blog_posts p ON p.id = t.post_id
+         WHERE t.slug = ? AND t.lang_code = ?
+           AND t.status = 'approved' AND p.status = 'published'
+           AND (p.published_at IS NULL OR p.published_at <= NOW())
+         LIMIT 1"
+    );
+}
 $stmt->execute([$slug, $lang]);
 $tr = $stmt->fetch();
 
@@ -167,15 +184,25 @@ unset($rr);
 
 $bk = [
     'lang'        => $lang,
-    'title'       => ($tr['meta_title'] ?: $tr['title']) . ' | Booked',
+    'title'       => ($isPreview ? '[PREVIEW] ' : '') . ($tr['meta_title'] ?: $tr['title']) . ' | Booked',
     'description' => $tr['meta_description'] ?: $tr['excerpt'] ?: '',
     'canonical'   => $canonical,
     'og_image'    => $ogImage,
     'og_type'     => 'article',
-    'hreflangs'   => $hreflangs,
-    'jsonld'      => $jsonld,
+    'hreflangs'   => $isPreview ? [] : $hreflangs, // brez hreflang povezav v preview
+    'jsonld'      => $isPreview ? '' : $jsonld,    // brez JSON-LD v preview
+    'robots'      => $isPreview ? 'noindex,nofollow' : 'index,follow',
 ];
 include __DIR__ . '/_header.php';
+
+if ($isPreview) {
+    echo '<div style="background:#fff3cd;border-bottom:2px solid #ffc107;padding:10px 16px;text-align:center;font:13px/1.4 -apple-system,sans-serif;color:#664d03;position:sticky;top:0;z-index:9999">'
+        . '<strong>👁️ PREDOGLED</strong> · status članka: <code>' . htmlspecialchars($tr['post_status'], ENT_QUOTES) . '</code>'
+        . ' · status prevoda: <code>' . htmlspecialchars($tr['status'], ENT_QUOTES) . '</code>'
+        . ' · jezik: <code>' . htmlspecialchars($lang, ENT_QUOTES) . '</code>'
+        . ' · <a href="' . BASE_PATH . '/pages/blog_editor.php?id=' . (int)$tr['post_id'] . '" style="color:#664d03;font-weight:600">← Nazaj v editor</a>'
+        . '</div>';
+}
 
 $publishedDate = !empty($tr['published_at'] ?? $tr['updated_at']) ? date('j. n. Y', strtotime($tr['published_at'] ?? $tr['updated_at'])) : '';
 ?>

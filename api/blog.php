@@ -965,7 +965,9 @@ if ($action === 'ai_generate' && $method === 'POST') {
                     ['quality' => $imgQuality]
                 );
                 $alt   = str_replace(["\r","\n",'"','`'], ' ', $img['alt'] ?? '');
-                $repl  = '![' . $alt . '](media:' . (int)$imgMeta['id'] . ')';
+                $cap   = trim((string)($img['caption'] ?? ''));
+                $cap   = str_replace(["\r","\n",'"','`'], ' ', $cap);
+                $repl  = '![' . $alt . '](media:' . (int)$imgMeta['id'] . ($cap !== '' ? ' "' . $cap . '"' : '') . ')';
                 $contentMd = str_replace('<!--IMG:' . $idx . '-->', $repl, $contentMd);
             }
             // Pošlji še morebitne neaktivirane placeholderje v "delete" — brez slike
@@ -1134,7 +1136,8 @@ if ($action === 'ai_apply_post_image' && $method === 'POST') {
         if (!$tr) json_response(false, null, 'Master translation ne obstaja.', 404);
 
         $altClean = str_replace(["\r","\n",'"','`'], ' ', $alt !== '' ? $alt : $prompt);
-        $repl     = '![' . $altClean . '](media:' . $mediaId . ')';
+        $capClean = str_replace(["\r","\n",'"','`'], ' ', $caption);
+        $repl     = '![' . $altClean . '](media:' . $mediaId . ($capClean !== '' ? ' "' . $capClean . '"' : '') . ')';
         $newMd    = str_replace('<!--IMG:' . $idx . '-->', $repl, $tr['content_md']);
 
         $rendered = blog_render_md($newMd, $masterLang);

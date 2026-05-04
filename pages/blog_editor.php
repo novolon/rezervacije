@@ -173,6 +173,7 @@ window.BLOG_TAGS       = <?= json_encode($tagsAll, JSON_UNESCAPED_UNICODE) ?>;
                 <button type="button" class="btn btn-outline" id="bk-schedule-btn">Zakaži objavo...</button>
                 <button type="button" class="btn btn-outline" id="bk-pending-btn">Pošlji v pregled</button>
                 <button type="button" class="btn btn-outline" id="bk-archive-btn">Arhiviraj</button>
+                <a href="#" id="bk-preview-post-link" class="btn btn-outline" target="_blank" rel="noopener" style="display:none;text-align:center">👁️ Predogled (<span data-preview-lang>SL</span>) ↗</a>
                 <a href="#" id="bk-view-post-link" class="btn btn-outline" target="_blank" rel="noopener" style="display:none;text-align:center">Poglej članek ↗</a>
             </div>
         </div>

@@ -25,6 +25,7 @@ $bkOgImage     = $bk['og_image']    ?? '';
 $bkOgType      = $bk['og_type']     ?? 'website';
 $bkHreflangs   = $bk['hreflangs']   ?? [];
 $bkJsonLd      = $bk['jsonld']      ?? '';
+$bkRobots      = $bk['robots']      ?? 'index,follow';
 $bkBase        = blog_base_url();
 ?><!DOCTYPE html>
 <html lang="<?= htmlspecialchars($bkLang, ENT_QUOTES) ?>">
@@ -39,6 +40,7 @@ $bkBase        = blog_base_url();
     'ogType'      => $bkOgType,
     'lang'        => $bkLang,
     'hreflangs'   => $bkHreflangs,
+    'robots'      => $bkRobots,
     'siteName'    => 'Booked — by Rezble',
 ]) ?>
 <link rel="preconnect" href="https://fonts.googleapis.com">
