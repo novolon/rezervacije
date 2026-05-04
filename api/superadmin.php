@@ -98,7 +98,7 @@ if ($method === 'POST') {
         json_response(true, null, 'Popust izbrisan.');
     }
 
-    // Testni email
+    // Testni email — VSI tipi (pred objavo končni pregled designa)
     require_once '../includes/mailer.php';
     $body  = get_body();
     $to    = trim($body['email'] ?? '');
@@ -108,20 +108,123 @@ if ($method === 'POST') {
         json_response(false, null, 'Vnesite veljaven email.', 400);
     }
 
-    $name = $session['full_name'] ?? 'Superadmin';
+    $name      = $session['full_name'] ?? 'Superadmin';
+    $tomorrow  = time() + 86400;
+    $in3Days   = time() + 86400 * 3;
+    $in7Days   = time() + 86400 * 7;
+    $testToken = 'TEST_TOKEN_' . bin2hex(random_bytes(8));
+    $resName   = 'Gostilna Pri Lipi';
+    $guestName = 'Janez Novak';
+    $date      = date('Y-m-d', $tomorrow);
+    $time      = '19:30';
+    $duration  = 90;
+    $guests    = 4;
+    $contactE  = 'info@lipa.si';
+    $contactP  = '+386 1 234 5678';
 
-    if ($type === 'reset') {
-        $ok = send_password_reset_email($to, $name, 'TEST_TOKEN_12345');
-    } elseif ($type === 'payment_failed') {
-        $ok = send_payment_failed_email($to, $name, 'Advanced', 6.99, 2, time() + 86400 * 3);
-    } elseif ($type === 'upcoming_invoice') {
-        $ok = send_upcoming_invoice_email($to, $name, 'Advanced', 69.99, time() + 86400 * 7);
-    } else {
-        $ok = send_verification_email($to, $name, 'TEST_TOKEN_12345');
+    // Mapiranje: tip → callable
+    $senders = [
+        'verification' => function() use ($to, $name, $testToken) {
+            return send_verification_email($to, $name, $testToken);
+        },
+        'reset' => function() use ($to, $name, $testToken) {
+            return send_password_reset_email($to, $name, $testToken);
+        },
+        'email_change' => function() use ($to, $name, $testToken) {
+            return send_email_change_email($to, $name, $testToken);
+        },
+        'payment_failed' => function() use ($to, $name, $in3Days) {
+            return send_payment_failed_email($to, $name, 'Advanced', 6.99, 2, $in3Days);
+        },
+        'upcoming_invoice' => function() use ($to, $name, $in7Days) {
+            return send_upcoming_invoice_email($to, $name, 'Advanced', 69.99, $in7Days);
+        },
+        'plan_changed' => function() use ($to, $name) {
+            return send_plan_changed_email($to, $name, 'Premium', 'monthly', 9.99);
+        },
+        'invoice_request' => function() use ($to) {
+            // Ta email gre superadminu kot obvestilo, da je admin zahteval predračun
+            return send_invoice_request_email($to, 'Janez Novak', 'admin@example.com', 'advanced', 69.99);
+        },
+        'booking_pending_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP) {
+            return send_booking_pending_guest($to, $guestName, $resName, $date, $time, $guests, 'EDIT_TEST_TOKEN', $contactE, $contactP);
+        },
+        'booking_confirmed_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $duration, $contactE, $contactP) {
+            return send_booking_confirmed_guest($to, $guestName, $resName, $date, $time, $guests, $duration, 'EDIT_TEST_TOKEN', $contactE, $contactP);
+        },
+        'booking_rejected_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP) {
+            return send_booking_rejected_guest($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP);
+        },
+        'booking_reminder_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $duration, $contactE, $contactP) {
+            return send_booking_reminder_guest($to, $guestName, $resName, $date, $time, $guests, $duration, $contactE, $contactP);
+        },
+        'booking_notify_admin' => function() use ($to, $name, $resName, $guestName, $date, $time, $guests) {
+            return send_booking_notify_admin($to, $name, $resName, $guestName, 'gost@example.com', $date, $time, $guests, 'pending', 12345);
+        },
+        'gdpr' => function() use ($to) {
+            return send_gdpr_confirmation($to, 'data_export');
+        },
+        'affiliate_verify' => function() use ($to, $name, $testToken) {
+            return send_affiliate_verify_email($to, $name, $testToken);
+        },
+        'affiliate_approved' => function() use ($to, $name) {
+            return send_affiliate_approved_email($to, $name, 'TESTREZBLE10');
+        },
+        'affiliate_rejected' => function() use ($to, $name) {
+            return send_affiliate_rejected_email($to, $name, 'Aplikacija ni izpolnjevala minimalnih pogojev za partnerski program.');
+        },
+        'affiliate_payout' => function() use ($to, $name) {
+            return send_affiliate_payout_email($to, $name, 142.50, 'PAY-2026-0042');
+        },
+        'affiliate_discount_granted' => function() use ($to, $name) {
+            return send_affiliate_discount_granted_email($to, $name, 'TESTREZBLE10', 10.0);
+        },
+        'blog_subscribe' => function() use ($to) {
+            // Inline emulacija blog subscribe potrditve (kot v api/blog_subscribe.php)
+            $appName = APP_NAME;
+            $confirmUrl = APP_URL . BASE_PATH . '/api/blog_subscribe.php?action=confirm&t=' . urlencode('TEST_TOKEN_BLOG_' . bin2hex(random_bytes(8)));
+            $body = email_h('Potrdi prijavo na Booked')
+                . email_p('Hvala za prijavo na Booked newsletter. Potrdi svoj email naslov, da začneš prejemati nove članke.')
+                . '<div style="margin:24px 0">' . email_button('Potrdi naslov', $confirmUrl) . '</div>'
+                . email_p('Če gumb ne deluje, kopiraj v brskalnik:<br><a href="' . $confirmUrl . '" style="color:#c8542b;word-break:break-all">' . htmlspecialchars($confirmUrl, ENT_QUOTES) . '</a>', true)
+                . email_divider()
+                . email_p('Če nisi sprožil prijave, ignoriraj to sporočilo.', true);
+            $html = email_wrap($appName, $body, 'Booked — by ' . $appName);
+            return send_email($to, 'Booked — potrdi naslov', $html);
+        },
+    ];
+
+    // BATCH "all" → zaporedno pošlji vse
+    if ($type === 'all') {
+        $sent = 0; $failed = [];
+        foreach ($senders as $key => $fn) {
+            try {
+                if ($fn()) $sent++;
+                else $failed[] = $key;
+            } catch (Throwable $e) {
+                $failed[] = $key . ' (' . $e->getMessage() . ')';
+            }
+            usleep(150000); // 150ms throttle, da Mailgun ni reroute
+        }
+        if (empty($failed)) {
+            json_response(true, null, 'Vseh ' . $sent . ' email tipov poslanih na ' . $to);
+        }
+        json_response(false, null, 'Poslanih: ' . $sent . '. Spodletelo: ' . implode(', ', $failed), 500);
+    }
+
+    // Posamezen tip
+    if (!isset($senders[$type])) {
+        json_response(false, null, 'Neznan tip: ' . $type, 400);
+    }
+    try {
+        $ok = $senders[$type]();
+    } catch (Throwable $e) {
+        error_log('test mail [' . $type . ']: ' . $e->getMessage());
+        json_response(false, null, 'Napaka: ' . $e->getMessage(), 500);
     }
 
     if ($ok) {
-        json_response(true, null, 'Email poslan na ' . $to);
+        json_response(true, null, 'Email "' . $type . '" poslan na ' . $to);
     } else {
         json_response(false, null, 'Pošiljanje ni uspelo. Preverite Mailgun nastavitve.', 500);
     }

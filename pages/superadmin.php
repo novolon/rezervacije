@@ -259,10 +259,40 @@ $fullName = $_SESSION['full_name'];
                 <div class="admin-field" style="margin-bottom:20px">
                     <label><?= t('superadmin.email_type_label') ?></label>
                     <select id="test-mail-type" style="width:100%;box-sizing:border-box">
-                        <option value="verification"><?= t('superadmin.email_type_verification') ?></option>
-                        <option value="reset"><?= t('superadmin.email_type_reset') ?></option>
-                        <option value="payment_failed"><?= t('superadmin.email_type_payment_failed') ?></option>
-                        <option value="upcoming_invoice"><?= t('superadmin.email_type_invoice') ?></option>
+                        <optgroup label="Račun & avtentikacija">
+                            <option value="verification">Potrditev emaila ob registraciji</option>
+                            <option value="reset">Ponastavitev gesla</option>
+                            <option value="email_change">Sprememba email naslova</option>
+                        </optgroup>
+                        <optgroup label="Naročnina (Stripe)">
+                            <option value="payment_failed">Plačilo ni uspelo</option>
+                            <option value="upcoming_invoice">Opomnik pred zaračunanjem</option>
+                            <option value="plan_changed">Sprememba paketa potrjena</option>
+                            <option value="invoice_request">Zahtevek za predračun</option>
+                        </optgroup>
+                        <optgroup label="Rezervacije (gost)">
+                            <option value="booking_pending_guest">Rezervacijska prošnja (gost)</option>
+                            <option value="booking_confirmed_guest">Potrjena rezervacija (gost)</option>
+                            <option value="booking_rejected_guest">Rezervacija ni mogoča (gost)</option>
+                            <option value="booking_reminder_guest">Opomnik 24h pred (gost)</option>
+                        </optgroup>
+                        <optgroup label="Rezervacije (admin)">
+                            <option value="booking_notify_admin">Obvestilo o rezervaciji (admin)</option>
+                        </optgroup>
+                        <optgroup label="Affiliate program">
+                            <option value="affiliate_verify">Potrditev affiliate prijave</option>
+                            <option value="affiliate_approved">Affiliate odobren</option>
+                            <option value="affiliate_rejected">Affiliate zavrnjen</option>
+                            <option value="affiliate_payout">Affiliate izplačilo</option>
+                            <option value="affiliate_discount_granted">Affiliate popustna koda aktivna</option>
+                        </optgroup>
+                        <optgroup label="Drugo">
+                            <option value="gdpr">GDPR potrditev zahtevka</option>
+                            <option value="blog_subscribe">Blog newsletter potrditev</option>
+                        </optgroup>
+                        <optgroup label="Vse v enem batch-u">
+                            <option value="all">📧 Pošlji VSE emaile naenkrat</option>
+                        </optgroup>
                     </select>
                 </div>
                 <button id="test-mail-btn" class="btn btn-primary"><?= t('superadmin.send_test_btn') ?></button>
