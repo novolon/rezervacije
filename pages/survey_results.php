@@ -1,10 +1,11 @@
 <?php
-// survey_results.php je preseljen v restaurant-edit.php (tab Anketa)
+/**
+ * Stran za pregled odgovorov ankete s tabelo posameznih responsov, klik na vrstico
+ * odpre detail modal, gumb za izvoz v CSV (Excel-compatible: UTF-8 BOM + ; delimiter).
+ *
+ * Dostopno admin/staff uporabnikom; superadmin gre na svoj panel.
+ */
 require_once '../includes/auth_check.php';
-if (is_logged_in()) {
-    header('Location: ' . BASE_PATH . '/pages/admin.php');
-    exit;
-}
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
 require_once '../includes/plans.php';
