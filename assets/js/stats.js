@@ -47,10 +47,18 @@ function setDays(days) {
     const d    = new Date();
     d.setDate(d.getDate() - days + 1);
     State.from = formatDate(d);
+    updatePeriodLabel();
 }
 
 function formatDate(d) {
     return d.toISOString().slice(0, 10);
+}
+
+/** Prikaži natančen "od – do" datum izbranega obdobja. */
+function updatePeriodLabel() {
+    const el = document.getElementById('period-range-label');
+    if (!el || !State.from || !State.to) return;
+    el.textContent = fmtDate(State.from) + ' – ' + fmtDate(State.to);
 }
 
 // ─── Nalaganje ───────────────────────────────────────────────────
@@ -388,6 +396,7 @@ document.getElementById('btn-apply-dates')?.addEventListener('click', () => {
     }
     State.from = from;
     State.to   = to;
+    updatePeriodLabel();
     loadAll();
 });
 

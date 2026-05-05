@@ -105,6 +105,9 @@ require_once '../includes/html_head.php';
                     <input type="date" id="filter-to" class="filter-input rz-input">
                     <button id="btn-apply-dates" class="btn btn-primary btn-sm rz-btn rz-btn-accent"><?= t('stats.custom_show') ?></button>
                 </div>
+
+                <!-- Točni datumi izbranega obdobja -->
+                <div id="period-range-label" style="font-size:.825rem;color:var(--color-muted);margin-top:8px"></div>
             </div>
         </div>
     </div>
