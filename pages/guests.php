@@ -174,7 +174,10 @@ if (!empty($_GET['rest_id'])) {
 <!-- Toolbar -->
 <div class="guests-toolbar">
     <input type="hidden" id="rest-select" value="<?= $activeRestId ?>">
-    <input type="search" id="guests-search" class="guests-search" placeholder="<?= t('guests.search_placeholder') ?>">
+    <input type="search" id="guests-search" name="q" class="guests-search"
+           placeholder="<?= t('guests.search_placeholder') ?>"
+           autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+           data-form-type="other" data-lpignore="true" data-1p-ignore="true" data-bwignore="true">
 </div>
 
 <!-- Tabela -->

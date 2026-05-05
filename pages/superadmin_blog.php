@@ -98,7 +98,8 @@ window.BLOG_LANGS = ['sl','en','de','it','fr','hr','es','pt'];
                     <option value="published">Objavljeno</option>
                     <option value="archived">Arhivirano</option>
                 </select>
-                <input type="search" id="bk-filter-search" placeholder="Iskanje po naslovu..." class="admin-field-input" style="padding:7px 12px;font-size:13px">
+                <input type="search" id="bk-filter-search" name="q" placeholder="Iskanje po naslovu..." class="admin-field-input" style="padding:7px 12px;font-size:13px"
+                       autocomplete="off" data-form-type="other" data-lpignore="true" data-1p-ignore="true" data-bwignore="true">
                 <button class="btn btn-primary" id="bk-new-post">+ Nov članek</button>
                 <button class="btn btn-outline" id="bk-ai-generate" title="Na voljo v Fazi 3">✨ AI</button>
             </div>
