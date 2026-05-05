@@ -352,9 +352,17 @@ if ($method === 'PUT') {
     if ($employees_can_override_schedule !== null) { $sets[] = 'employees_can_override_schedule = ?';        $params[] = $employees_can_override_schedule; }
     if ($track_no_shows !== null)                  { $sets[] = 'track_no_shows = ?';                        $params[] = $track_no_shows; }
     if ($no_show_threshold !== null)               { $sets[] = 'no_show_threshold = ?';                     $params[] = $no_show_threshold; }
-    if ($booking_lang_switcher_enabled !== null)   { $sets[] = 'booking_lang_switcher_enabled = ?';         $params[] = $booking_lang_switcher_enabled; }
-    if ($booking_available_languages !== null)     { $sets[] = 'booking_available_languages = ?';           $params[] = $booking_available_languages; }
-    if ($booking_primary_language !== null)        { $sets[] = 'booking_primary_language = ?';              $params[] = $booking_primary_language; }
+    // Lang stolpci samo če migration applied (booking_lang_*)
+    $hasLangCols = false;
+    try {
+        $colCheck = $pdo->query("SHOW COLUMNS FROM restaurants LIKE 'booking_lang_switcher_enabled'");
+        $hasLangCols = (bool)$colCheck->fetch();
+    } catch (Throwable $e) { $hasLangCols = false; }
+    if ($hasLangCols) {
+        if ($booking_lang_switcher_enabled !== null)   { $sets[] = 'booking_lang_switcher_enabled = ?';         $params[] = $booking_lang_switcher_enabled; }
+        if ($booking_available_languages !== null)     { $sets[] = 'booking_available_languages = ?';           $params[] = $booking_available_languages; }
+        if ($booking_primary_language !== null)        { $sets[] = 'booking_primary_language = ?';              $params[] = $booking_primary_language; }
+    }
 
     try {
         // Day schedules
@@ -379,7 +387,12 @@ if ($method === 'PUT') {
         json_response(false, null, $e->getMessage(), 400);
     } catch (PDOException $e) {
         error_log('Restaurant update error: ' . $e->getMessage());
-        json_response(false, null, 'Napaka pri posodabljanju.', 500);
+        // V dev (display_errors) ali za superadmin — pošlji dejansko sporočilo nazaj
+        $detail = '';
+        if (($_SESSION['role'] ?? '') === 'superadmin' || ini_get('display_errors')) {
+            $detail = ' (' . $e->getMessage() . ')';
+        }
+        json_response(false, null, 'Napaka pri posodabljanju.' . $detail, 500);
     }
 }
 
