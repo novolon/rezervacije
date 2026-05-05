@@ -86,8 +86,8 @@ function initialMonthly(array $d): string {
 <nav class="fixed top-0 left-0 right-0 z-50 bg-cream/90 backdrop-blur-md border-b border-sage-light">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="flex justify-between items-center h-20">
-            <a href="#" class="text-2xl font-bold text-forest tracking-tight">
-                Rezervacije<span class="text-terracotta">.</span>
+            <a href="#" class="flex items-center" aria-label="Rezble">
+                <img src="<?= $appUrl ?>/assets/images/Rezble.svg" alt="Rezble" style="height:32px;width:auto;display:block">
             </a>
             <div class="hidden md:flex items-center space-x-8">
                 <a href="#features" class="text-forest/80 hover:text-forest font-medium transition-colors"><?= t('landing.nav_features') ?></a>
@@ -557,8 +557,8 @@ function initialMonthly(array $d): string {
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div class="grid grid-cols-1 md:grid-cols-4 gap-8">
             <div class="col-span-1 md:col-span-2">
-                <a href="#" class="text-2xl font-bold text-cream tracking-tight mb-4 block">
-                    Rezervacije<span class="text-terracotta">.</span>
+                <a href="#" class="inline-block mb-4" aria-label="Rezble">
+                    <img src="<?= $appUrl ?>/assets/images/rezble-white.svg" alt="Rezble" style="height:32px;width:auto;display:block">
                 </a>
                 <p class="text-sm max-w-sm text-cream/60">Preprost, sodoben sistem za upravljanje rezervacij, zasnovan za restavracije – od posameznih lokacij do verig.</p>
             </div>
