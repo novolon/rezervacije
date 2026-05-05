@@ -195,7 +195,7 @@ function _rz_icon(string $name, int $size = 17): string {
         <?php endif; ?>
         <?= _rz_nav_item(BASE_PATH . '/pages/stats.php', 'chart', t('nav.stats'), $_cp === 'stats.php') ?>
         <?php if ($_hasSurvey): ?>
-            <?= _rz_nav_item(BASE_PATH . '/pages/survey.php', 'survey', t('nav.survey'), in_array($_cp, ['survey.php','survey_builder.php','survey_results.php'])) ?>
+            <?= _rz_nav_item(BASE_PATH . '/pages/survey_results.php', 'survey', t('nav.survey'), in_array($_cp, ['survey.php','survey_builder.php','survey_results.php'])) ?>
         <?php endif; ?>
     </nav>
 
