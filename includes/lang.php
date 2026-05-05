@@ -115,15 +115,42 @@ function detect_user_country(): string {
     if (isset($_SESSION[$cacheKey]) && $_SESSION[$cacheKey]['exp'] > time()) {
         return $_SESSION[$cacheKey]['cc'] ?? '';
     }
-    // ip-api.com vrne JSON za /json/{ip}?fields=countryCode (brezplačno, brez api key)
-    $url = 'http://ip-api.com/json/' . urlencode($ip) . '?fields=countryCode';
-    $ctx = stream_context_create(['http' => ['timeout' => 2, 'ignore_errors' => true]]);
-    $resp = @file_get_contents($url, false, $ctx);
+
+    // Poskusi prek cURL (zanesljivejši kot file_get_contents na Synology kjer
+    // allow_url_fopen je včasih onemogočen). Najprej HTTPS ipwho.is, fallback na ip-api.com.
     $cc = '';
-    if ($resp) {
+    $endpoints = [
+        'https://ipwho.is/' . urlencode($ip) . '?fields=country_code',
+        'http://ip-api.com/json/'  . urlencode($ip) . '?fields=countryCode',
+    ];
+    foreach ($endpoints as $url) {
+        if (function_exists('curl_init')) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_TIMEOUT        => 3,
+                CURLOPT_CONNECTTIMEOUT => 2,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_SSL_VERIFYPEER => false, // Synology pogosto nima cacert
+                CURLOPT_SSL_VERIFYHOST => 0,
+            ]);
+            $resp = curl_exec($ch);
+            $err  = curl_error($ch);
+            curl_close($ch);
+        } else {
+            $ctx = stream_context_create(['http' => ['timeout' => 3, 'ignore_errors' => true]]);
+            $resp = @file_get_contents($url, false, $ctx);
+            $err  = '';
+        }
+        if (!$resp) {
+            error_log('detect_user_country: ' . $url . ' failed: ' . ($err ?: 'no response'));
+            continue;
+        }
         $j = json_decode($resp, true);
-        if (isset($j['countryCode']) && preg_match('/^[A-Z]{2}$/', $j['countryCode'])) {
-            $cc = $j['countryCode'];
+        $code = $j['country_code'] ?? $j['countryCode'] ?? '';
+        if ($code && preg_match('/^[A-Z]{2}$/', $code)) {
+            $cc = $code;
+            break;
         }
     }
     $_SESSION[$cacheKey] = ['cc' => $cc, 'exp' => time() + 86400]; // 24h cache
@@ -201,6 +228,15 @@ function detect_user_lang(): string {
 }
 
 // ── Auto-init ──────────────────────────────────────────────────────────────────
+// Debug / testing: ?reset_lang=1 počisti rzlang cookie in session, da forsira
+// ponovno detekcijo (uporabno po prepogibu VPN-a ali jezikovnih nastavitev brskalnika).
+if (!empty($_GET['reset_lang'])) {
+    setcookie('rzlang', '', time() - 3600, '/');
+    unset($_COOKIE['rzlang']);
+    if (session_status() === PHP_SESSION_ACTIVE) unset($_SESSION['lang']);
+    if (session_status() === PHP_SESSION_ACTIVE) unset($_SESSION['_geoip_' . ($_SERVER['REMOTE_ADDR'] ?? '')]);
+}
+
 // Prioriteta: GET ?lang= (eksplicitni switcher) > cookie > session > Accept-Language > 'sl' fallback
 $_rz_lang_init = null;
 if (!empty($_GET['lang']) && in_array($_GET['lang'], ['sl', 'en', 'de', 'it', 'fr', 'hr', 'es', 'pt'], true)) {
