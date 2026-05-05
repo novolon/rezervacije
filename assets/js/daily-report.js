@@ -142,23 +142,38 @@ const DailyReport = (() => {
     justify-content: flex-end;
 }
 @media print {
+    /* Skrij vse na strani razen dnevnega poročila */
+    body > *:not(#dr-overlay) {
+        display: none !important;
+    }
+    /* Razveljavi tudi sticky/fixed elemente in header (so otroci body) */
+    html, body {
+        background: #fff !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
     .dr-overlay {
-        position: static;
-        background: none;
-        padding: 0;
+        position: static !important;
+        background: none !important;
+        padding: 0 !important;
+        z-index: auto !important;
     }
     .dr-modal {
-        max-height: none;
-        box-shadow: none;
+        max-width: none !important;
+        max-height: none !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        margin: 0 !important;
     }
     .dr-btn-print,
     .dr-btn-close,
-    .dr-footer {
-        display: none;
-    }
+    .dr-footer,
     .dr-header-actions {
-        display: none;
+        display: none !important;
     }
+    /* Tabela naj ne preskoči stran med vrstico */
+    .dr-table tr { page-break-inside: avoid; }
 }
 `;
     document.head.appendChild(style);
