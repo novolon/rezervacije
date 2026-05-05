@@ -336,7 +336,7 @@ require_once '../includes/html_head.php';
         <div class="flex flex--equal flex--gap20">
             <div class="flex flex--column flex--gap20">
                 <div class="re-section">
-                    <?=  card_head(t('re.card_settings'), t('re.tab_booking')); ?>
+                    <?=  card_head(t('re.card_settings'), t('re.tab_booking'), '<button class="btn btn-primary js-save-booking">' . t('common.save') . '</button>'); ?>
                     <div class="admin-form">
 
                         <div class="rz-toggle-row">
@@ -578,7 +578,7 @@ require_once '../includes/html_head.php';
     <!-- ── Tab: Zaposleni ──────────────────────────────────── -->
     <div id="panel-zaposleni" class="re-panel">
         <div class="re-section">
-            <?=  card_head(t('re.tab_staff'), t('re.card_staff_list'), '<button class="btn btn-primary" id="btn-save-booking">' . t('common.save') . '</button>'); ?>
+            <?=  card_head(t('re.tab_staff'), t('re.card_staff_list'), '<button class="btn btn-primary js-save-booking" id="btn-save-booking">' . t('common.save') . '</button>'); ?>
             <div id="staff-list" style="margin-bottom:14px"><?= t('common.loading') ?></div>
             <div style="display:flex;gap:8px">
                 <input type="text" id="staff-name-input" placeholder="<?= t('re.staff_placeholder') ?>"
@@ -1469,7 +1469,7 @@ window.copyEmbed = () => {
     if (v) navigator.clipboard.writeText(v).then(()=>toast(window.t('re.toast_embed_copied')),()=>prompt(window.t('re.btn_copy')+':',v));
 };
 
-document.getElementById('btn-save-booking').addEventListener('click', async () => {
+async function saveBookingSettings(triggerBtn) {
     const enabled     = document.getElementById('r-booking-enabled').checked ? 1 : 0;
     const interval    = parseInt(document.getElementById('r-slot-interval')?.value||'60');
     const autoConf    = document.getElementById('r-auto-confirm')?.checked ? 1 : 0;
@@ -1480,14 +1480,14 @@ document.getElementById('btn-save-booking').addEventListener('click', async () =
     const allowCancel = document.getElementById('r-allow-cancel')?.checked ? 1 : 0;
     const cancelCutoff = parseInt(document.getElementById('r-cancel-cutoff')?.value||'4');
     if (enabled && minG > maxG) { showPageErr(window.t('re.err_min_max_guests')); return; }
-    const btn = document.getElementById('btn-save-booking');
-    btn.disabled=true; btn.textContent='...';
+    const allBtns = Array.from(document.querySelectorAll('.js-save-booking'));
+    allBtns.forEach(b => { b.disabled = true; b.textContent = '...'; });
     // Lang nastavitve
     const langSwitcher = document.getElementById('r-lang-switcher')?.checked ? 1 : 0;
     const availLangs   = Array.from(document.querySelectorAll('input[name="r-avail-lang[]"]:checked')).map(cb => cb.value);
     const primaryLang  = document.getElementById('r-primary-lang')?.value || 'sl';
-    if (availLangs.length === 0) { showPageErr('Izberi vsaj en jezik.'); btn.disabled=false; btn.textContent=window.t('common.save'); return; }
-    if (availLangs.indexOf(primaryLang) === -1) { showPageErr('Primarni jezik mora biti med razpoložljivimi.'); btn.disabled=false; btn.textContent=window.t('common.save'); return; }
+    if (availLangs.length === 0) { showPageErr('Izberi vsaj en jezik.'); _reenableBookingBtns(); return; }
+    if (availLangs.indexOf(primaryLang) === -1) { showPageErr('Primarni jezik mora biti med razpoložljivimi.'); _reenableBookingBtns(); return; }
     try {
         await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}`, {
             booking_enabled: enabled, booking_slot_interval: interval,
@@ -1503,8 +1503,19 @@ document.getElementById('btn-save-booking').addEventListener('click', async () =
         });
         showPageOk(window.t('re.toast_saved'));
     } catch(e) { showPageErr(e.message); }
-    btn.disabled=false; btn.textContent=window.t('common.save');
+    allBtns.forEach(b => { b.disabled = false; b.textContent = window.t('common.save'); });
+}
+
+// Bind handler na vse "Shrani" gumbe na booking nastavitvah
+// (na Spletne rezervacije + Zaposleni tab — oba shranita iste nastavitve).
+document.querySelectorAll('.js-save-booking').forEach(btn => {
+    btn.addEventListener('click', () => saveBookingSettings(btn));
 });
+
+// Validation guard for early-return cases — re-enable buttons after error
+function _reenableBookingBtns() {
+    document.querySelectorAll('.js-save-booking').forEach(b => { b.disabled=false; b.textContent=window.t('common.save'); });
+}
 
 // ── Zaposleni ─────────────────────────────────────────────────
 let staffLoaded = false;
