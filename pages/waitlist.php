@@ -117,6 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $hasFeature) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="<?= BASE_PATH ?>/assets/images/icon.svg">
     <title><?= t('waitlist.title') ?> – <?= h(APP_NAME) ?></title>
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css?v=4">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/rezble.css?v=4">

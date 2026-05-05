@@ -149,6 +149,7 @@ if ($isActive && $cycle === 'monthly' && ($sub['payment_method'] ?? '') === 'str
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="image/svg+xml" href="<?= BASE_PATH ?>/assets/images/icon.svg">
     <title><?= t('billing.page_title') ?> – <?= h(APP_NAME) ?></title>
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/admin.css">

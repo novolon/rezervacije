@@ -132,11 +132,7 @@ function _rz_icon(string $name, int $size = 17): string {
 
     <div class="rz-side-top">
         <a href="<?= BASE_PATH ?>/pages/main.php" class="rz-logo">
-            <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true" style="flex:none">
-                <rect width="32" height="32" rx="7" fill="var(--accent)"/>
-                <path d="M9 8v16l4-4h5a5 5 0 0 0 5-5v-4a3 3 0 0 0-3-3H9Z" fill="var(--accent-ink)"/>
-            </svg>
-            <span class="rz-logo-name display" style="font-size:18px;font-weight:700;letter-spacing:-0.02em">Rezble</span>
+            <img src="<?= BASE_PATH ?>/assets/images/rezble-white.svg" alt="Rezble" class="rz-logo-img display" style="height:24px;width:auto;flex:none">
             <span class="rz-plan-badge"><?= h($_planLabel) ?></span>
         </a>
         <button class="rz-collapse" id="rz-collapse-btn" type="button" title="<?= t('nav.collapse') ?>">

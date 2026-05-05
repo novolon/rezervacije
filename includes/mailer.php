@@ -122,6 +122,9 @@ function _email_format_date(string $date, string $lang): string {
  */
 function email_wrap(string $appName, string $body, string $footerNote): string {
     $year = date('Y');
+    $logoUrl = (defined('APP_URL') ? rtrim(APP_URL, '/') : '')
+             . (defined('BASE_PATH') ? BASE_PATH : '')
+             . '/assets/images/rezble@2x.png';
     return "<!DOCTYPE html>
 <html>
 <head>
@@ -136,16 +139,7 @@ function email_wrap(string $appName, string $body, string $footerNote): string {
 
             <!-- Brand header -->
             <tr><td style='padding:0 0 24px;text-align:center'>
-                <table role='presentation' cellpadding='0' cellspacing='0' border='0' style='display:inline-table'>
-                    <tr>
-                        <td style='background:#c8542b;border-radius:10px;width:38px;height:38px;text-align:center;vertical-align:middle'>
-                            <span style='color:#ffffff;font-size:20px;font-weight:800;line-height:38px;display:block;font-family:Georgia,\"Times New Roman\",serif'>R</span>
-                        </td>
-                        <td style='padding-left:12px;vertical-align:middle'>
-                            <span style='font-size:20px;font-weight:700;color:#1c2620;letter-spacing:-0.01em;font-family:Georgia,\"Times New Roman\",serif'>{$appName}</span>
-                        </td>
-                    </tr>
-                </table>
+                <img src='{$logoUrl}' alt='{$appName}' width='120' style='display:inline-block;height:auto;max-width:140px;border:0;outline:none;text-decoration:none'>
             </td></tr>
 
             <!-- Card -->

@@ -33,6 +33,7 @@ $bkBase        = blog_base_url();
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="icon" type="image/svg+xml" href="<?= htmlspecialchars($bkBase . '/assets/images/icon.svg', ENT_QUOTES) ?>">
 <?= blog_render_meta_tags([
     'title'       => $bkTitle,
     'description' => $bkDesc,
