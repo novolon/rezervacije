@@ -103,6 +103,8 @@ if ($method === 'POST') {
     $body  = get_body();
     $to    = trim($body['email'] ?? '');
     $type  = $body['type'] ?? 'verification';
+    $lang  = $body['lang'] ?? 'sl';
+    if (!in_array($lang, ['sl','en','de','it','fr','hr','es','pt'], true)) $lang = 'sl';
 
     if (!$to || !filter_var($to, FILTER_VALIDATE_EMAIL)) {
         json_response(false, null, 'Vnesite veljaven email.', 400);
@@ -124,72 +126,70 @@ if ($method === 'POST') {
 
     // Mapiranje: tip → callable
     $senders = [
-        'verification' => function() use ($to, $name, $testToken) {
-            return send_verification_email($to, $name, $testToken);
+        'verification' => function() use ($to, $name, $testToken, $lang) {
+            return send_verification_email($to, $name, $testToken, $lang);
         },
-        'reset' => function() use ($to, $name, $testToken) {
-            return send_password_reset_email($to, $name, $testToken);
+        'reset' => function() use ($to, $name, $testToken, $lang) {
+            return send_password_reset_email($to, $name, $testToken, $lang);
         },
-        'email_change' => function() use ($to, $name, $testToken) {
-            return send_email_change_email($to, $name, $testToken);
+        'email_change' => function() use ($to, $name, $testToken, $lang) {
+            return send_email_change_email($to, $name, $testToken, $lang);
         },
-        'payment_failed' => function() use ($to, $name, $in3Days) {
-            return send_payment_failed_email($to, $name, 'Advanced', 6.99, 2, $in3Days);
+        'payment_failed' => function() use ($to, $name, $in3Days, $lang) {
+            return send_payment_failed_email($to, $name, 'Advanced', 6.99, 2, $in3Days, $lang);
         },
-        'upcoming_invoice' => function() use ($to, $name, $in7Days) {
-            return send_upcoming_invoice_email($to, $name, 'Advanced', 69.99, $in7Days);
+        'upcoming_invoice' => function() use ($to, $name, $in7Days, $lang) {
+            return send_upcoming_invoice_email($to, $name, 'Advanced', 69.99, $in7Days, $lang);
         },
-        'plan_changed' => function() use ($to, $name) {
-            return send_plan_changed_email($to, $name, 'Premium', 'monthly', 9.99);
+        'plan_changed' => function() use ($to, $name, $lang) {
+            return send_plan_changed_email($to, $name, 'Premium', 'monthly', 9.99, $lang);
         },
-        'invoice_request' => function() use ($to) {
+        'invoice_request' => function() use ($to, $lang) {
             // Ta email gre superadminu kot obvestilo, da je admin zahteval predračun
-            return send_invoice_request_email($to, 'Janez Novak', 'admin@example.com', 'advanced', 69.99);
+            return send_invoice_request_email($to, 'Janez Novak', 'admin@example.com', 'advanced', 69.99, $lang);
         },
-        'booking_pending_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP) {
-            return send_booking_pending_guest($to, $guestName, $resName, $date, $time, $guests, 'EDIT_TEST_TOKEN', $contactE, $contactP);
+        'booking_pending_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP, $lang) {
+            return send_booking_pending_guest($to, $guestName, $resName, $date, $time, $guests, 'EDIT_TEST_TOKEN', $contactE, $contactP, $lang);
         },
-        'booking_confirmed_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $duration, $contactE, $contactP) {
-            return send_booking_confirmed_guest($to, $guestName, $resName, $date, $time, $guests, $duration, 'EDIT_TEST_TOKEN', $contactE, $contactP);
+        'booking_confirmed_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $duration, $contactE, $contactP, $lang) {
+            return send_booking_confirmed_guest($to, $guestName, $resName, $date, $time, $guests, $duration, 'EDIT_TEST_TOKEN', $contactE, $contactP, $lang);
         },
-        'booking_rejected_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP) {
-            return send_booking_rejected_guest($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP);
+        'booking_rejected_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP, $lang) {
+            return send_booking_rejected_guest($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP, $lang);
         },
-        'booking_reminder_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $duration, $contactE, $contactP) {
-            return send_booking_reminder_guest($to, $guestName, $resName, $date, $time, $guests, $duration, $contactE, $contactP);
+        'booking_reminder_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $duration, $contactE, $contactP, $lang) {
+            return send_booking_reminder_guest($to, $guestName, $resName, $date, $time, $guests, $duration, $contactE, $contactP, $lang);
         },
-        'booking_notify_admin' => function() use ($to, $name, $resName, $guestName, $date, $time, $guests) {
-            return send_booking_notify_admin($to, $name, $resName, $guestName, 'gost@example.com', $date, $time, $guests, 'pending', 12345);
+        'booking_notify_admin' => function() use ($to, $name, $resName, $guestName, $date, $time, $guests, $lang) {
+            return send_booking_notify_admin($to, $name, $resName, $guestName, 'gost@example.com', $date, $time, $guests, 'pending', 12345, $lang);
         },
-        'gdpr' => function() use ($to) {
-            return send_gdpr_confirmation($to, 'data_export');
+        'gdpr' => function() use ($to, $lang) {
+            return send_gdpr_confirmation($to, 'data_export', $lang);
         },
-        'affiliate_verify' => function() use ($to, $name, $testToken) {
-            return send_affiliate_verify_email($to, $name, $testToken);
+        'affiliate_verify' => function() use ($to, $name, $testToken, $lang) {
+            return send_affiliate_verify_email($to, $name, $testToken, $lang);
         },
-        'affiliate_approved' => function() use ($to, $name) {
-            return send_affiliate_approved_email($to, $name, 'TESTREZBLE10');
+        'affiliate_approved' => function() use ($to, $name, $lang) {
+            return send_affiliate_approved_email($to, $name, 'TESTREZBLE10', $lang);
         },
-        'affiliate_rejected' => function() use ($to, $name) {
-            return send_affiliate_rejected_email($to, $name, 'Aplikacija ni izpolnjevala minimalnih pogojev za partnerski program.');
+        'affiliate_rejected' => function() use ($to, $name, $lang) {
+            return send_affiliate_rejected_email($to, $name, 'Aplikacija ni izpolnjevala minimalnih pogojev za partnerski program.', $lang);
         },
-        'affiliate_payout' => function() use ($to, $name) {
-            return send_affiliate_payout_email($to, $name, 142.50, 'PAY-2026-0042');
+        'affiliate_payout' => function() use ($to, $name, $lang) {
+            return send_affiliate_payout_email($to, $name, 142.50, 'PAY-2026-0042', $lang);
         },
-        'affiliate_discount_granted' => function() use ($to, $name) {
-            return send_affiliate_discount_granted_email($to, $name, 'TESTREZBLE10', 10.0);
+        'affiliate_discount_granted' => function() use ($to, $name, $lang) {
+            return send_affiliate_discount_granted_email($to, $name, 'TESTREZBLE10', 10.0, $lang);
         },
-        'blog_subscribe' => function() use ($to) {
-            // Inline emulacija blog subscribe potrditve (kot v api/blog_subscribe.php)
+        'blog_subscribe' => function() use ($to, $lang) {
             $appName = APP_NAME;
             $confirmUrl = APP_URL . BASE_PATH . '/api/blog_subscribe.php?action=confirm&t=' . urlencode('TEST_TOKEN_BLOG_' . bin2hex(random_bytes(8)));
-            $body = email_h('Potrdi prijavo na Booked')
-                . email_p('Hvala za prijavo na Booked newsletter. Potrdi svoj email naslov, da začneš prejemati nove članke.')
-                . email_button('Potrdi naslov', $confirmUrl)
-                . email_p('Če gumb ne deluje, kopiraj v brskalnik:<br><a href="' . $confirmUrl . '" style="color:#c8542b;word-break:break-all">' . htmlspecialchars($confirmUrl, ENT_QUOTES) . '</a>', true)
-                . email_p('Če nisi sprožil prijave, ignoriraj to sporočilo.', true);
-            $html = email_wrap($appName, $body, 'Booked — by ' . $appName);
-            return send_email($to, 'Booked — potrdi naslov', $html);
+            $body = email_h(_email_t('email.blog_subscribe.heading', $lang))
+                . email_p(_email_t('email.blog_subscribe.intro', $lang))
+                . email_button(_email_t('email.blog_subscribe.button', $lang), $confirmUrl)
+                . email_p(_email_t('email.blog_subscribe.note', $lang), true);
+            $html = email_wrap($appName, $body, _email_t('email.blog_subscribe.footer', $lang, ['appName' => $appName]));
+            return send_email($to, _email_t('email.blog_subscribe.subject', $lang), $html);
         },
     ];
 

@@ -61,7 +61,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $token,
                 ]);
 
-                send_affiliate_verify_email($post['email'], $post['full_name'], $token);
+                send_affiliate_verify_email($post['email'], $post['full_name'], $token, _resolve_email_lang());
                 $success = true;
             }
         } catch (\Throwable $e) {

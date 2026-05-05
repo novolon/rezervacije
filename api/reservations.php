@@ -679,15 +679,16 @@ if ($method === 'POST') {
                 $cEmail      = $restRow2['contact_email'] ?? '';
                 $cPhone      = $restRow2['contact_phone'] ?? '';
                 $autoConfirm = !empty($restRow2['auto_confirm']);
+                $emLang = _resolve_email_lang();
                 if ($autoConfirm) {
                     send_booking_confirmed_guest(
                         $guestEmail, $name, $restName2, $date, substr($time, 0, 5),
-                        $count, $effectiveDuration, '', $cEmail, $cPhone
+                        $count, $effectiveDuration, '', $cEmail, $cPhone, $emLang
                     );
                 } else {
                     send_booking_pending_guest(
                         $guestEmail, $name, $restName2, $date, substr($time, 0, 5),
-                        $count, '', $cEmail, $cPhone
+                        $count, '', $cEmail, $cPhone, $emLang
                     );
                 }
             } catch (Throwable $e) {
@@ -765,7 +766,8 @@ if ($method === 'PUT') {
                     $existing['email'], $existing['guest_name'],
                     $existing['restaurant_name'],
                     $resDate, $resTime, (int)$existing['guest_count'], $duration, $editToken,
-                    $existing['contact_email'] ?? '', $existing['contact_phone'] ?? ''
+                    $existing['contact_email'] ?? '', $existing['contact_phone'] ?? '',
+                    _resolve_email_lang()
                 );
             }
             json_response(true, ['status' => 'confirmed']);
@@ -788,7 +790,8 @@ if ($method === 'PUT') {
                     $existing['email'], $existing['guest_name'],
                     $existing['restaurant_name'],
                     $existing['reservation_date'], $time, (int)$existing['guest_count'],
-                    $existing['contact_email'] ?? '', $existing['contact_phone'] ?? ''
+                    $existing['contact_email'] ?? '', $existing['contact_phone'] ?? '',
+                    _resolve_email_lang()
                 );
             }
             // Zavrnjena rezervacija = sproščen termin → obvesti čakalno listo

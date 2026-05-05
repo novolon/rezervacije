@@ -56,7 +56,7 @@ if ($action === 'submit_request') {
             'erasure'       => 'izbris podatkov',
             'portability'   => 'prenosljivost podatkov',
         ];
-        send_gdpr_confirmation($email, $typeLabels[$type]);
+        send_gdpr_confirmation($email, $typeLabels[$type], _resolve_email_lang());
     } catch (Exception $e) {
         error_log('GDPR confirmation email failed: ' . $e->getMessage());
     }

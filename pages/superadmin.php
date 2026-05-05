@@ -256,6 +256,19 @@ $fullName = $_SESSION['full_name'];
                     <label><?= t('superadmin.email_recipient') ?></label>
                     <input id="test-mail-to" type="email" placeholder="vas@email.com" style="width:100%;box-sizing:border-box">
                 </div>
+                <div class="admin-field" style="margin-bottom:14px">
+                    <label>Jezik emaila</label>
+                    <select id="test-mail-lang" style="width:100%;box-sizing:border-box">
+                        <option value="sl">Slovenščina</option>
+                        <option value="en">English</option>
+                        <option value="de">Deutsch</option>
+                        <option value="it">Italiano</option>
+                        <option value="fr">Français</option>
+                        <option value="hr">Hrvatski</option>
+                        <option value="es">Español</option>
+                        <option value="pt">Português</option>
+                    </select>
+                </div>
                 <div class="admin-field" style="margin-bottom:20px">
                     <label><?= t('superadmin.email_type_label') ?></label>
                     <select id="test-mail-type" style="width:100%;box-sizing:border-box">
@@ -523,6 +536,7 @@ window.APP_STATE = <?= json_encode([
     document.getElementById('test-mail-btn')?.addEventListener('click', async () => {
         const email   = document.getElementById('test-mail-to').value.trim();
         const type    = document.getElementById('test-mail-type').value;
+        const lang    = document.getElementById('test-mail-lang')?.value || 'sl';
         const btn     = document.getElementById('test-mail-btn');
         const result  = document.getElementById('test-mail-result');
 
@@ -533,7 +547,7 @@ window.APP_STATE = <?= json_encode([
         result.style.display = 'none';
 
         try {
-            await API.post('/api/superadmin.php', { email, type });
+            await API.post('/api/superadmin.php', { email, type, lang });
             result.textContent = window.t('superadmin.email_sent', {email: email});
             result.style.cssText = 'display:block;padding:10px 14px;border-radius:8px;font-size:.875rem;margin-bottom:16px;background:#D1FAE5;color:#065F46;border:1px solid #6EE7B7';
         } catch(e) {

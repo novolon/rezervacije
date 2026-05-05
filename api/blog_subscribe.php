@@ -90,12 +90,14 @@ if ($action === 'subscribe' && $method === 'POST') {
     $confirmUrl = (defined('APP_URL') ? rtrim(APP_URL, '/') : '') . BASE_PATH . '/api/blog_subscribe.php?action=confirm&t=' . $token;
 
     $appName = defined('APP_NAME') ? APP_NAME : 'Rezble';
-    $bodyHtml = '<h1 style="font-size:22px;color:#1c2620;margin:0 0 12px">Še ena potrditev</h1>'
-        . '<p style="font-size:15px;color:#3a4150;line-height:1.6;margin:0 0 20px">Klikni na gumb spodaj, da potrdiš naročnino na Booked — magazin za gostince by Rezble.</p>'
-        . '<p style="margin:0 0 24px"><a href="' . htmlspecialchars($confirmUrl, ENT_QUOTES) . '" style="display:inline-block;padding:12px 22px;background:#c8542b;color:#fff;border-radius:999px;font-weight:600;text-decoration:none">Potrdi naslov</a></p>'
-        . '<p style="font-size:13px;color:#6b7280;line-height:1.5;margin:0">Če nisi naročil/a tega emaila, lahko ignoriraš sporočilo.</p>';
-    $html = function_exists('email_wrap') ? email_wrap($appName, $bodyHtml, 'Booked — by ' . $appName) : ('<html><body>' . $bodyHtml . '</body></html>');
-    @send_email($email, 'Booked — potrdi naslov', $html);
+    $bodyHtml = email_h(_email_t('email.blog_subscribe.heading', $lang))
+        . email_p(_email_t('email.blog_subscribe.intro', $lang))
+        . email_button(_email_t('email.blog_subscribe.button', $lang), $confirmUrl)
+        . email_p(_email_t('email.blog_subscribe.note', $lang), true);
+    $html = function_exists('email_wrap')
+        ? email_wrap($appName, $bodyHtml, _email_t('email.blog_subscribe.footer', $lang, ['appName' => $appName]))
+        : ('<html><body>' . $bodyHtml . '</body></html>');
+    @send_email($email, _email_t('email.blog_subscribe.subject', $lang), $html);
 
     json_response(true, null, 'Preveri email za potrditev.');
 }

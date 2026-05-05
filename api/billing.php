@@ -362,7 +362,7 @@ if ($method === 'POST' && $action === 'request_invoice') {
         $superadminEmail = $pdo->query("SELECT email FROM users WHERE role = 'superadmin' LIMIT 1")->fetchColumn();
         if ($superadminEmail) {
             $yearlyPrice = PLANS[$planSlug]['yearly_price'];
-            send_invoice_request_email($superadminEmail, $name, $email, $planSlug, $yearlyPrice);
+            send_invoice_request_email($superadminEmail, $name, $email, $planSlug, $yearlyPrice, _resolve_email_lang());
         }
 
         json_response(true, null, 'Zahtevek poslan! Kontaktirali vas bomo v kratkem s predračunom.');

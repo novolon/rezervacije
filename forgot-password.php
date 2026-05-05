@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $expires = date('Y-m-d H:i:s', strtotime('+1 hour'));
                 $pdo->prepare("UPDATE users SET reset_token = ?, reset_token_expires = ? WHERE id = ?")
                     ->execute([$token, $expires, $user['id']]);
-                send_password_reset_email($email, $user['full_name'], $token);
+                send_password_reset_email($email, $user['full_name'], $token, get_lang());
             }
 
             $success = true;

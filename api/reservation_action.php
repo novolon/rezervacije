@@ -100,7 +100,8 @@ if ($action === 'approve') {
     if ($res['email']) {
         send_booking_confirmed_guest(
             $res['email'], $res['guest_name'], $res['restaurant_name'],
-            $date, $time, (int)$res['guest_count'], $duration, $editToken, $cEmail, $cPhone
+            $date, $time, (int)$res['guest_count'], $duration, $editToken, $cEmail, $cPhone,
+            _resolve_email_lang()
         );
     }
 
@@ -115,7 +116,8 @@ if ($action === 'reject') {
     if ($res['email']) {
         send_booking_rejected_guest(
             $res['email'], $res['guest_name'], $res['restaurant_name'],
-            $date, $time, (int)$res['guest_count'], $cEmail, $cPhone
+            $date, $time, (int)$res['guest_count'], $cEmail, $cPhone,
+            _resolve_email_lang()
         );
     }
 

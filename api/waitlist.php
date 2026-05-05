@@ -150,7 +150,8 @@ if ($method === 'GET') {
                 $rest['reservation_duration'] ?? 60,
                 $editToken,
                 $cEmail,
-                $cPhone
+                $cPhone,
+                _resolve_email_lang()
             );
         } catch (Throwable $e) { error_log('Waitlist confirm email error: ' . $e->getMessage()); }
 

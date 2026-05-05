@@ -531,7 +531,8 @@ if ($method === 'POST') {
             send_booking_notify_admin(
                 $adminRow['email'], $adminRow['full_name'],
                 $rest['name'], $guestName, $email,
-                $date, $time, $guestCount, $status, $newId
+                $date, $time, $guestCount, $status, $newId,
+                _resolve_email_lang()
             );
         }
 

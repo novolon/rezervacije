@@ -101,7 +101,7 @@ if ($action === 'request_email_change') {
         UPDATE users SET email_change_pending=?, email_change_token=?, email_change_expires=? WHERE id=?
     ")->execute([$newEmail, $token, $expires, $userId]);
 
-    send_email_change_email($newEmail, $user['full_name'], $token);
+    send_email_change_email($newEmail, $user['full_name'], $token, get_lang());
 
     json_response(true, null, 'Poslali smo potrditveni link na ' . $newEmail . '. Preverite email.');
 }

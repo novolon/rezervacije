@@ -96,7 +96,7 @@ function blog_ai_call($model, array $messages, array $opts = []) {
     // temperature je deprecated za Claude 4.x modele — namerno izpuščeno.
 
     $ch = curl_init(BLOG_AI_API_URL);
-    curl_setopt_array($ch, [
+    $opts = [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST           => true,
         CURLOPT_POSTFIELDS     => json_encode($payload, JSON_UNESCAPED_UNICODE),
@@ -107,7 +107,13 @@ function blog_ai_call($model, array $messages, array $opts = []) {
         ],
         CURLOPT_TIMEOUT        => 180,
         CURLOPT_CONNECTTIMEOUT => 15,
-    ]);
+    ];
+    // CLI / Windows fallback: če ni curl.cainfo, dovoli izklop SSL verify preko env var.
+    if (PHP_SAPI === 'cli' && (getenv('BLOG_AI_INSECURE_SSL') === '1' || getenv('BLOG_AI_INSECURE_SSL') === 'true')) {
+        $opts[CURLOPT_SSL_VERIFYPEER] = false;
+        $opts[CURLOPT_SSL_VERIFYHOST] = 0;
+    }
+    curl_setopt_array($ch, $opts);
     $resp = curl_exec($ch);
     $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
     $err  = curl_error($ch);

@@ -110,7 +110,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 VALUES (?, ?, 'trial', ?)
             ")->execute([$newUserId, $selectedPlan, $trialEnds]);
 
-            send_verification_email($post['email'], $post['full_name'], $verificationToken);
+            send_verification_email($post['email'], $post['full_name'], $verificationToken, get_lang());
 
             $success = true;
 

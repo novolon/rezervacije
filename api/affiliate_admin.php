@@ -118,7 +118,7 @@ if ($method === 'POST' && $action === 'approve') {
 
     // Email samo ob prvem odobravanju (ne ob reaktivaciji)
     if ($aff['status'] === 'pending') {
-        send_affiliate_approved_email($aff['email'], $aff['full_name'], $aff['ref_code']);
+        send_affiliate_approved_email($aff['email'], $aff['full_name'], $aff['ref_code'], _resolve_email_lang());
     }
     json_response(true, null, 'Affiliate aktiviran.');
 }
@@ -135,7 +135,7 @@ if ($method === 'POST' && $action === 'reject') {
     $pdo->prepare("UPDATE affiliates SET status = 'rejected', rejected_reason = ? WHERE id = ?")
         ->execute([$reason, $id]);
 
-    send_affiliate_rejected_email($aff['email'], $aff['full_name'], $reason);
+    send_affiliate_rejected_email($aff['email'], $aff['full_name'], $reason, _resolve_email_lang());
     json_response(true, null, 'Affiliate zavrnjen.');
 }
 
@@ -298,7 +298,7 @@ if ($method === 'POST' && $action === 'mark_paid') {
     ")->fetchAll();
 
     foreach ($rows as $row) {
-        send_affiliate_payout_email($row['email'], $row['full_name'], (float)$row['amount_eur'], $row['reference']);
+        send_affiliate_payout_email($row['email'], $row['full_name'], (float)$row['amount_eur'], $row['reference'], _resolve_email_lang());
     }
 
     json_response(true, null, count($ids) . ' izplačil označenih kot plačano.');
