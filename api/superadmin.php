@@ -123,6 +123,7 @@ if ($method === 'POST') {
     $guests    = 4;
     $contactE  = 'info@lipa.si';
     $contactP  = '+386 1 234 5678';
+    $resAddress = 'Tržaška cesta 25, 1000 Ljubljana';
 
     // Mapiranje: tip → callable
     $senders = [
@@ -148,17 +149,17 @@ if ($method === 'POST') {
             // Ta email gre superadminu kot obvestilo, da je admin zahteval predračun
             return send_invoice_request_email($to, 'Janez Novak', 'admin@example.com', 'advanced', 69.99, $lang);
         },
-        'booking_pending_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP, $lang) {
-            return send_booking_pending_guest($to, $guestName, $resName, $date, $time, $guests, 'EDIT_TEST_TOKEN', $contactE, $contactP, $lang);
+        'booking_pending_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP, $lang, $resAddress) {
+            return send_booking_pending_guest($to, $guestName, $resName, $date, $time, $guests, 'EDIT_TEST_TOKEN', $contactE, $contactP, $lang, $resAddress);
         },
-        'booking_confirmed_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $duration, $contactE, $contactP, $lang) {
-            return send_booking_confirmed_guest($to, $guestName, $resName, $date, $time, $guests, $duration, 'EDIT_TEST_TOKEN', $contactE, $contactP, $lang);
+        'booking_confirmed_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $duration, $contactE, $contactP, $lang, $resAddress) {
+            return send_booking_confirmed_guest($to, $guestName, $resName, $date, $time, $guests, $duration, 'EDIT_TEST_TOKEN', $contactE, $contactP, $lang, $resAddress);
         },
-        'booking_rejected_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP, $lang) {
-            return send_booking_rejected_guest($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP, $lang);
+        'booking_rejected_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP, $lang, $resAddress) {
+            return send_booking_rejected_guest($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP, $lang, $resAddress);
         },
-        'booking_reminder_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $duration, $contactE, $contactP, $lang) {
-            return send_booking_reminder_guest($to, $guestName, $resName, $date, $time, $guests, $duration, $contactE, $contactP, $lang);
+        'booking_reminder_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $duration, $contactE, $contactP, $lang, $resAddress) {
+            return send_booking_reminder_guest($to, $guestName, $resName, $date, $time, $guests, $duration, $contactE, $contactP, $lang, $resAddress);
         },
         'booking_notify_admin' => function() use ($to, $name, $resName, $guestName, $date, $time, $guests, $lang) {
             return send_booking_notify_admin($to, $name, $resName, $guestName, 'gost@example.com', $date, $time, $guests, 'pending', 12345, $lang);
@@ -188,7 +189,7 @@ if ($method === 'POST') {
                 . email_p(_email_t('email.blog_subscribe.intro', $lang))
                 . email_button(_email_t('email.blog_subscribe.button', $lang), $confirmUrl)
                 . email_p(_email_t('email.blog_subscribe.note', $lang), true);
-            $html = email_wrap($appName, $body, _email_t('email.blog_subscribe.footer', $lang, ['appName' => $appName]));
+            $html = email_wrap($appName, $body, '', ['type' => 'booked']);
             return send_email($to, _email_t('email.blog_subscribe.subject', $lang), $html);
         },
     ];

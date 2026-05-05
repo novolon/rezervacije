@@ -138,8 +138,9 @@ if ($method === 'GET') {
         // Pošlji potrditveni email
         try {
             require_once __DIR__ . '/../includes/mailer.php';
-            $cEmail = $rest['contact_email'] ?? '';
-            $cPhone = $rest['contact_phone'] ?? '';
+            $cEmail   = $rest['contact_email'] ?? '';
+            $cPhone   = $rest['contact_phone'] ?? '';
+            $cAddress = $rest['address']       ?? '';
             send_booking_confirmed_guest(
                 $entry['email'],
                 $entry['first_name'] . ' ' . $entry['last_name'],
@@ -151,7 +152,8 @@ if ($method === 'GET') {
                 $editToken,
                 $cEmail,
                 $cPhone,
-                _resolve_email_lang()
+                _resolve_email_lang(),
+                $cAddress
             );
         } catch (Throwable $e) { error_log('Waitlist confirm email error: ' . $e->getMessage()); }
 

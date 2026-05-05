@@ -194,6 +194,10 @@ require_once '../includes/html_head.php';
             <?=  card_head(t('re.card_basic'), t('re.card_contact')); ?>
             <p style="font-size:.825rem;color:var(--color-muted);margin:0 0 14px;line-height:1.5"><?= t('re.contact_intro') ?></p>
             <div class="admin-form">
+                <div class="admin-field">
+                    <label><?= t('re.field_address') ?></label>
+                    <input id="r-address" type="text" placeholder="Tržaška cesta 25, 1000 Ljubljana" value="<?= h($rest['address'] ?? '') ?>" maxlength="255">
+                </div>
                 <div class="admin-field-row">
                     <div class="admin-field">
                         <label><?= t('re.field_contact_email') ?></label>
@@ -1146,13 +1150,14 @@ document.getElementById('btn-save-splosno').addEventListener('click', async () =
     const active       = parseInt(document.getElementById('r-active').value);
     const contactEmail = document.getElementById('r-contact-email').value.trim();
     const contactPhone = document.getElementById('r-contact-phone').value.trim();
+    const address      = document.getElementById('r-address')?.value.trim() || '';
     if (!name) { showPageErr(window.t('re.err_name_required')); return; }
     const btn = document.getElementById('btn-save-splosno');
     btn.disabled=true; btn.textContent='...';
     try {
         await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}`, {
             name, color, is_active: active,
-            contact_email: contactEmail, contact_phone: contactPhone,
+            contact_email: contactEmail, contact_phone: contactPhone, address: address,
         });
         document.querySelector('.rest-edit-title').innerHTML =
             `<span class="rest-color-dot" id="hdr-color-dot" style="background:${color}"></span>${h(name)}`;

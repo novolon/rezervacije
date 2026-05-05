@@ -584,7 +584,8 @@ if ($method === 'POST') {
     }
 
     // Pridobi lastnika restavracije za feature check in email
-    $ownerStmt = $pdo->prepare("SELECT owner_id, reservation_duration, booking_auto_confirm AS auto_confirm, contact_email, contact_phone, name AS rest_name FROM restaurants WHERE id = ?");
+    // SELECT * da prejmemo address (če migration apply-an) brez tveganja unknown-column napake.
+    $ownerStmt = $pdo->prepare("SELECT *, name AS rest_name, booking_auto_confirm AS auto_confirm FROM restaurants WHERE id = ?");
     $ownerStmt->execute([$rest_id]);
     $restRow2 = $ownerStmt->fetch();
     $ownerId2 = (int)($restRow2['owner_id'] ?? 0);
@@ -678,17 +679,18 @@ if ($method === 'POST') {
                 $restName2   = $restRow2['rest_name']     ?? '';
                 $cEmail      = $restRow2['contact_email'] ?? '';
                 $cPhone      = $restRow2['contact_phone'] ?? '';
+                $cAddress    = $restRow2['address']       ?? '';
                 $autoConfirm = !empty($restRow2['auto_confirm']);
                 $emLang = _resolve_email_lang();
                 if ($autoConfirm) {
                     send_booking_confirmed_guest(
                         $guestEmail, $name, $restName2, $date, substr($time, 0, 5),
-                        $count, $effectiveDuration, '', $cEmail, $cPhone, $emLang
+                        $count, $effectiveDuration, '', $cEmail, $cPhone, $emLang, $cAddress
                     );
                 } else {
                     send_booking_pending_guest(
                         $guestEmail, $name, $restName2, $date, substr($time, 0, 5),
-                        $count, '', $cEmail, $cPhone, $emLang
+                        $count, '', $cEmail, $cPhone, $emLang, $cAddress
                     );
                 }
             } catch (Throwable $e) {
@@ -728,7 +730,7 @@ if ($method === 'PUT') {
     $action = trim($_GET['action'] ?? '');
     if (!$id) json_response(false, null, 'ID ni določen.', 400);
 
-    $stmt = $pdo->prepare("SELECT r.*, res.name AS restaurant_name, res.reservation_duration AS restaurant_duration, res.contact_email, res.contact_phone FROM reservations r JOIN restaurants res ON r.restaurant_id = res.id WHERE r.id = ?");
+    $stmt = $pdo->prepare("SELECT r.*, res.name AS restaurant_name, res.reservation_duration AS restaurant_duration, res.contact_email, res.contact_phone, res.address AS restaurant_address FROM reservations r JOIN restaurants res ON r.restaurant_id = res.id WHERE r.id = ?");
     $stmt->execute([$id]);
     $existing = $stmt->fetch();
     if (!$existing) json_response(false, null, 'Rezervacija ne obstaja.', 404);
@@ -767,7 +769,8 @@ if ($method === 'PUT') {
                     $existing['restaurant_name'],
                     $resDate, $resTime, (int)$existing['guest_count'], $duration, $editToken,
                     $existing['contact_email'] ?? '', $existing['contact_phone'] ?? '',
-                    _resolve_email_lang()
+                    _resolve_email_lang(),
+                    $existing['restaurant_address'] ?? ''
                 );
             }
             json_response(true, ['status' => 'confirmed']);
@@ -791,7 +794,8 @@ if ($method === 'PUT') {
                     $existing['restaurant_name'],
                     $existing['reservation_date'], $time, (int)$existing['guest_count'],
                     $existing['contact_email'] ?? '', $existing['contact_phone'] ?? '',
-                    _resolve_email_lang()
+                    _resolve_email_lang(),
+                    $existing['restaurant_address'] ?? ''
                 );
             }
             // Zavrnjena rezervacija = sproščen termin → obvesti čakalno listo

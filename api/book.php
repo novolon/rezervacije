@@ -528,12 +528,14 @@ if ($method === 'POST') {
                 ->execute([$editToken, $editTokenExpires, $newId]);
         } catch (PDOException $e) { $editToken = null; /* stolpec morda še ne obstaja */ }
 
-        $cEmail = $rest['contact_email'] ?? '';
-        $cPhone = $rest['contact_phone'] ?? '';
+        $cEmail   = $rest['contact_email'] ?? '';
+        $cPhone   = $rest['contact_phone'] ?? '';
+        $cAddress = $rest['address']       ?? '';
+        $emLang   = _resolve_email_lang();
         if ($status === 'confirmed') {
-            send_booking_confirmed_guest($email, $guestName, $rest['name'], $date, $time, $guestCount, (int)$rest['reservation_duration'], $editToken ?? '', $cEmail, $cPhone);
+            send_booking_confirmed_guest($email, $guestName, $rest['name'], $date, $time, $guestCount, (int)$rest['reservation_duration'], $editToken ?? '', $cEmail, $cPhone, $emLang, $cAddress);
         } else {
-            send_booking_pending_guest($email, $guestName, $rest['name'], $date, $time, $guestCount, $editToken ?? '', $cEmail, $cPhone);
+            send_booking_pending_guest($email, $guestName, $rest['name'], $date, $time, $guestCount, $editToken ?? '', $cEmail, $cPhone, $emLang, $cAddress);
         }
 
         $admin = $pdo->prepare("SELECT email, full_name FROM users WHERE id = ?");

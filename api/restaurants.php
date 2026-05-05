@@ -303,6 +303,7 @@ if ($method === 'PUT') {
 
     $contact_email = array_key_exists('contact_email', $body) ? (trim($body['contact_email']) ?: null) : false;
     $contact_phone = array_key_exists('contact_phone', $body) ? (trim($body['contact_phone']) ?: null) : false;
+    $address       = array_key_exists('address',       $body) ? (trim($body['address'])       ?: null) : false;
 
     $all_tables_mergeable              = isset($body['all_tables_mergeable'])              ? ($body['all_tables_mergeable'] ? 1 : 0) : null;
     $allow_area_choice                 = isset($body['allow_area_choice'])                 ? ($body['allow_area_choice'] ? 1 : 0) : null;
@@ -347,6 +348,13 @@ if ($method === 'PUT') {
     if ($waitlist_max_per_slot !== null)    { $sets[] = 'waitlist_max_per_slot = ?';        $params[] = $waitlist_max_per_slot; }
     if ($contact_email !== false)            { $sets[] = 'contact_email = ?';               $params[] = $contact_email; }
     if ($contact_phone !== false)            { $sets[] = 'contact_phone = ?';               $params[] = $contact_phone; }
+    if ($address       !== false) {
+        // Stolpec address je dodan v migrate_restaurant_address.sql; varno preskoči če še manjka.
+        try {
+            $colCheck = $pdo->query("SHOW COLUMNS FROM restaurants LIKE 'address'");
+            if ($colCheck->fetch()) { $sets[] = 'address = ?'; $params[] = $address; }
+        } catch (Throwable $e) { /* skip */ }
+    }
     if ($all_tables_mergeable !== null)            { $sets[] = 'all_tables_mergeable = ?';                  $params[] = $all_tables_mergeable; }
     if ($allow_area_choice !== null)               { $sets[] = 'allow_area_choice = ?';                     $params[] = $allow_area_choice; }
     if ($employees_can_override_schedule !== null) { $sets[] = 'employees_can_override_schedule = ?';        $params[] = $employees_can_override_schedule; }

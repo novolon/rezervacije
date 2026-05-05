@@ -58,7 +58,7 @@ $pdo = getDB();
 // Naloži rezervacijo
 $stmt = $pdo->prepare("
     SELECT r.*, res.name AS restaurant_name, res.reservation_duration AS restaurant_duration,
-           res.contact_email, res.contact_phone
+           res.contact_email, res.contact_phone, res.address AS restaurant_address
     FROM reservations r
     JOIN restaurants res ON r.restaurant_id = res.id
     WHERE r.id = ?
@@ -84,6 +84,7 @@ $time     = substr($res['reservation_time'], 0, 5);
 $duration = (int)($res['duration'] ?? $res['restaurant_duration'] ?? 60);
 $cEmail   = $res['contact_email'] ?? '';
 $cPhone   = $res['contact_phone'] ?? '';
+$cAddress = $res['restaurant_address'] ?? '';
 
 if ($action === 'approve') {
     // Ustvari edit_token
@@ -101,7 +102,7 @@ if ($action === 'approve') {
         send_booking_confirmed_guest(
             $res['email'], $res['guest_name'], $res['restaurant_name'],
             $date, $time, (int)$res['guest_count'], $duration, $editToken, $cEmail, $cPhone,
-            _resolve_email_lang()
+            _resolve_email_lang(), $cAddress
         );
     }
 
@@ -117,7 +118,7 @@ if ($action === 'reject') {
         send_booking_rejected_guest(
             $res['email'], $res['guest_name'], $res['restaurant_name'],
             $date, $time, (int)$res['guest_count'], $cEmail, $cPhone,
-            _resolve_email_lang()
+            _resolve_email_lang(), $cAddress
         );
     }
 

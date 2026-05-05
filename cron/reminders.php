@@ -22,6 +22,7 @@ $stmt = $pdo->prepare("
            COALESCE(r.duration, res.reservation_duration, 60) AS effective_duration,
            res.contact_email AS restaurant_contact_email,
            res.contact_phone AS restaurant_contact_phone,
+           res.address       AS restaurant_address,
            ra.user_id AS admin_user_id
     FROM reservations r
     JOIN restaurants res ON r.restaurant_id = res.id
@@ -57,7 +58,9 @@ foreach ($reservations as $r) {
         (int) $r['guest_count'],
         (int) $r['effective_duration'],
         (string)($r['restaurant_contact_email'] ?? ''),
-        (string)($r['restaurant_contact_phone'] ?? '')
+        (string)($r['restaurant_contact_phone'] ?? ''),
+        'sl',
+        (string)($r['restaurant_address'] ?? '')
     );
     if ($ok) {
         $sent++;

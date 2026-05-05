@@ -120,11 +120,23 @@ function _email_format_date(string $date, string $lang): string {
  *   accent-soft:#fae8df (highlight bg)
  *   divider:   #e8dcc9  (cream-2)
  */
-function email_wrap(string $appName, string $body, string $footerNote): string {
+/**
+ * @param string $appName
+ * @param string $body
+ * @param string $footerNote     Legacy: kratko sporočilo nad copyright vrstico (npr. "appName · auto").
+ *                               Pri novih klicih je lahko prazen — footer-Extra pove vse.
+ * @param array  $footerExtra    Strukturiran footer:
+ *  - empty                                                                 → minimalen "© YEAR Rezble" footer (default).
+ *  - ['type' => 'guest', 'rest_name'=>, 'rest_address'=>?, 'rest_email'=>?,
+ *     'rest_phone'=>?, 'lang'=>?]                                          → polni guest footer (rezervacija pri X).
+ *  - ['type' => 'booked']                                                  → "Booked by Rezble" subscriber footer.
+ */
+function email_wrap(string $appName, string $body, string $footerNote = '', array $footerExtra = []): string {
     $year = date('Y');
     $logoUrl = (defined('APP_URL') ? rtrim(APP_URL, '/') : '')
              . (defined('BASE_PATH') ? BASE_PATH : '')
              . '/assets/images/rezble@2x.png';
+    $footerHtml = _email_render_footer($footerNote, $footerExtra, $year, $appName);
     return "<!DOCTYPE html>
 <html>
 <head>
@@ -149,8 +161,7 @@ function email_wrap(string $appName, string $body, string $footerNote): string {
 
             <!-- Footer -->
             <tr><td style='text-align:center;padding:24px 16px 8px'>
-                <p style='margin:0 0 4px;font-size:12.5px;color:#5a655e;line-height:1.5'>{$footerNote}</p>
-                <p style='margin:0;font-size:11px;color:#8a948e'>&copy; {$year} {$appName}</p>
+                {$footerHtml}
             </td></tr>
 
         </table>
@@ -158,6 +169,54 @@ function email_wrap(string $appName, string $body, string $footerNote): string {
 </table>
 </body>
 </html>";
+}
+
+/** Footer rendering — različen za guest / booked / default tipe. */
+function _email_render_footer(string $footerNote, array $footerExtra, string $year, string $appName): string {
+    $type     = $footerExtra['type'] ?? 'default';
+    $rezbleUrl = 'https://www.rezble.com';
+    $bookedUrl = 'https://www.rezble.com/booked';
+
+    if ($type === 'guest') {
+        $lang        = $footerExtra['lang']         ?? 'sl';
+        $restName    = htmlspecialchars((string)($footerExtra['rest_name']    ?? ''), ENT_QUOTES);
+        $restAddress = htmlspecialchars((string)($footerExtra['rest_address'] ?? ''), ENT_QUOTES);
+        $restEmail   = htmlspecialchars((string)($footerExtra['rest_email']   ?? ''), ENT_QUOTES);
+        $restPhone   = htmlspecialchars((string)($footerExtra['rest_phone']   ?? ''), ENT_QUOTES);
+        $privacyUrl  = (defined('APP_URL') ? rtrim(APP_URL, '/') : '')
+                     . (defined('BASE_PATH') ? BASE_PATH : '') . '/pages/privacy.php';
+
+        $line1 = $restAddress !== '' ? ($restName . ', ' . $restAddress) : $restName;
+        $reasonText = _email_t('email.footer.guest_reason', $lang, ['rest' => $restName]);
+        $privacyLabel = _email_t('email.footer.privacy_link', $lang);
+        $contactLabel = _email_t('email.footer.contact_label', $lang);
+
+        $contactParts = [];
+        if ($restEmail !== '') $contactParts[] = "<a href='mailto:{$restEmail}' style='color:#5a655e;text-decoration:underline'>{$restEmail}</a>";
+        if ($restPhone !== '') $contactParts[] = "<a href='tel:" . preg_replace('/\s+/', '', $restPhone) . "' style='color:#5a655e;text-decoration:underline'>{$restPhone}</a>";
+        $contactBlock = !empty($contactParts) ? (' &middot; ' . $contactLabel . ' ' . implode(' ', $contactParts)) : '';
+
+        return "<p style='margin:0 0 6px;font-size:12.5px;color:#5a655e;line-height:1.5;font-weight:600'>{$line1}</p>"
+             . "<p style='margin:0 0 4px;font-size:11.5px;color:#8a948e;line-height:1.55'>{$reasonText}</p>"
+             . "<p style='margin:0 0 10px;font-size:11.5px;color:#8a948e;line-height:1.55'>"
+             . "<a href='{$privacyUrl}' style='color:#8a948e;text-decoration:underline'>{$privacyLabel}</a>"
+             . $contactBlock
+             . "</p>"
+             . "<p style='margin:0;font-size:11px;color:#8a948e'>&copy; {$year} <a href='{$rezbleUrl}' style='color:#8a948e;text-decoration:none' target='_blank'>Rezble</a></p>";
+    }
+
+    if ($type === 'booked') {
+        return "<p style='margin:0;font-size:11.5px;color:#8a948e;line-height:1.5'>"
+             . "&copy; {$year} <a href='{$bookedUrl}' style='color:#8a948e;text-decoration:none' target='_blank'>Booked</a> by "
+             . "<a href='{$rezbleUrl}' style='color:#8a948e;text-decoration:none' target='_blank'>Rezble</a>"
+             . "</p>";
+    }
+
+    // Default: minimalen footer (za auth, billing, affiliate, gdpr emaile)
+    $extraNote = $footerNote !== '' ? "<p style='margin:0 0 4px;font-size:12.5px;color:#5a655e;line-height:1.5'>{$footerNote}</p>" : '';
+    return $extraNote
+         . "<p style='margin:0;font-size:11.5px;color:#8a948e'>&copy; {$year} "
+         . "<a href='{$rezbleUrl}' style='color:#8a948e;text-decoration:none' target='_blank'>Rezble</a></p>";
 }
 
 /**
@@ -477,7 +536,7 @@ function _calendar_links_html(string $date, string $time, int $duration, string 
 /**
  * Gost – rezervacija čaka potrditev (manual approve).
  */
-function send_booking_pending_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests, string $editToken = '', string $contactEmail = '', string $contactPhone = '', string $lang = 'sl'): bool {
+function send_booking_pending_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests, string $editToken = '', string $contactEmail = '', string $contactPhone = '', string $lang = 'sl', string $restAddress = ''): bool {
     $appName = APP_NAME;
     $details = _booking_details_html($restName, $date, $time, $guests, $lang);
     $contact = _contact_html($contactEmail, $contactPhone, $lang);
@@ -496,7 +555,14 @@ function send_booking_pending_guest(string $toEmail, string $guestName, string $
         . $editLinks
         . email_p(_email_t('email.booking_pending.note', $lang), true)
         . $contact;
-    $html = email_wrap($appName, $body, _email_t('email.booking_pending.footer', $lang, ['appName' => $appName]));
+    $html = email_wrap($appName, $body, '', [
+        'type'         => 'guest',
+        'rest_name'    => $restName,
+        'rest_address' => $restAddress,
+        'rest_email'   => $contactEmail,
+        'rest_phone'   => $contactPhone,
+        'lang'         => $lang,
+    ]);
     $text = _email_t('email.booking_pending.text_summary', $lang, [
         'name' => $guestName, 'rest' => $restName, 'date' => $date, 'time' => $time, 'guests' => $guests,
     ]);
@@ -506,7 +572,7 @@ function send_booking_pending_guest(string $toEmail, string $guestName, string $
 /**
  * Gost – rezervacija potrjena (auto ali manual approve).
  */
-function send_booking_confirmed_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests, int $duration = 60, string $editToken = '', string $contactEmail = '', string $contactPhone = '', string $lang = 'sl'): bool {
+function send_booking_confirmed_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests, int $duration = 60, string $editToken = '', string $contactEmail = '', string $contactPhone = '', string $lang = 'sl', string $restAddress = ''): bool {
     $appName  = APP_NAME;
     $details  = _booking_details_html($restName, $date, $time, $guests, $lang);
     $calLinks = _calendar_links_html($date, $time, $duration, $restName, $guestName, $lang);
@@ -527,7 +593,10 @@ function send_booking_confirmed_guest(string $toEmail, string $guestName, string
         . $editLinks
         . email_p(_email_t('email.booking_confirmed.note', $lang), true)
         . $contact;
-    $html = email_wrap($appName, $body, _email_t('email.booking_confirmed.footer', $lang, ['appName' => $appName]));
+    $html = email_wrap($appName, $body, '', [
+        'type' => 'guest', 'rest_name' => $restName, 'rest_address' => $restAddress,
+        'rest_email' => $contactEmail, 'rest_phone' => $contactPhone, 'lang' => $lang,
+    ]);
     $text = _email_t('email.booking_confirmed.text_summary', $lang, [
         'name' => $guestName, 'rest' => $restName, 'date' => $date, 'time' => $time, 'guests' => $guests,
     ]);
@@ -537,7 +606,7 @@ function send_booking_confirmed_guest(string $toEmail, string $guestName, string
 /**
  * Gost – rezervacija zavrnjena.
  */
-function send_booking_rejected_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests, string $contactEmail = '', string $contactPhone = '', string $lang = 'sl'): bool {
+function send_booking_rejected_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests, string $contactEmail = '', string $contactPhone = '', string $lang = 'sl', string $restAddress = ''): bool {
     $appName = APP_NAME;
     $details = _booking_details_html($restName, $date, $time, $guests, $lang);
     $contact = _contact_html($contactEmail, $contactPhone, $lang);
@@ -548,7 +617,10 @@ function send_booking_rejected_guest(string $toEmail, string $guestName, string 
         . $details
         . email_p(_email_t('email.booking_rejected.note', $lang), true)
         . $contact;
-    $html = email_wrap($appName, $body, _email_t('email.booking_rejected.footer', $lang, ['appName' => $appName]));
+    $html = email_wrap($appName, $body, '', [
+        'type' => 'guest', 'rest_name' => $restName, 'rest_address' => $restAddress,
+        'rest_email' => $contactEmail, 'rest_phone' => $contactPhone, 'lang' => $lang,
+    ]);
     $text = _email_t('email.booking_rejected.text_summary', $lang, [
         'name' => $guestName, 'rest' => $restName, 'date' => $date, 'time' => $time,
     ]);
@@ -558,7 +630,7 @@ function send_booking_rejected_guest(string $toEmail, string $guestName, string 
 /**
  * Gost – opomnik 24h pred rezervacijo.
  */
-function send_booking_reminder_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests, int $duration = 60, string $contactEmail = '', string $contactPhone = '', string $lang = 'sl'): bool {
+function send_booking_reminder_guest(string $toEmail, string $guestName, string $restName, string $date, string $time, int $guests, int $duration = 60, string $contactEmail = '', string $contactPhone = '', string $lang = 'sl', string $restAddress = ''): bool {
     $appName  = APP_NAME;
     $details  = _booking_details_html($restName, $date, $time, $guests, $lang);
     $calLinks = _calendar_links_html($date, $time, $duration, $restName, $guestName, $lang);
@@ -571,7 +643,10 @@ function send_booking_reminder_guest(string $toEmail, string $guestName, string 
         . $calLinks
         . email_p(_email_t('email.booking_reminder.note', $lang), true)
         . $contact;
-    $html = email_wrap($appName, $body, _email_t('email.booking_reminder.footer', $lang, ['appName' => $appName]));
+    $html = email_wrap($appName, $body, '', [
+        'type' => 'guest', 'rest_name' => $restName, 'rest_address' => $restAddress,
+        'rest_email' => $contactEmail, 'rest_phone' => $contactPhone, 'lang' => $lang,
+    ]);
     $text = _email_t('email.booking_reminder.text_summary', $lang, [
         'rest' => $restName, 'date' => $date, 'time' => $time, 'guests' => $guests,
     ]);

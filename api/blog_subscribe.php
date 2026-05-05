@@ -95,7 +95,7 @@ if ($action === 'subscribe' && $method === 'POST') {
         . email_button(_email_t('email.blog_subscribe.button', $lang), $confirmUrl)
         . email_p(_email_t('email.blog_subscribe.note', $lang), true);
     $html = function_exists('email_wrap')
-        ? email_wrap($appName, $bodyHtml, _email_t('email.blog_subscribe.footer', $lang, ['appName' => $appName]))
+        ? email_wrap($appName, $bodyHtml, '', ['type' => 'booked'])
         : ('<html><body>' . $bodyHtml . '</body></html>');
     @send_email($email, _email_t('email.blog_subscribe.subject', $lang), $html);
 
