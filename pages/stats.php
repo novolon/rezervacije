@@ -142,6 +142,7 @@ require_once '../includes/html_head.php';
             <div>
                 <div class="rz-card-eyebrow"><?= t('stats.trend_eyebrow') ?></div>
                 <h2 class="rz-card-title"><?= t('stats.trend_title') ?></h2>
+                <div class="rz-card-subtitle" id="trend-range" style="font-size:.825rem;color:var(--color-muted);margin-top:4px"></div>
             </div>
         </div>
         <div class="chart-wrap">

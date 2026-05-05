@@ -97,13 +97,19 @@ async function loadOverview() {
     } catch { /* tiho */ }
 }
 
-// ─── Trend po mesecih ────────────────────────────────────────────
+// ─── Trend po izbranem obdobju ──────────────────────────────────
 async function loadMonthly() {
     try {
         const data = await fetchStats('by_month');
         const labels = data.map(r => r.label);
         const vals   = data.map(r => r.reservations);
         const guests = data.map(r => r.guests);
+
+        // Subtitle: prikaži natančen datum od–do
+        const subtitleEl = document.getElementById('trend-range');
+        if (subtitleEl && State.from && State.to) {
+            subtitleEl.textContent = fmtDate(State.from) + ' – ' + fmtDate(State.to);
+        }
 
         destroyChart('monthly');
         const ctx = document.getElementById('chart-monthly').getContext('2d');

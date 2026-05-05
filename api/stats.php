@@ -172,39 +172,134 @@ if ($section === 'by_hour') {
 }
 
 // ─── Sekcija: by_month ────────────────────────────────────────
+// Trend po izbranem obdobju z adaptivno granularnostjo:
+//   ≤ 31 dni  → po dnevih
+//   ≤ 90 dni  → po tednih
+//   ≤ 730 dni → po mesecih
+//   > 730 dni → po četrtletjih
 if ($section === 'by_month') {
-    // Zadnjih 12 mesecev (neodvisno od from/to filtra)
-    $monthFrom = date('Y-m-d', strtotime('-11 months', strtotime(date('Y-m-01'))));
-    $monthTo   = date('Y-m-d', strtotime('last day of this month'));
-
-    $stmt = $pdo->prepare("
-        SELECT
-            DATE_FORMAT(r.reservation_date, '%Y-%m') AS month,
-            COUNT(*) AS reservations,
-            COALESCE(SUM(r.guest_count), 0) AS guests
-        FROM reservations r
-        WHERE {$rf['where']} AND r.reservation_date BETWEEN ? AND ?
-          AND r.status NOT IN ('rejected','cancelled')
-        GROUP BY month
-        ORDER BY month
-    ");
-    $stmt->execute(array_merge($rf['params'], [$monthFrom, $monthTo]));
-    $rows = $stmt->fetchAll();
-    $map = [];
-    foreach ($rows as $row) $map[$row['month']] = $row;
+    $fromDt = strtotime($from);
+    $toDt   = strtotime($to);
+    $days   = max(1, ($toDt - $fromDt) / 86400 + 1);
 
     $months_sl = ['Jan','Feb','Mar','Apr','Maj','Jun','Jul','Avg','Sep','Okt','Nov','Dec'];
-    $result = [];
-    for ($i = 11; $i >= 0; $i--) {
-        $dt    = date('Y-m', strtotime("-{$i} months"));
-        $m     = (int)date('m', strtotime($dt . '-01')) - 1;
-        $result[] = [
-            'label'        => $months_sl[$m] . ' ' . date('Y', strtotime($dt . '-01')),
-            'month'        => $dt,
-            'reservations' => (int)($map[$dt]['reservations'] ?? 0),
-            'guests'       => (int)($map[$dt]['guests']       ?? 0),
-        ];
+
+    if ($days <= 31) {
+        // Po dnevih
+        $sqlFmt = "%Y-%m-%d";
+        $bucketKey = 'day';
+        $stmt = $pdo->prepare("
+            SELECT DATE_FORMAT(r.reservation_date, '{$sqlFmt}') AS bucket,
+                   COUNT(*) AS reservations,
+                   COALESCE(SUM(r.guest_count), 0) AS guests
+            FROM reservations r
+            WHERE {$rf['where']} AND r.reservation_date BETWEEN ? AND ?
+              AND r.status NOT IN ('rejected','cancelled')
+            GROUP BY bucket ORDER BY bucket
+        ");
+        $stmt->execute(array_merge($rf['params'], [$from, $to]));
+        $map = [];
+        foreach ($stmt->fetchAll() as $row) $map[$row['bucket']] = $row;
+        $result = [];
+        for ($d = $fromDt; $d <= $toDt; $d += 86400) {
+            $key = date('Y-m-d', $d);
+            $result[] = [
+                'label'        => date('j. n.', $d),
+                'period'       => $key,
+                'reservations' => (int)($map[$key]['reservations'] ?? 0),
+                'guests'       => (int)($map[$key]['guests']       ?? 0),
+            ];
+        }
+    } elseif ($days <= 90) {
+        // Po ISO tednih
+        $stmt = $pdo->prepare("
+            SELECT YEARWEEK(r.reservation_date, 3) AS bucket,
+                   MIN(r.reservation_date) AS week_start,
+                   COUNT(*) AS reservations,
+                   COALESCE(SUM(r.guest_count), 0) AS guests
+            FROM reservations r
+            WHERE {$rf['where']} AND r.reservation_date BETWEEN ? AND ?
+              AND r.status NOT IN ('rejected','cancelled')
+            GROUP BY bucket ORDER BY bucket
+        ");
+        $stmt->execute(array_merge($rf['params'], [$from, $to]));
+        $map = [];
+        foreach ($stmt->fetchAll() as $row) $map[$row['bucket']] = $row;
+        // Generate buckets za vsak teden
+        $result = [];
+        $w = strtotime('monday this week', $fromDt);
+        if ($w > $fromDt) $w = strtotime('-1 week', $w);
+        while ($w <= $toDt) {
+            $yw = (int)date('o', $w) * 100 + (int)date('W', $w);
+            $row = $map[$yw] ?? null;
+            $result[] = [
+                'label'        => 'T' . (int)date('W', $w) . ' · ' . date('j. n.', $w),
+                'period'       => date('Y-\WW', $w),
+                'reservations' => (int)($row['reservations'] ?? 0),
+                'guests'       => (int)($row['guests']       ?? 0),
+            ];
+            $w = strtotime('+7 days', $w);
+        }
+    } elseif ($days <= 730) {
+        // Po mesecih
+        $stmt = $pdo->prepare("
+            SELECT DATE_FORMAT(r.reservation_date, '%Y-%m') AS bucket,
+                   COUNT(*) AS reservations,
+                   COALESCE(SUM(r.guest_count), 0) AS guests
+            FROM reservations r
+            WHERE {$rf['where']} AND r.reservation_date BETWEEN ? AND ?
+              AND r.status NOT IN ('rejected','cancelled')
+            GROUP BY bucket ORDER BY bucket
+        ");
+        $stmt->execute(array_merge($rf['params'], [$from, $to]));
+        $map = [];
+        foreach ($stmt->fetchAll() as $row) $map[$row['bucket']] = $row;
+        $result = [];
+        $cursor = strtotime(date('Y-m-01', $fromDt));
+        while ($cursor <= $toDt) {
+            $key = date('Y-m', $cursor);
+            $m = (int)date('m', $cursor) - 1;
+            $result[] = [
+                'label'        => $months_sl[$m] . ' ' . date('Y', $cursor),
+                'period'       => $key,
+                'reservations' => (int)($map[$key]['reservations'] ?? 0),
+                'guests'       => (int)($map[$key]['guests']       ?? 0),
+            ];
+            $cursor = strtotime('+1 month', $cursor);
+        }
+    } else {
+        // Po četrtletjih
+        $stmt = $pdo->prepare("
+            SELECT CONCAT(YEAR(r.reservation_date), '-Q', QUARTER(r.reservation_date)) AS bucket,
+                   COUNT(*) AS reservations,
+                   COALESCE(SUM(r.guest_count), 0) AS guests
+            FROM reservations r
+            WHERE {$rf['where']} AND r.reservation_date BETWEEN ? AND ?
+              AND r.status NOT IN ('rejected','cancelled')
+            GROUP BY bucket ORDER BY bucket
+        ");
+        $stmt->execute(array_merge($rf['params'], [$from, $to]));
+        $map = [];
+        foreach ($stmt->fetchAll() as $row) $map[$row['bucket']] = $row;
+        $result = [];
+        $cursor = strtotime(date('Y-m-01', $fromDt));
+        // Snap na začetek četrtletja
+        $startMonth = (int)date('m', $cursor);
+        $qStartMonth = (int)floor(($startMonth - 1) / 3) * 3 + 1;
+        $cursor = strtotime(date('Y', $cursor) . '-' . sprintf('%02d', $qStartMonth) . '-01');
+        while ($cursor <= $toDt) {
+            $q = (int)ceil((int)date('n', $cursor) / 3);
+            $key = date('Y', $cursor) . '-Q' . $q;
+            $result[] = [
+                'label'        => 'Q' . $q . ' ' . date('Y', $cursor),
+                'period'       => $key,
+                'reservations' => (int)($map[$key]['reservations'] ?? 0),
+                'guests'       => (int)($map[$key]['guests']       ?? 0),
+            ];
+            $cursor = strtotime('+3 months', $cursor);
+        }
     }
+
     json_response(true, $result);
 }
 
