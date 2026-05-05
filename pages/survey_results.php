@@ -58,10 +58,15 @@ require_once '../includes/html_head.php';
 <?php
 $topbarTitle    = t('survey_results.page_title');
 $topbarSubtitle = t('survey_results.subtitle');
+// "Uredi anketo" pelje na restaurant-edit > Anketa tab. Privzeto prva restavracija
+// (ali aktivna iz seje); v JS dinamično posodobimo glede na izbrano v filtru.
+$_editRestId = !empty($_SESSION['restaurant_id'])
+    ? (int)$_SESSION['restaurant_id']
+    : (int)($restaurants[0]['id'] ?? 0);
 ob_start();
-if ($hasSurvey && $isAdmin):
+if ($hasSurvey && $isAdmin && $_editRestId):
 ?>
-    <a href="<?= BASE_PATH ?>/pages/survey_builder.php" class="rz-btn">
+    <a href="<?= BASE_PATH ?>/pages/restaurant-edit.php?id=<?= $_editRestId ?>#anketa" class="rz-btn" id="btn-edit-survey">
         <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
         <span><?= t('survey_results.builder_link') ?></span>
     </a>
@@ -406,10 +411,24 @@ function exportCsv(e) {
     window.location.href = `${BASE}/api/survey.php?${params}`;
 }
 
+// "Uredi anketo" link sledi izbrani restavraciji v filtru
+function updateEditSurveyLink() {
+    const sel = document.getElementById('f-restaurant');
+    const btn = document.getElementById('btn-edit-survey');
+    if (!btn || !sel) return;
+    const id = sel.value || '';
+    if (!id) return; // pri "Vse" pustimo trenutni link (default first)
+    btn.href = `${BASE}/pages/restaurant-edit.php?id=${encodeURIComponent(id)}#anketa`;
+}
+
 // Ob nalaganju strani – če je samo ena restavracija, naložimo samodejno
 window.addEventListener('DOMContentLoaded', () => {
     const sel = document.getElementById('f-restaurant');
     if (sel && sel.tagName === 'INPUT' && sel.value) loadResults();
+    if (sel && sel.tagName === 'SELECT') {
+        sel.addEventListener('change', updateEditSurveyLink);
+        updateEditSurveyLink();
+    }
 });
 </script>
 </body>
