@@ -995,6 +995,8 @@
   "main.topbar_guests": "gostov pričakovanih",
   "main.timeline_label": "TIMELINE",
   "main.schedule_title": "Razpored po mizah",
+  "main.prev_day": "Prejšnji dan",
+  "main.next_day": "Naslednji dan",
   "main.view_timeline": "Timeline",
   "main.view_list": "Seznam",
   "main.legend_past": "Končana",

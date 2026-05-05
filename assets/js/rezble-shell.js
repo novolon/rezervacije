@@ -12,19 +12,39 @@
     'use strict';
 
     const BASE = (window.APP_STATE && window.APP_STATE.base) ? window.APP_STATE.base : '';
+    const restId = (window.APP_STATE && window.APP_STATE.restaurantId) ? window.APP_STATE.restaurantId : null;
+
+    // Nastavitve URL: če je en restavracija izbrana, gremo direktno na edit; sicer admin lista.
+    const settingsUrl = restId
+        ? BASE + '/pages/restaurant-edit.php?id=' + restId
+        : BASE + '/pages/admin.php';
 
     // --- Ukazi ---
     const NAV_COMMANDS = [
-        { group: 'Navigacija', label: 'Danes',       hint: 'Pojdi na dashboard',        icon: 'calendar', href: BASE + '/pages/main.php' },
-        { group: 'Navigacija', label: 'Statistika',  hint: 'Poglej statistiko',          icon: 'chart',    href: BASE + '/pages/stats.php' },
-        { group: 'Navigacija', label: 'Gostje',      hint: 'Baza gostov',                icon: 'users',    href: BASE + '/pages/guests.php' },
-        { group: 'Navigacija', label: 'Čakalna lista', hint: 'Čakajoče zahteve',         icon: 'wait',     href: BASE + '/pages/waitlist.php' },
-        { group: 'Navigacija', label: 'Anketa',      hint: 'Nastavi in preglej odgovore', icon: 'survey',  href: BASE + '/pages/survey.php' },
-        { group: 'Navigacija', label: 'Nastavitve',  hint: 'Restavracija, mize, urnik',  icon: 'cog',      href: BASE + '/pages/admin.php' },
-        { group: 'Navigacija', label: 'Naročnina',   hint: 'Plan in plačila',            icon: 'card',     href: BASE + '/pages/billing.php' },
-        { group: 'Dejanja',    label: 'Nova rezervacija', hint: 'Odpri obrazec',         icon: 'plus',     action: 'newReservation' },
-        { group: 'Dejanja',    label: 'Odjava',       hint: 'Odjava iz aplikacije',      icon: 'logout',   href: BASE + '/logout.php' },
+        { group: 'Navigacija', label: 'Danes',       hint: 'Pojdi na dashboard',          icon: 'calendar', href: BASE + '/pages/main.php' },
+        { group: 'Navigacija', label: 'Statistika',  hint: 'Poglej statistiko',           icon: 'chart',    href: BASE + '/pages/stats.php' },
+        { group: 'Navigacija', label: 'Gostje',      hint: 'Baza gostov',                 icon: 'users',    href: BASE + '/pages/guests.php' },
+        { group: 'Navigacija', label: 'Čakalna lista', hint: 'Čakajoče zahteve',          icon: 'wait',     href: BASE + '/pages/waitlist.php' },
+        { group: 'Navigacija', label: 'Anketa',      hint: 'Pregled odgovorov + izvoz',   icon: 'survey',   href: BASE + '/pages/survey_results.php' },
+        { group: 'Navigacija', label: 'Nastavitve',  hint: 'Restavracija, mize, urnik',   icon: 'cog',      href: settingsUrl },
+        { group: 'Navigacija', label: 'Naročnina',   hint: 'Plan in plačila',             icon: 'card',     href: BASE + '/pages/billing.php' },
+        { group: 'Dejanja',    label: 'Nova rezervacija', hint: 'Odpri obrazec',          icon: 'plus',     action: 'newReservation' },
+        { group: 'Dejanja',    label: 'Odjava',     hint: 'Odjava iz aplikacije',         icon: 'logout',   href: BASE + '/logout.php' },
     ];
+
+    // --- Default fallback handlers (delujejo iz katerekoli strani) ---
+    // Stran lahko override-a (npr. main.php nastavi window.rz_newReservation),
+    // ampak default poskrbi da se akcija izvede tudi iz drugih strani prek redirect-a.
+    if (typeof window.rz_newReservation !== 'function') {
+        window.rz_newReservation = function() {
+            window.location.href = BASE + '/pages/main.php?new=1';
+        };
+    }
+    if (typeof window.rz_goToday !== 'function') {
+        window.rz_goToday = function() {
+            window.location.href = BASE + '/pages/main.php';
+        };
+    }
 
     const ICONS = {
         calendar:  '<rect x="3" y="4.5" width="18" height="16" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/>',
@@ -186,6 +206,14 @@
     document.addEventListener('DOMContentLoaded', function() {
         const btn = document.getElementById('rz-cmd-open');
         if (btn) btn.addEventListener('click', open);
+
+        // Mac vs Win/Linux — prikazi pravo bližnjico v topbarju.
+        const isMac = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || navigator.userAgent || '');
+        if (!isMac) {
+            document.querySelectorAll('[data-rz-shortcut="cmd-k"]').forEach(function(el) {
+                el.textContent = 'Ctrl K';
+            });
+        }
     });
 
     window.RZ = window.RZ || {};

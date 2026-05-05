@@ -34,7 +34,7 @@ $topbarShowCmd  = $topbarShowCmd  ?? true;
             <button type="button" class="rz-kbd-hint" id="rz-cmd-open" title="<?= t('topbar.search') ?>">
                 <?= _rz_icon('search', 14) ?>
                 <span><?= t('topbar.search') ?></span>
-                <span class="rz-kbd">⌘K</span>
+                <span class="rz-kbd" data-rz-shortcut="cmd-k">⌘K</span>
             </button>
         <?php endif; ?>
         <?= $topbarActions ?>

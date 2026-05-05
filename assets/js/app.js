@@ -292,6 +292,29 @@
     // Gumb danes
     document.getElementById("btn-today").addEventListener("click", goToToday);
 
+    // Prev/next dan navigacija (poleg naslova razporeda)
+    function shiftDay(deltaDays) {
+      const d = new Date(state.currentDate);
+      d.setDate(d.getDate() + deltaDays);
+      state.currentDate = d;
+      // Posodobi calendar prikaz, če smo prešli na drug mesec
+      const newY = d.getFullYear();
+      const newM = d.getMonth();
+      if (newY !== state.calendarYear || newM !== state.calendarMonth) {
+        state.calendarYear = newY;
+        state.calendarMonth = newM;
+        Calendar.render(newY, newM);
+        Calendar.loadMonth(newY, newM);
+      }
+      loadSchedule();
+      updateTodayBtn();
+      updateAddBtn();
+    }
+    const prevDayBtn = document.getElementById("btn-prev-day");
+    const nextDayBtn = document.getElementById("btn-next-day");
+    if (prevDayBtn) prevDayBtn.addEventListener("click", () => shiftDay(-1));
+    if (nextDayBtn) nextDayBtn.addEventListener("click", () => shiftDay(1));
+
     // Gumb + Nova rezervacija
     const addBtn = document.getElementById("btn-add-reservation");
     if (addBtn) {

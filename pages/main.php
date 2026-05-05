@@ -287,13 +287,19 @@ require_once '../includes/html_head.php';
                 <h2 class="rz-card-title display"><?= t('main.schedule_title') ?></h2>
             </div>
             <div class="rz-card-tools">
+                <!-- Day navigation (prev/next) -->
+                <div class="rz-day-nav" style="display:inline-flex;align-items:center;gap:6px;margin-right:8px">
+                    <button type="button" class="rz-iconbtn" id="btn-prev-day" title="<?= t('main.prev_day') ?>" aria-label="<?= t('main.prev_day') ?>">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+                    </button>
+                    <button type="button" class="rz-iconbtn" id="btn-next-day" title="<?= t('main.next_day') ?>" aria-label="<?= t('main.next_day') ?>">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    </button>
+                </div>
                 <div class="rz-seg" id="sched-view-seg">
                     <button data-view="timeline" class="is-sel"><?= t('main.view_timeline') ?></button>
                     <button data-view="list"><?= t('main.view_list') ?></button>
                 </div>
-                <!-- <button class="rz-iconbtn" id="sched-refresh-btn" title="Osveži">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-                </button> -->
             </div>
         </div>
         <div id="schedule-body" class="schedule-body"></div>
@@ -407,13 +413,12 @@ window.APP_STATE = <?= json_encode([
 <!-- ── JavaScript ─────────────────────────────────────────── -->
 <?php $cv = time(); ?>
 <script>
-// Per-page command-palette items
-window.RZ_CMD_ITEMS = [
-    { group: t('main.cmd_group_actions'), label: t('main.new_reservation'), hint: t('main.cmd_new_reservation_hint'),
-      icon: 'plus', action: 'newReservation' },
-    { group: t('main.cmd_group_actions'), label: t('main.cmd_go_today'),   hint: t('main.cmd_go_today_hint'),
-      icon: 'calendar', action: 'goToday' },
-];
+// Per-page command-palette items — main.php nima dodatkov, ker default
+// NAV_COMMANDS že vsebuje "Nova rezervacija" in "Danes". Preprečimo duplikate.
+window.RZ_CMD_ITEMS = [];
+
+// Lokalni override-i: ker smo na main.php, akcija opravi dejansko delo
+// (klik gumba), brez redirect-a.
 window.rz_newReservation = function() {
     var btn = document.getElementById('btn-add-reservation');
     if (btn) btn.click();
@@ -422,6 +427,23 @@ window.rz_goToday = function() {
     var btn = document.getElementById('btn-today');
     if (btn) btn.click();
 };
+
+// Če smo prišli z ?new=1 (deep-link iz cmd palette na drugi strani),
+// avtomatsko odpri formo za novo rezervacijo.
+if (new URLSearchParams(location.search).get('new') === '1') {
+    document.addEventListener('DOMContentLoaded', function() {
+        setTimeout(function() {
+            var btn = document.getElementById('btn-add-reservation');
+            if (btn) btn.click();
+            // počisti URL, da se F5 ne ponovi
+            try {
+                var u = new URL(location.href);
+                u.searchParams.delete('new');
+                history.replaceState(null, '', u.toString());
+            } catch (e) {}
+        }, 200);
+    });
+}
 </script>
 <script src="<?= BASE_PATH ?>/assets/js/api.js?v=<?= $cv ?>"></script>
 <script src="<?= BASE_PATH ?>/assets/js/calendar.js?v=<?= $cv ?>"></script>
