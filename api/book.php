@@ -304,11 +304,23 @@ if ($method === 'GET') {
         }
     } catch (PDOException $e) { /* tabela morda še ne obstaja */ }
 
+    // Lang nastavitve (z varnimi defaulti če stolpci še ne obstajajo)
+    $bkLangSwitcher  = array_key_exists('booking_lang_switcher_enabled', $rest)
+        ? (bool)$rest['booking_lang_switcher_enabled'] : true;
+    $bkAvailLangs    = !empty($rest['booking_available_languages'])
+        ? (json_decode($rest['booking_available_languages'], true) ?: ['sl','en','de','it','fr','hr','es','pt'])
+        : ['sl','en','de','it','fr','hr','es','pt'];
+    $bkPrimaryLang   = !empty($rest['booking_primary_language']) ? $rest['booking_primary_language'] : 'sl';
+    if (!in_array($bkPrimaryLang, $bkAvailLangs, true)) $bkPrimaryLang = $bkAvailLangs[0] ?? 'sl';
+
     json_response(true, [
         'name'             => $rest['name'],
         'open_days'        => $openDays,
         'auto_confirm'     => (bool)$rest['booking_auto_confirm'],
         'duration'         => (int)$rest['reservation_duration'],
+        'lang_switcher_enabled' => $bkLangSwitcher,
+        'available_languages'   => $bkAvailLangs,
+        'primary_language'      => $bkPrimaryLang,
         'sched_start'      => (int)$rest['schedule_start'],
         'sched_end'        => (int)$rest['schedule_end'],
         'min_guests'       => (int)$rest['booking_min_guests'],

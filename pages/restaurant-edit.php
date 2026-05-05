@@ -493,6 +493,58 @@ require_once '../includes/html_head.php';
                         </div>
                 </div>
                 <?php endif; ?>
+
+                <!-- ── Jeziki booking strani ────────────────────────── -->
+                <?php
+                $_curLangSwitcher = ($rest['booking_lang_switcher_enabled'] ?? 1);
+                $_curAvailLangs = !empty($rest['booking_available_languages'])
+                    ? (json_decode($rest['booking_available_languages'], true) ?: ['sl','en','de','it','fr','hr','es','pt'])
+                    : ['sl','en','de','it','fr','hr','es','pt'];
+                $_curPrimaryLang = $rest['booking_primary_language'] ?? get_lang();
+                $_langLabels = ['sl'=>'Slovenščina','en'=>'English','de'=>'Deutsch','it'=>'Italiano','fr'=>'Français','hr'=>'Hrvatski','es'=>'Español','pt'=>'Português'];
+                ?>
+                <div class="re-section">
+                    <?= card_head(t('re.card_settings'), 'Jeziki booking strani', false, 'advanced'); ?>
+                    <p class="nastavitve-intro">
+                        Določite, v katerih jezikih je booking stran na voljo gostom.
+                        Če omogočite preklop jezika, gostje izberejo sami; sicer vidijo samo primarni jezik.
+                    </p>
+                    <div class="rz-toggle-row">
+                        <div>
+                            <div class="rz-toggle-label">Pokaži preklop jezika gostom</div>
+                            <div class="rz-toggle-hint">Dropdown desno zgoraj v booking strani in widgetu.</div>
+                        </div>
+                        <label class="toggle-wrap" style="cursor:pointer;margin:0;flex-shrink:0">
+                            <span class="toggle">
+                                <input type="checkbox" id="r-lang-switcher" <?= $_curLangSwitcher ? 'checked' : '' ?>>
+                                <span class="toggle-track"></span>
+                            </span>
+                        </label>
+                    </div>
+
+                    <div id="r-langs-block" style="margin-top:16px">
+                        <div style="display:flex;flex-direction:column;gap:8px">
+                            <label style="font-size:.825rem;color:var(--color-muted);font-weight:600">Razpoložljivi jeziki (kateri so v switcherju):</label>
+                            <div style="display:flex;flex-wrap:wrap;gap:8px">
+                                <?php foreach ($_langLabels as $_lc => $_label): ?>
+                                    <label class="rz-tag-chip" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1.5px solid var(--color-border);border-radius:999px;font-size:.825rem;cursor:pointer;background:#fff">
+                                        <input type="checkbox" name="r-avail-lang[]" value="<?= $_lc ?>" <?= in_array($_lc, $_curAvailLangs, true) ? 'checked' : '' ?>>
+                                        <span><?= strtoupper($_lc) ?> · <?= $_label ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                        </div>
+
+                        <div class="admin-field" style="padding:14px 0 0">
+                            <label>Primarni jezik (privzet ob prvem obisku, in edini ko switcher onemogočen)</label>
+                            <select id="r-primary-lang" style="border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none;min-width:220px">
+                                <?php foreach ($_langLabels as $_lc => $_label): ?>
+                                    <option value="<?= $_lc ?>" <?= $_curPrimaryLang === $_lc ? 'selected' : '' ?>><?= strtoupper($_lc) ?> · <?= $_label ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    </div>
+                </div>
   </div>
     </div>
     <div class="flex flex--column flex--gap20" id="booking-dependent1" style="display:<?= $rest['booking_enabled'] ? 'flex' : 'none' ?>">
@@ -1430,6 +1482,12 @@ document.getElementById('btn-save-booking').addEventListener('click', async () =
     if (enabled && minG > maxG) { showPageErr(window.t('re.err_min_max_guests')); return; }
     const btn = document.getElementById('btn-save-booking');
     btn.disabled=true; btn.textContent='...';
+    // Lang nastavitve
+    const langSwitcher = document.getElementById('r-lang-switcher')?.checked ? 1 : 0;
+    const availLangs   = Array.from(document.querySelectorAll('input[name="r-avail-lang[]"]:checked')).map(cb => cb.value);
+    const primaryLang  = document.getElementById('r-primary-lang')?.value || 'sl';
+    if (availLangs.length === 0) { showPageErr('Izberi vsaj en jezik.'); btn.disabled=false; btn.textContent=window.t('common.save'); return; }
+    if (availLangs.indexOf(primaryLang) === -1) { showPageErr('Primarni jezik mora biti med razpoložljivimi.'); btn.disabled=false; btn.textContent=window.t('common.save'); return; }
     try {
         await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}`, {
             booking_enabled: enabled, booking_slot_interval: interval,
@@ -1439,6 +1497,9 @@ document.getElementById('btn-save-booking').addEventListener('click', async () =
             waitlist_enabled: document.getElementById('r-waitlist-enabled')?.checked ? 1 : 0,
             waitlist_max_per_slot: parseInt(document.getElementById('r-waitlist-max')?.value ?? 3) || 0,
             allow_area_choice: document.getElementById('r-allow-area-choice')?.checked ? 1 : 0,
+            booking_lang_switcher_enabled: langSwitcher,
+            booking_available_languages:   JSON.stringify(availLangs),
+            booking_primary_language:      primaryLang,
         });
         showPageOk(window.t('re.toast_saved'));
     } catch(e) { showPageErr(e.message); }

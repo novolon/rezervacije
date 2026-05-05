@@ -92,36 +92,112 @@ function lang_days_js(): string {
 }
 
 /**
- * Detektira preferiran jezik uporabnika iz HTTP Accept-Language headerja.
- * Format vhoda: "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7"
- * Vrne enega od podprtih jezikov ali 'en' (mednarodni default), nikoli 'sl'
- * — slovenščina je default samo za uporabnike z znanim sl Accept-Language.
+ * Detektira ISO 3166-1 kodo države iz IP-ja. Vrne npr. "IT", "DE", "US" ali ''.
+ * Strategija:
+ *  1. Cloudflare `CF-IPCountry` (free če je domena za CF)
+ *  2. Drugi reverse-proxy headerji (X-Country-Code, ipd.)
+ *  3. Fallback: ip-api.com (45 req/min brezplačno) — cached v $_SESSION
+ */
+function detect_user_country(): string {
+    // 1. CDN / proxy headerji
+    foreach (['HTTP_CF_IPCOUNTRY', 'HTTP_X_COUNTRY_CODE', 'HTTP_X_GEOIP_COUNTRY'] as $h) {
+        if (!empty($_SERVER[$h]) && preg_match('/^[A-Z]{2}$/', $_SERVER[$h])) {
+            return $_SERVER[$h];
+        }
+    }
+    // 2. Public API fallback (cache v session, da ne kličemo na vsak pageload)
+    if (session_status() === PHP_SESSION_NONE) @session_start();
+    $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+    if (!$ip || preg_match('/^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|::1$|fe80:)/', $ip)) {
+        return ''; // localhost / private — preskoči
+    }
+    $cacheKey = '_geoip_' . $ip;
+    if (isset($_SESSION[$cacheKey]) && $_SESSION[$cacheKey]['exp'] > time()) {
+        return $_SESSION[$cacheKey]['cc'] ?? '';
+    }
+    // ip-api.com vrne JSON za /json/{ip}?fields=countryCode (brezplačno, brez api key)
+    $url = 'http://ip-api.com/json/' . urlencode($ip) . '?fields=countryCode';
+    $ctx = stream_context_create(['http' => ['timeout' => 2, 'ignore_errors' => true]]);
+    $resp = @file_get_contents($url, false, $ctx);
+    $cc = '';
+    if ($resp) {
+        $j = json_decode($resp, true);
+        if (isset($j['countryCode']) && preg_match('/^[A-Z]{2}$/', $j['countryCode'])) {
+            $cc = $j['countryCode'];
+        }
+    }
+    $_SESSION[$cacheKey] = ['cc' => $cc, 'exp' => time() + 86400]; // 24h cache
+    return $cc;
+}
+
+/**
+ * Mapira ISO 3166-1 kodo države v naš lang code (8 podprtih).
+ */
+function country_to_supported_lang(string $cc): string {
+    static $map = [
+        'SI' => 'sl',
+        'IT' => 'it', 'SM' => 'it', 'VA' => 'it', 'CH' => 'it', // CH ima it/de/fr; default it ker po populaciji prevladuje de — uporabljeno samo če Accept-Lang ne pomaga
+        'DE' => 'de', 'AT' => 'de', 'LI' => 'de',
+        'FR' => 'fr', 'BE' => 'fr', 'LU' => 'fr', 'MC' => 'fr',
+        'HR' => 'hr', 'BA' => 'hr', 'RS' => 'hr', 'ME' => 'hr', 'MK' => 'hr',
+        'ES' => 'es', 'MX' => 'es', 'AR' => 'es', 'CL' => 'es', 'CO' => 'es', 'PE' => 'es',
+        'VE' => 'es', 'UY' => 'es', 'PY' => 'es', 'BO' => 'es', 'EC' => 'es', 'GT' => 'es',
+        'CR' => 'es', 'PA' => 'es', 'DO' => 'es', 'CU' => 'es', 'NI' => 'es', 'HN' => 'es',
+        'SV' => 'es',
+        'PT' => 'pt', 'BR' => 'pt', 'AO' => 'pt', 'MZ' => 'pt', 'CV' => 'pt',
+        // GB/US/IE/AU/CA/NZ/IN ostane 'en' (default fallback)
+    ];
+    return $map[$cc] ?? '';
+}
+
+/**
+ * Detektira preferiran jezik uporabnika.
  *
- * Opcijsko (zakomentirano): IP geolokacija prek MaxMind/Cloudflare CF-IPCountry
- * headerja. Browser language je zanesljivejša, ker spoštuje user preferenco
- * (turist iz Italije v ZDA hoče italijansko).
+ * Hibridna logika:
+ *  1. Accept-Language header — če eksplicitno omenja kateri od naših 8 jezikov,
+ *     ga uporabi (spoštuje user preferenco).
+ *  2. Sicer pogledaj IP državo (Italijan na potovanju z EN browserjem dobi italijansko).
+ *  3. Fallback: 'en' za mednarodne goste, 'sl' samo za prazne signale.
  */
 function detect_user_lang(): string {
     static $allowed = ['sl', 'en', 'de', 'it', 'fr', 'hr', 'es', 'pt'];
     $accept = $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '';
-    if ($accept === '') return 'en';
 
     $tags = [];
-    foreach (explode(',', $accept) as $entry) {
-        $parts = explode(';', trim($entry));
-        $code  = strtolower(trim($parts[0]));
-        $q     = 1.0;
-        foreach (array_slice($parts, 1) as $p) {
-            if (preg_match('/q\s*=\s*([0-9.]+)/', $p, $m)) $q = (float)$m[1];
-        }
-        $primary = explode('-', $code)[0]; // it-IT → it
-        if (in_array($primary, $allowed, true)) {
-            if (!isset($tags[$primary]) || $tags[$primary] < $q) $tags[$primary] = $q;
+    if ($accept !== '') {
+        foreach (explode(',', $accept) as $entry) {
+            $parts = explode(';', trim($entry));
+            $code  = strtolower(trim($parts[0]));
+            $q     = 1.0;
+            foreach (array_slice($parts, 1) as $p) {
+                if (preg_match('/q\s*=\s*([0-9.]+)/', $p, $m)) $q = (float)$m[1];
+            }
+            $primary = explode('-', $code)[0]; // it-IT → it
+            if (in_array($primary, $allowed, true)) {
+                if (!isset($tags[$primary]) || $tags[$primary] < $q) $tags[$primary] = $q;
+            }
         }
     }
-    if (empty($tags)) return 'en';
-    arsort($tags);
-    return array_key_first($tags);
+
+    // Kadar browser TOPSTI lang ni 'en', mu zaupaj — user je verjetno explicitno nastavil
+    if (!empty($tags)) {
+        arsort($tags);
+        $top = array_key_first($tags);
+        if ($top !== 'en') return $top;
+    }
+
+    // Browser je English (privzeto za večino brskalnikov) ALI ne pomaga —
+    // uporabi IP geo da ujamemo turiste in dejansko lokacijo.
+    $cc = detect_user_country();
+    if ($cc !== '') {
+        $ipLang = country_to_supported_lang($cc);
+        if ($ipLang !== '') return $ipLang;
+        // Anglofone države (GB/US/AU/...) eksplicitno → en
+        if (in_array($cc, ['GB','US','IE','AU','NZ','CA','IN','ZA','SG','PH','MT'], true)) return 'en';
+    }
+
+    // Vrni browser top če sploh kaj je, sicer en
+    return !empty($tags) ? array_key_first($tags) : 'en';
 }
 
 // ── Auto-init ──────────────────────────────────────────────────────────────────

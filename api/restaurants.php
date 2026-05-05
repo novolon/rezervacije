@@ -311,6 +311,23 @@ if ($method === 'PUT') {
     $track_no_shows    = isset($body['track_no_shows'])    ? ($body['track_no_shows'] ? 1 : 0) : null;
     $no_show_threshold = isset($body['no_show_threshold']) ? max(1, (int)$body['no_show_threshold']) : null;
 
+    // Booking lang nastavitve
+    $allowedLangs = ['sl','en','de','it','fr','hr','es','pt'];
+    $booking_lang_switcher_enabled = isset($body['booking_lang_switcher_enabled']) ? ($body['booking_lang_switcher_enabled'] ? 1 : 0) : null;
+    $booking_available_languages   = null;
+    if (array_key_exists('booking_available_languages', $body)) {
+        $val = $body['booking_available_languages'];
+        if (is_string($val)) $val = json_decode($val, true);
+        if (is_array($val)) {
+            $val = array_values(array_intersect($val, $allowedLangs));
+            $booking_available_languages = !empty($val) ? json_encode($val) : null;
+        }
+    }
+    $booking_primary_language = null;
+    if (!empty($body['booking_primary_language']) && in_array($body['booking_primary_language'], $allowedLangs, true)) {
+        $booking_primary_language = $body['booking_primary_language'];
+    }
+
     $sets = []; $params = [];
     if ($name)                               { $sets[] = 'name = ?';                        $params[] = $name; }
     if ($duration)                           { $sets[] = 'reservation_duration = ?';        $params[] = $duration; }
@@ -335,6 +352,9 @@ if ($method === 'PUT') {
     if ($employees_can_override_schedule !== null) { $sets[] = 'employees_can_override_schedule = ?';        $params[] = $employees_can_override_schedule; }
     if ($track_no_shows !== null)                  { $sets[] = 'track_no_shows = ?';                        $params[] = $track_no_shows; }
     if ($no_show_threshold !== null)               { $sets[] = 'no_show_threshold = ?';                     $params[] = $no_show_threshold; }
+    if ($booking_lang_switcher_enabled !== null)   { $sets[] = 'booking_lang_switcher_enabled = ?';         $params[] = $booking_lang_switcher_enabled; }
+    if ($booking_available_languages !== null)     { $sets[] = 'booking_available_languages = ?';           $params[] = $booking_available_languages; }
+    if ($booking_primary_language !== null)        { $sets[] = 'booking_primary_language = ?';              $params[] = $booking_primary_language; }
 
     try {
         // Day schedules

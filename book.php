@@ -1,8 +1,52 @@
 <?php
 require_once 'config.php';
-require_once 'includes/lang.php';
+require_once 'includes/db.php';
 
 $token = trim($_GET['t'] ?? '');
+
+// Naloži restaurant lang nastavitve PREJ kot lang.php auto-init,
+// da lahko nastavimo cookie na primary_language preden se lang.php zažene.
+$_bkLangSwitcher  = true;
+$_bkAvailLangs    = ['sl','en','de','it','fr','hr','es','pt'];
+$_bkPrimaryLang   = null;
+if ($token) {
+    try {
+        $pdo = getDB();
+        $stmt = $pdo->prepare("SELECT booking_lang_switcher_enabled, booking_available_languages, booking_primary_language FROM restaurants WHERE booking_token = ? LIMIT 1");
+        $stmt->execute([$token]);
+        if ($r = $stmt->fetch()) {
+            $_bkLangSwitcher = $r['booking_lang_switcher_enabled'] === null ? true : (bool)$r['booking_lang_switcher_enabled'];
+            if (!empty($r['booking_available_languages'])) {
+                $decoded = json_decode($r['booking_available_languages'], true);
+                if (is_array($decoded) && !empty($decoded)) $_bkAvailLangs = $decoded;
+            }
+            if (!empty($r['booking_primary_language'])) $_bkPrimaryLang = $r['booking_primary_language'];
+        }
+    } catch (Throwable $e) { /* stolpci morda še ne obstajajo */ }
+}
+// Če ?lang= ni eksplicitno poslan in nimamo cookie-ja, in switcher onemogočen ali primary nastavljen,
+// nastavi cookie na primary lang da lang.php ne zažene auto-detekcije.
+if (empty($_GET['lang']) && empty($_COOKIE['rzlang']) && $_bkPrimaryLang) {
+    if (!$_bkLangSwitcher) {
+        // Switcher onemogočen — vsi vidijo primary
+        $_COOKIE['rzlang'] = $_bkPrimaryLang;
+    } else {
+        // Switcher omogočen — pusti auto-detect, ampak omeji na available_languages
+        // (handled later v $_GET filter)
+    }
+}
+// Če ?lang= je poslan ampak ni v available_languages, ga zavrni (fall back na primary)
+if (!empty($_GET['lang']) && !in_array($_GET['lang'], $_bkAvailLangs, true)) {
+    unset($_GET['lang']);
+    if ($_bkPrimaryLang) $_COOKIE['rzlang'] = $_bkPrimaryLang;
+}
+// Če cookie ni v available, prav tako reset
+if (!empty($_COOKIE['rzlang']) && !in_array($_COOKIE['rzlang'], $_bkAvailLangs, true) && $_bkPrimaryLang) {
+    $_COOKIE['rzlang'] = $_bkPrimaryLang;
+}
+
+require_once 'includes/lang.php';
+
 $apiBase = BASE_PATH . '/api/book.php';
 ?>
 <!DOCTYPE html>
@@ -74,7 +118,8 @@ $apiBase = BASE_PATH . '/api/book.php';
                 <div id="rest-name" class="font-bold text-forest text-sm truncate"><?= t('common.loading') ?></div>
                 <div class="text-xs text-forest/50"><?= t('book.subtitle') ?></div>
             </div>
-            <!-- Lang switcher -->
+            <!-- Lang switcher (samo če ima restavracija switcher omogočen IN ima vsaj 2 podprta jezika) -->
+            <?php if ($_bkLangSwitcher && count($_bkAvailLangs) >= 2): ?>
             <details class="relative" id="lang-switcher">
                 <summary class="cursor-pointer list-none px-2 py-1.5 rounded-md hover:bg-cream-dark text-xs font-semibold text-forest flex items-center gap-1" style="user-select:none">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
@@ -85,7 +130,8 @@ $apiBase = BASE_PATH . '/api/book.php';
                     $_curUrl = strtok($_SERVER['REQUEST_URI'] ?? '/', '?');
                     $_curQs  = $_GET; unset($_curQs['lang']);
                     $_langNames = ['sl'=>'Slovenščina','en'=>'English','de'=>'Deutsch','it'=>'Italiano','fr'=>'Français','hr'=>'Hrvatski','es'=>'Español','pt'=>'Português'];
-                    foreach ($_langNames as $_lc => $_label):
+                    foreach ($_bkAvailLangs as $_lc):
+                        if (!isset($_langNames[$_lc])) continue;
                         $_qs = array_merge($_curQs, ['lang' => $_lc]);
                         $_href = $_curUrl . '?' . http_build_query($_qs);
                         $_isCurrent = $_lc === get_lang();
@@ -93,11 +139,12 @@ $apiBase = BASE_PATH . '/api/book.php';
                         <a href="<?= htmlspecialchars($_href, ENT_QUOTES) ?>"
                            class="block px-3 py-2 text-sm hover:bg-cream-dark <?= $_isCurrent ? 'font-semibold text-forest bg-cream' : 'text-forest/70' ?>">
                             <span class="inline-block w-7 text-xs text-forest/50 font-bold tracking-wider"><?= strtoupper($_lc) ?></span>
-                            <?= $_label ?>
+                            <?= $_langNames[$_lc] ?>
                         </a>
                     <?php endforeach; ?>
                 </div>
             </details>
+            <?php endif; ?>
         </div>
     </header>
 
