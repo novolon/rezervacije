@@ -1,9 +1,7 @@
 <?php
 /**
- * Stran za pregled odgovorov ankete s tabelo posameznih responsov, klik na vrstico
- * odpre detail modal, gumb za izvoz v CSV (Excel-compatible: UTF-8 BOM + ; delimiter).
- *
- * Dostopno admin/staff uporabnikom; superadmin gre na svoj panel.
+ * Anketa — pregled posameznih odgovorov + izvoz CSV (Excel-compatible).
+ * Rezble design, admin shell s sidebarjem.
  */
 require_once '../includes/auth_check.php';
 require_once '../includes/db.php';
@@ -39,182 +37,213 @@ if ($isAdmin) {
     ");
     $stmt->execute([$_SESSION['user_id']]);
     $restaurants = $stmt->fetchAll();
+} elseif (!empty($_SESSION['restaurant_id'])) {
+    $stmt = $pdo->prepare("SELECT id, name FROM restaurants WHERE id = ? AND is_active = 1");
+    $stmt->execute([$_SESSION['restaurant_id']]);
+    $restaurants = $stmt->fetchAll();
 }
+
+$pageTitle = t('survey_results.page_title');
+$extraCss  = ['main.css?v=4', 'design.css?v=1'];
+require_once '../includes/html_head.php';
 ?>
-<!DOCTYPE html>
-<html lang="<?= get_lang() ?>">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><?= t('survey_results.page_title') ?> – <?= h(APP_NAME) ?></title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css?v=4">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/admin.css?v=3">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/modal.css?v=3">
-    <style>
-        .results-wrap{max-width:960px;margin:0 auto;padding:28px 16px 60px}
-        .results-filters{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin-bottom:22px}
-        .results-filters label{font-size:.8rem;font-weight:500;color:#374151;display:block;margin-bottom:4px}
-        .results-filters select,.results-filters input{border:1px solid #D1D5DB;border-radius:8px;padding:8px 11px;font-size:.88rem;font-family:inherit;background:#fff;color:#111827}
-        .results-filters select:focus,.results-filters input:focus{outline:none;border-color:#F59E0B}
-        .btn-filter{background:#F59E0B;color:#fff;border:none;border-radius:8px;padding:9px 18px;font-size:.88rem;font-weight:600;cursor:pointer;font-family:inherit;height:38px}
-        .btn-filter:hover{background:#D97706}
-        .btn-export{background:#fff;color:#374151;border:1px solid #D1D5DB;border-radius:8px;padding:9px 16px;font-size:.88rem;font-weight:500;cursor:pointer;font-family:inherit;height:38px;display:inline-flex;align-items:center;gap:6px;text-decoration:none}
-        .btn-export:hover{border-color:#F59E0B;color:#D97706}
-        .btn-export.disabled{opacity:.5;cursor:default;pointer-events:none}
-        .results-table{width:100%;border-collapse:collapse;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.07)}
-        .results-table th{padding:12px 14px;font-size:.78rem;font-weight:600;color:#6B7280;text-align:left;border-bottom:1px solid #F3F4F6;white-space:nowrap;background:#F9FAFB}
-        .results-table td{padding:11px 14px;font-size:.85rem;color:#374151;border-bottom:1px solid #F9FAFB;vertical-align:middle}
-        .results-table tr:last-child td{border-bottom:none}
-        .results-table tr:hover td{background:#FFFBEB;cursor:pointer}
-        .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:.75rem;font-weight:600}
-        .badge-public{background:#D1FAE5;color:#065F46}
-        .badge-anonymous{background:#DBEAFE;color:#1D4ED8}
-        .badge-private{background:#F3F4F6;color:#6B7280}
-        .badge-submitted{background:#D1FAE5;color:#065F46}
-        .badge-sent{background:#FEF3C7;color:#92400E}
-        .badge-pending{background:#F3F4F6;color:#9CA3AF}
-        .empty-state{text-align:center;padding:50px 20px;color:#9CA3AF;font-size:.9rem}
-        .gate-notice{background:#FEF3C7;border:1px solid #FDE68A;border-radius:10px;padding:18px 20px;margin-bottom:20px;font-size:.9rem;color:#92400E}
-        .gate-notice a{color:#B45309;font-weight:600}
-        /* Modal */
-        .modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;padding:16px}
-        .modal-overlay.open{display:flex}
-        .modal-box{background:#fff;border-radius:14px;max-width:580px;width:100%;max-height:85vh;overflow-y:auto;padding:28px;position:relative;box-shadow:0 8px 30px rgba(0,0,0,.15)}
-        .modal-close{position:absolute;top:16px;right:16px;background:none;border:none;font-size:1.3rem;cursor:pointer;color:#9CA3AF;line-height:1;padding:4px}
-        .modal-close:hover{color:#374151}
-        .modal-title{font-size:1.05rem;font-weight:700;color:#111827;margin:0 0 4px;padding-right:30px}
-        .modal-sub{font-size:.82rem;color:#9CA3AF;margin:0 0 20px}
-        .answer-block{margin-bottom:18px}
-        .answer-block:last-child{margin-bottom:0}
-        .answer-q{font-size:.83rem;font-weight:600;color:#6B7280;margin-bottom:5px}
-        .answer-val{font-size:.92rem;color:#111827;line-height:1.5}
-        .stars-display{display:flex;gap:3px}
-        .stars-display svg{display:block}
-        @media(max-width:640px){.results-table th:nth-child(3),.results-table td:nth-child(3){display:none}}
-    </style>
-    <script>
-    window.__T__ = <?= json_encode(get_lang_strings(), JSON_UNESCAPED_UNICODE) ?>;
-    window.t = function(k, p) { var s = window.__T__[k] || k; if (p) { for (var x in p) s = s.split('{'+x+'}').join(p[x]); } return s; };
-    </script>
-</head>
 <body>
 
-<!-- ── Header ──────────────────────────────────────────────── -->
-<header class="app-header">
-    <a href="<?= BASE_PATH ?>/pages/main.php" class="header-logo" style="flex-shrink:0">
-        <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <rect width="28" height="28" rx="7" fill="#F59E0B"/>
-            <path d="M7 10h14M7 14h14M7 18h9" stroke="#fff" stroke-width="2" stroke-linecap="round"/>
-        </svg>
-        <?= h(APP_NAME) ?>
-        <?php if ($isAdmin): ?><?= plan_badge($_SESSION['plan_slug'] ?? 'trial') ?><?php endif; ?>
-    </a>
-    <div class="header-restaurant">
-        <span style="color:rgba(255,255,255,.5);font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;font-weight:600"><?= t('survey_results.header_label') ?></span>
-    </div>
-    <div class="header-actions">
-        <span class="header-user">👤 <?= h($fullName) ?></span>
-        <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
-            <?= t('survey_results.schedule_link') ?>
-        </a>
-        <?php if ($isAdmin): ?>
-        <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin"><?= t('survey_results.admin_link') ?></a>
-        <a href="<?= BASE_PATH ?>/pages/survey_builder.php" class="btn-header"><?= t('survey_results.builder_link') ?></a>
-        <?php endif; ?>
-        <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header"><?= t('survey_results.profile_link') ?></a>
-        <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout"><?= t('survey_results.logout') ?></a>
-    </div>
-    <button class="hamburger-btn" id="hamburger-btn" onclick="document.getElementById('mobile-nav').classList.toggle('open')">
-        <span></span><span></span><span></span>
-    </button>
-</header>
-
-<div class="mobile-nav" id="mobile-nav">
-    <div class="mobile-nav-user">👤 <?= h($fullName) ?></div>
-    <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin"><?= t('survey_results.schedule_link') ?></a>
-    <?php if ($isAdmin): ?>
-    <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin"><?= t('survey_results.admin_link') ?></a>
-    <a href="<?= BASE_PATH ?>/pages/survey_builder.php" class="btn-header"><?= t('survey_results.builder_link') ?></a>
-    <?php endif; ?>
-    <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header"><?= t('survey_results.profile_link') ?></a>
-    <a href="<?= BASE_PATH ?>/logout.php" class="btn-header btn-header-logout"><?= t('survey_results.logout') ?></a>
-</div>
+<div id="rz-app" class="rz-app">
+<?php require_once '../includes/sidebar.php'; ?>
+<main class="rz-main">
 
 <?php require_once '../includes/trial_banner.php'; ?>
 
-<div class="results-wrap">
+<?php
+$topbarTitle    = t('survey_results.page_title');
+$topbarSubtitle = t('survey_results.subtitle');
+ob_start();
+if ($hasSurvey && $isAdmin):
+?>
+    <a href="<?= BASE_PATH ?>/pages/survey_builder.php" class="rz-btn">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+        <span><?= t('survey_results.builder_link') ?></span>
+    </a>
+<?php
+endif;
+$topbarActions = ob_get_clean();
+require_once '../includes/topbar.php';
+?>
 
-    <?php if (!$hasSurvey): ?>
-    <div class="gate-notice">
-        <?= t_raw('survey_results.gate_notice') ?>
-        <a href="<?= BASE_PATH ?>/pages/billing.php"><?= t('survey_results.gate_upgrade') ?></a>
+<div class="rz-wrap">
+
+<?php if (!$hasSurvey): ?>
+
+    <div class="rz-card" style="background:var(--terracotta-soft);border-color:#f4d4c4">
+        <div style="padding:20px 22px;font-size:.92rem;color:var(--terracotta-2);line-height:1.55">
+            <?= t_raw('survey_results.gate_notice') ?>
+            <a href="<?= BASE_PATH ?>/pages/billing.php" style="color:var(--terracotta);font-weight:600;text-decoration:underline"><?= t('survey_results.gate_upgrade') ?></a>
+        </div>
     </div>
-    <?php else: ?>
+
+<?php else: ?>
 
     <!-- Filtri -->
-    <div class="results-filters">
-        <?php if ($isAdmin && count($restaurants) > 1): ?>
-        <div>
-            <label><?= t('survey_results.label_restaurant') ?></label>
-            <select id="f-restaurant">
-                <option value=""><?= t('survey_results.all_restaurants') ?></option>
-                <?php foreach ($restaurants as $r): ?>
-                <option value="<?= $r['id'] ?>"><?= h($r['name']) ?></option>
-                <?php endforeach; ?>
-            </select>
+    <div class="rz-card" style="margin-bottom:20px">
+        <div class="rz-card-head">
+            <h2 class="rz-card-title"><?= t('survey_results.filters_title') ?></h2>
         </div>
-        <?php elseif (count($restaurants) === 1): ?>
-        <input type="hidden" id="f-restaurant" value="<?= $restaurants[0]['id'] ?>">
-        <?php endif; ?>
+        <div style="padding:18px 22px;display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end">
+            <?php if ($isAdmin && count($restaurants) > 1): ?>
+            <div style="display:flex;flex-direction:column;gap:5px">
+                <label style="font-size:.78rem;font-weight:600;color:var(--text-2)"><?= t('survey_results.label_restaurant') ?></label>
+                <select id="f-restaurant" class="rz-input" style="min-width:180px">
+                    <option value=""><?= t('survey_results.all_restaurants') ?></option>
+                    <?php foreach ($restaurants as $r): ?>
+                    <option value="<?= $r['id'] ?>"><?= h($r['name']) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <?php elseif (count($restaurants) === 1): ?>
+            <input type="hidden" id="f-restaurant" value="<?= $restaurants[0]['id'] ?>">
+            <?php endif; ?>
 
-        <div>
-            <label><?= t('survey_results.label_date_from') ?></label>
-            <input type="date" id="f-from">
+            <div style="display:flex;flex-direction:column;gap:5px">
+                <label style="font-size:.78rem;font-weight:600;color:var(--text-2)"><?= t('survey_results.label_date_from') ?></label>
+                <input type="date" id="f-from" class="rz-input">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px">
+                <label style="font-size:.78rem;font-weight:600;color:var(--text-2)"><?= t('survey_results.label_date_to') ?></label>
+                <input type="date" id="f-to" class="rz-input">
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px">
+                <label style="font-size:.78rem;font-weight:600;color:var(--text-2)"><?= t('survey_results.label_consent') ?></label>
+                <select id="f-consent" class="rz-input">
+                    <option value=""><?= t('survey_results.consent_all') ?></option>
+                    <option value="public"><?= t('survey_results.consent_public') ?></option>
+                    <option value="anonymous"><?= t('survey_results.consent_anonymous') ?></option>
+                    <option value="private"><?= t('survey_results.consent_private') ?></option>
+                </select>
+            </div>
+            <button class="rz-btn rz-btn-primary" onclick="loadResults()" style="height:38px;align-self:flex-end"><?= t('survey_results.btn_show') ?></button>
+            <?php if ($hasExport): ?>
+            <a href="#" class="rz-btn" id="btn-export" onclick="exportCsv(event)" style="height:38px;align-self:flex-end">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <span><?= t('survey_results.btn_export') ?></span>
+            </a>
+            <?php else: ?>
+            <span class="rz-btn" style="height:38px;align-self:flex-end;opacity:.5;cursor:default" title="<?= t('survey_results.btn_export_premium') ?>">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <?= t('survey_results.btn_export_premium') ?>
+            </span>
+            <?php endif; ?>
         </div>
-        <div>
-            <label><?= t('survey_results.label_date_to') ?></label>
-            <input type="date" id="f-to">
-        </div>
-        <div>
-            <label><?= t('survey_results.label_consent') ?></label>
-            <select id="f-consent">
-                <option value=""><?= t('survey_results.consent_all') ?></option>
-                <option value="public"><?= t('survey_results.consent_public') ?></option>
-                <option value="anonymous"><?= t('survey_results.consent_anonymous') ?></option>
-                <option value="private"><?= t('survey_results.consent_private') ?></option>
-            </select>
-        </div>
-        <button class="btn-filter" onclick="loadResults()"><?= t('survey_results.btn_show') ?></button>
-        <?php if ($hasExport): ?>
-        <a href="#" class="btn-export" id="btn-export" onclick="exportCsv(event)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <?= t('survey_results.btn_export') ?>
-        </a>
-        <?php else: ?>
-        <span class="btn-export disabled" title="<?= t('survey_results.btn_export_premium') ?>">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            <?= t('survey_results.btn_export_premium') ?>
-        </span>
-        <?php endif; ?>
     </div>
 
-    <div id="results-container">
-        <div class="empty-state"><?= t('survey_results.empty_initial') ?></div>
+    <!-- Rezultati -->
+    <div class="rz-card">
+        <div class="rz-card-head">
+            <div>
+                <div class="rz-card-eyebrow"><?= t('survey_results.list_eyebrow') ?></div>
+                <h2 class="rz-card-title"><?= t('survey_results.list_title') ?></h2>
+            </div>
+        </div>
+        <div id="results-container" style="padding:8px 0">
+            <div style="text-align:center;padding:48px 20px;color:var(--text-2);font-size:.9rem"><?= t('survey_results.empty_initial') ?></div>
+        </div>
     </div>
 
-    <?php endif; ?>
+<?php endif; ?>
+
 </div>
 
-<!-- ── Modal ─────────────────────────────────────────────────── -->
-<div class="modal-overlay" id="detail-modal" onclick="if(event.target===this)closeModal()">
-    <div class="modal-box">
-        <button class="modal-close" onclick="closeModal()">×</button>
+</main>
+</div>
+
+<!-- Detail modal -->
+<div id="detail-modal" style="display:none;position:fixed;inset:0;background:rgba(28,38,32,.55);z-index:1000;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(2px)" onclick="if(event.target===this)closeModal()">
+    <div style="background:#fff;border-radius:14px;max-width:600px;width:100%;max-height:88vh;overflow-y:auto;padding:32px 30px;position:relative;box-shadow:0 24px 60px rgba(28,38,32,.25)">
+        <button onclick="closeModal()" style="position:absolute;top:14px;right:14px;background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-2);line-height:1;padding:6px;border-radius:6px" onmouseover="this.style.background='var(--cream)'" onmouseout="this.style.background='none'">×</button>
         <div id="modal-content"></div>
     </div>
 </div>
+
+<style>
+/* Local: tabela rezultatov v Rezble stilu */
+.sr-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: .88rem;
+}
+.sr-table th {
+    padding: 10px 16px;
+    text-align: left;
+    font-size: .75rem;
+    font-weight: 700;
+    color: var(--text-2);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    border-bottom: 1.5px solid var(--line);
+    background: var(--cream);
+    white-space: nowrap;
+}
+.sr-table td {
+    padding: 12px 16px;
+    color: var(--ink);
+    border-bottom: 1px solid var(--line);
+    vertical-align: middle;
+}
+.sr-table tbody tr {
+    transition: background .12s;
+}
+.sr-table tbody tr:hover {
+    background: var(--cream);
+    cursor: pointer;
+}
+.sr-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 600;
+    letter-spacing: .02em;
+}
+.sr-badge-public      { background:#D1FAE5; color:#065F46 }
+.sr-badge-anonymous   { background:#DBEAFE; color:#1E40AF }
+.sr-badge-private     { background:var(--cream); color:var(--text-2) }
+.sr-badge-submitted   { background:#D1FAE5; color:#065F46 }
+.sr-badge-sent        { background:var(--terracotta-soft); color:var(--terracotta-2) }
+.sr-badge-pending     { background:var(--cream); color:var(--text-2) }
+
+.sr-empty {
+    text-align: center;
+    padding: 48px 20px;
+    color: var(--text-2);
+    font-size: .9rem;
+}
+
+.sr-answer {
+    margin-bottom: 18px;
+}
+.sr-answer:last-child { margin-bottom: 0 }
+.sr-answer-q {
+    font-size: .8rem;
+    font-weight: 700;
+    color: var(--text-2);
+    margin-bottom: 6px;
+    letter-spacing: .02em;
+    text-transform: uppercase;
+}
+.sr-answer-val {
+    font-size: .95rem;
+    color: var(--ink);
+    line-height: 1.5;
+}
+.sr-stars {
+    display: inline-flex;
+    gap: 3px;
+    align-items: center;
+}
+@media (max-width: 700px) {
+    .sr-table th:nth-child(3), .sr-table td:nth-child(3) { display:none }
+}
+</style>
 
 <script>
 const BASE = '<?= BASE_PATH ?>';
@@ -232,7 +261,7 @@ function loadResults() {
     if (to)      params.set('date_to',   to);
     if (consent) params.set('consent',   consent);
 
-    document.getElementById('results-container').innerHTML = `<div class="empty-state">${window.t('survey_results.loading')}</div>`;
+    document.getElementById('results-container').innerHTML = `<div class="sr-empty">${window.t('survey_results.loading')}</div>`;
 
     fetch(`${BASE}/api/survey.php?${params}`)
         .then(r => r.json())
@@ -248,16 +277,16 @@ const CONSENT_LABELS = {
     anonymous: window.t('survey_results.consent_anonymous'),
     private:   window.t('survey_results.consent_private'),
 };
-const CONSENT_BADGES = { public:'badge-public', anonymous:'badge-anonymous', private:'badge-private' };
+const CONSENT_BADGES = { public:'sr-badge-public', anonymous:'sr-badge-anonymous', private:'sr-badge-private' };
 
 function renderTable(rows) {
     const cont = document.getElementById('results-container');
     if (!rows.length) {
-        cont.innerHTML = `<div class="empty-state">${window.t('survey_results.empty_results')}</div>`;
+        cont.innerHTML = `<div class="sr-empty">${window.t('survey_results.empty_results')}</div>`;
         return;
     }
     let html = `
-    <table class="results-table">
+    <table class="sr-table">
         <thead><tr>
             <th>${window.t('survey_results.col_submitted')}</th>
             <th>${window.t('survey_results.col_guest')}</th>
@@ -268,12 +297,12 @@ function renderTable(rows) {
         <tbody>`;
     rows.forEach(r => {
         const status = r.submitted_at
-            ? `<span class="badge badge-submitted">${window.t('survey_results.status_submitted')}</span>`
+            ? `<span class="sr-badge sr-badge-submitted">${window.t('survey_results.status_submitted')}</span>`
             : r.email_sent_at
-                ? `<span class="badge badge-sent">${window.t('survey_results.status_sent')}</span>`
-                : `<span class="badge badge-pending">${window.t('survey_results.status_pending')}</span>`;
+                ? `<span class="sr-badge sr-badge-sent">${window.t('survey_results.status_sent')}</span>`
+                : `<span class="sr-badge sr-badge-pending">${window.t('survey_results.status_pending')}</span>`;
         const consent = r.consent
-            ? `<span class="badge ${CONSENT_BADGES[r.consent] || ''}">${CONSENT_LABELS[r.consent] || r.consent}</span>`
+            ? `<span class="sr-badge ${CONSENT_BADGES[r.consent] || ''}">${CONSENT_LABELS[r.consent] || r.consent}</span>`
             : '–';
         const submitted = r.submitted_at ? fmtDate(r.submitted_at) : '–';
         html += `
@@ -304,16 +333,16 @@ function hesc(s) {
 
 function openDetail(id) {
     const mc = document.getElementById('modal-content');
-    mc.innerHTML = `<div style="text-align:center;padding:30px;color:#9CA3AF">${window.t('survey_results.loading')}</div>`;
-    document.getElementById('detail-modal').classList.add('open');
+    mc.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text-2)">${window.t('survey_results.loading')}</div>`;
+    document.getElementById('detail-modal').style.display = 'flex';
 
     fetch(`${BASE}/api/survey.php?action=get_response_detail&id=${id}`)
         .then(r => r.json())
         .then(res => {
-            if (!res.success) { mc.innerHTML = '<p style="color:#EF4444">' + hesc(res.error) + '</p>'; return; }
+            if (!res.success) { mc.innerHTML = '<p style="color:var(--terracotta-2)">' + hesc(res.error) + '</p>'; return; }
             renderDetail(res.data);
         })
-        .catch(() => mc.innerHTML = `<p style="color:#EF4444">${window.t('survey_results.err_load')}</p>`);
+        .catch(() => mc.innerHTML = `<p style="color:var(--terracotta-2)">${window.t('survey_results.err_load')}</p>`);
 }
 
 function renderDetail(data) {
@@ -326,31 +355,31 @@ function renderDetail(data) {
     const submitted = sr.submitted_at ? fmtDate(sr.submitted_at) : '–';
 
     let html = `
-        <div class="modal-title">${window.t('survey_results.detail_title')}</div>
-        <div class="modal-sub">${window.t('survey_results.detail_submitted_label')}: ${submitted} · ${window.t('survey_results.detail_consent_label')}: ${consentMap[sr.consent] || '–'}</div>
+        <h2 style="font-family:'Source Serif 4',Georgia,serif;font-size:1.4rem;font-weight:700;color:var(--ink);margin:0 0 6px;letter-spacing:-0.01em;line-height:1.2">${window.t('survey_results.detail_title')}</h2>
+        <div style="font-size:.82rem;color:var(--text-2);margin:0 0 22px">${window.t('survey_results.detail_submitted_label')}: <strong>${submitted}</strong> · ${window.t('survey_results.detail_consent_label')}: <strong>${consentMap[sr.consent] || '–'}</strong></div>
     `;
 
     if (!answers || !answers.length) {
-        html += `<p style="color:#9CA3AF;font-size:.88rem">${window.t('survey_results.detail_no_answers')}</p>`;
+        html += `<p style="color:var(--text-2);font-size:.88rem">${window.t('survey_results.detail_no_answers')}</p>`;
     } else {
         answers.forEach(a => {
-            html += '<div class="answer-block">';
-            html += `<div class="answer-q">${hesc(a.question_text)}</div>`;
+            html += '<div class="sr-answer">';
+            html += `<div class="sr-answer-q">${hesc(a.question_text)}</div>`;
             if (a.type === 'rating' && a.answer_text) {
                 const val = parseInt(a.answer_text);
-                let stars = '<div class="stars-display">';
+                let stars = '<div class="sr-stars">';
                 for (let i = 1; i <= 5; i++) {
                     const filled = i <= val;
-                    stars += `<svg width="18" height="18" viewBox="0 0 24 24" fill="${filled?'#F59E0B':'none'}" stroke="${filled?'#F59E0B':'#D1D5DB'}" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
+                    stars += `<svg width="20" height="20" viewBox="0 0 24 24" fill="${filled?'#c8542b':'none'}" stroke="${filled?'#c8542b':'#e8dcc9'}" stroke-width="1.5"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`;
                 }
-                stars += '</div>';
-                html += `<div class="answer-val">${stars} <span style="font-size:.82rem;color:#6B7280;margin-left:4px">${val}/5</span></div>`;
+                stars += `<span style="font-size:.85rem;color:var(--text-2);margin-left:8px">${val}/5</span></div>`;
+                html += `<div class="sr-answer-val">${stars}</div>`;
             } else if (a.option_labels && a.option_labels.length) {
-                html += `<div class="answer-val">${a.option_labels.map(l => hesc(l)).join(', ')}</div>`;
+                html += `<div class="sr-answer-val">${a.option_labels.map(l => hesc(l)).join(', ')}</div>`;
             } else if (a.answer_text) {
-                html += `<div class="answer-val" style="white-space:pre-wrap">${hesc(a.answer_text)}</div>`;
+                html += `<div class="sr-answer-val" style="white-space:pre-wrap">${hesc(a.answer_text)}</div>`;
             } else {
-                html += `<div class="answer-val" style="color:#9CA3AF">–</div>`;
+                html += `<div class="sr-answer-val" style="color:var(--text-2)">–</div>`;
             }
             html += '</div>';
         });
@@ -360,7 +389,7 @@ function renderDetail(data) {
 }
 
 function closeModal() {
-    document.getElementById('detail-modal').classList.remove('open');
+    document.getElementById('detail-modal').style.display = 'none';
 }
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
