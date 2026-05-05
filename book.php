@@ -70,10 +70,34 @@ $apiBase = BASE_PATH . '/api/book.php';
     <header class="bg-white border-b border-sage-light px-4 py-4">
         <div class="max-w-lg mx-auto flex items-center gap-3">
             <div class="w-8 h-8 bg-forest rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0">R</div>
-            <div>
-                <div id="rest-name" class="font-bold text-forest text-sm"><?= t('common.loading') ?></div>
+            <div class="flex-1 min-w-0">
+                <div id="rest-name" class="font-bold text-forest text-sm truncate"><?= t('common.loading') ?></div>
                 <div class="text-xs text-forest/50"><?= t('book.subtitle') ?></div>
             </div>
+            <!-- Lang switcher -->
+            <details class="relative" id="lang-switcher">
+                <summary class="cursor-pointer list-none px-2 py-1.5 rounded-md hover:bg-cream-dark text-xs font-semibold text-forest flex items-center gap-1" style="user-select:none">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+                    <?= strtoupper(get_lang()) ?>
+                </summary>
+                <div class="absolute right-0 top-full mt-1 bg-white border border-sage-light rounded-lg shadow-lg overflow-hidden z-30" style="min-width:140px">
+                    <?php
+                    $_curUrl = strtok($_SERVER['REQUEST_URI'] ?? '/', '?');
+                    $_curQs  = $_GET; unset($_curQs['lang']);
+                    $_langNames = ['sl'=>'Slovenščina','en'=>'English','de'=>'Deutsch','it'=>'Italiano','fr'=>'Français','hr'=>'Hrvatski','es'=>'Español','pt'=>'Português'];
+                    foreach ($_langNames as $_lc => $_label):
+                        $_qs = array_merge($_curQs, ['lang' => $_lc]);
+                        $_href = $_curUrl . '?' . http_build_query($_qs);
+                        $_isCurrent = $_lc === get_lang();
+                    ?>
+                        <a href="<?= htmlspecialchars($_href, ENT_QUOTES) ?>"
+                           class="block px-3 py-2 text-sm hover:bg-cream-dark <?= $_isCurrent ? 'font-semibold text-forest bg-cream' : 'text-forest/70' ?>">
+                            <span class="inline-block w-7 text-xs text-forest/50 font-bold tracking-wider"><?= strtoupper($_lc) ?></span>
+                            <?= $_label ?>
+                        </a>
+                    <?php endforeach; ?>
+                </div>
+            </details>
         </div>
     </header>
 
@@ -406,6 +430,7 @@ $apiBase = BASE_PATH . '/api/book.php';
 <script>
 const TOKEN   = <?= json_encode($token) ?>;
 const API_URL = <?= json_encode(APP_URL . BASE_PATH . '/api/book.php') ?>;
+const USER_LANG = <?= json_encode(get_lang()) ?>;
 
 // ── i18n ──────────────────────────────────────────────────────
 const __T__ = <?= json_encode(get_lang_strings(), JSON_UNESCAPED_UNICODE) ?>;
@@ -887,6 +912,7 @@ async function submitWaitlist() {
                 email,
                 phone:       phone || '',
                 gdpr_consent: true,
+                lang:        USER_LANG,
             }),
         });
         const json = await res.json();
@@ -1020,6 +1046,7 @@ document.getElementById('btn-submit').onclick = async () => {
                     last_name:    lastName,
                     email, phone,
                     gdpr_consent: true,
+                    lang:         USER_LANG,
                 }),
             });
             const json = await res.json();
@@ -1050,6 +1077,7 @@ document.getElementById('btn-submit').onclick = async () => {
                 custom_fields: customFields,
                 gdpr_consent: true,
                 marketing_consent: marketing ? true : false,
+                lang: USER_LANG,
             }),
         });
         const json = await res.json();

@@ -91,19 +91,59 @@ function lang_days_js(): string {
     return json_encode($out, JSON_UNESCAPED_UNICODE);
 }
 
+/**
+ * Detektira preferiran jezik uporabnika iz HTTP Accept-Language headerja.
+ * Format vhoda: "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7"
+ * Vrne enega od podprtih jezikov ali 'en' (mednarodni default), nikoli 'sl'
+ * — slovenščina je default samo za uporabnike z znanim sl Accept-Language.
+ *
+ * Opcijsko (zakomentirano): IP geolokacija prek MaxMind/Cloudflare CF-IPCountry
+ * headerja. Browser language je zanesljivejša, ker spoštuje user preferenco
+ * (turist iz Italije v ZDA hoče italijansko).
+ */
+function detect_user_lang(): string {
+    static $allowed = ['sl', 'en', 'de', 'it', 'fr', 'hr', 'es', 'pt'];
+    $accept = $_SERVER['HTTP_ACCEPT_LANGUAGE'] ?? '';
+    if ($accept === '') return 'en';
+
+    $tags = [];
+    foreach (explode(',', $accept) as $entry) {
+        $parts = explode(';', trim($entry));
+        $code  = strtolower(trim($parts[0]));
+        $q     = 1.0;
+        foreach (array_slice($parts, 1) as $p) {
+            if (preg_match('/q\s*=\s*([0-9.]+)/', $p, $m)) $q = (float)$m[1];
+        }
+        $primary = explode('-', $code)[0]; // it-IT → it
+        if (in_array($primary, $allowed, true)) {
+            if (!isset($tags[$primary]) || $tags[$primary] < $q) $tags[$primary] = $q;
+        }
+    }
+    if (empty($tags)) return 'en';
+    arsort($tags);
+    return array_key_first($tags);
+}
+
 // ── Auto-init ──────────────────────────────────────────────────────────────────
-// Prioriteta: GET ?lang= (za switcher) > cookie > session > privzeto 'sl'
-$_rz_lang_init = 'sl';
+// Prioriteta: GET ?lang= (eksplicitni switcher) > cookie > session > Accept-Language > 'sl' fallback
+$_rz_lang_init = null;
 if (!empty($_GET['lang']) && in_array($_GET['lang'], ['sl', 'en', 'de', 'it', 'fr', 'hr', 'es', 'pt'], true)) {
     $_rz_lang_init = $_GET['lang'];
     setcookie('rzlang', $_rz_lang_init, time() + 365 * 24 * 3600, '/');
     if (session_status() === PHP_SESSION_ACTIVE) {
         $_SESSION['lang'] = $_rz_lang_init;
     }
-} elseif (!empty($_COOKIE['rzlang'])) {
+} elseif (!empty($_COOKIE['rzlang']) && in_array($_COOKIE['rzlang'], ['sl', 'en', 'de', 'it', 'fr', 'hr', 'es', 'pt'], true)) {
     $_rz_lang_init = (string)$_COOKIE['rzlang'];
-} elseif (!empty($_SESSION['lang'])) {
+} elseif (!empty($_SESSION['lang']) && in_array($_SESSION['lang'], ['sl', 'en', 'de', 'it', 'fr', 'hr', 'es', 'pt'], true)) {
     $_rz_lang_init = (string)$_SESSION['lang'];
+} else {
+    // Auto-detect iz brskalnika; persist v cookie da se na naslednjem requestu
+    // ne ponovi detekcija (in da je konsistentno s switcherjem).
+    $_rz_lang_init = detect_user_lang();
+    if ($_rz_lang_init !== 'sl' || !empty($_SERVER['HTTP_ACCEPT_LANGUAGE'])) {
+        setcookie('rzlang', $_rz_lang_init, time() + 365 * 24 * 3600, '/');
+    }
 }
 _rz_load_lang($_rz_lang_init);
 unset($_rz_lang_init);
