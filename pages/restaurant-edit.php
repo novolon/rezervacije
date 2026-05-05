@@ -516,33 +516,34 @@ require_once '../includes/html_head.php';
                         </div>
                         <label class="toggle-wrap" style="cursor:pointer;margin:0;flex-shrink:0">
                             <span class="toggle">
-                                <input type="checkbox" id="r-lang-switcher" <?= $_curLangSwitcher ? 'checked' : '' ?>>
+                                <input type="checkbox" id="r-lang-switcher" <?= $_curLangSwitcher ? 'checked' : '' ?>
+                                       onchange="document.getElementById('r-avail-langs-block').style.display=this.checked?'flex':'none'">
                                 <span class="toggle-track"></span>
                             </span>
                         </label>
                     </div>
 
-                    <div id="r-langs-block" style="margin-top:16px">
-                        <div style="display:flex;flex-direction:column;gap:8px">
-                            <label style="font-size:.825rem;color:var(--color-muted);font-weight:600">Razpoložljivi jeziki (kateri so v switcherju):</label>
-                            <div style="display:flex;flex-wrap:wrap;gap:8px">
-                                <?php foreach ($_langLabels as $_lc => $_label): ?>
-                                    <label class="rz-tag-chip" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1.5px solid var(--color-border);border-radius:999px;font-size:.825rem;cursor:pointer;background:#fff">
-                                        <input type="checkbox" name="r-avail-lang[]" value="<?= $_lc ?>" <?= in_array($_lc, $_curAvailLangs, true) ? 'checked' : '' ?>>
-                                        <span><?= strtoupper($_lc) ?> · <?= $_label ?></span>
-                                    </label>
-                                <?php endforeach; ?>
-                            </div>
+                    <!-- Razpoložljivi jeziki: vidno samo če switcher omogočen -->
+                    <div id="r-avail-langs-block" style="margin-top:16px;display:<?= $_curLangSwitcher ? 'flex' : 'none' ?>;flex-direction:column;gap:8px">
+                        <label style="font-size:.825rem;color:var(--color-muted);font-weight:600">Razpoložljivi jeziki (kateri so v switcherju):</label>
+                        <div style="display:flex;flex-wrap:wrap;gap:8px">
+                            <?php foreach ($_langLabels as $_lc => $_label): ?>
+                                <label class="rz-tag-chip" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1.5px solid var(--color-border);border-radius:999px;font-size:.825rem;cursor:pointer;background:#fff">
+                                    <input type="checkbox" name="r-avail-lang[]" value="<?= $_lc ?>" <?= in_array($_lc, $_curAvailLangs, true) ? 'checked' : '' ?>>
+                                    <span><?= strtoupper($_lc) ?> · <?= $_label ?></span>
+                                </label>
+                            <?php endforeach; ?>
                         </div>
+                    </div>
 
-                        <div class="admin-field" style="padding:14px 0 0">
-                            <label>Primarni jezik (privzet ob prvem obisku, in edini ko switcher onemogočen)</label>
-                            <select id="r-primary-lang" style="border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none;min-width:220px">
-                                <?php foreach ($_langLabels as $_lc => $_label): ?>
-                                    <option value="<?= $_lc ?>" <?= $_curPrimaryLang === $_lc ? 'selected' : '' ?>><?= strtoupper($_lc) ?> · <?= $_label ?></option>
-                                <?php endforeach; ?>
-                            </select>
-                        </div>
+                    <!-- Primarni jezik: vedno viden -->
+                    <div class="admin-field" style="padding:14px 0 0">
+                        <label>Primarni jezik <span style="font-weight:400;color:var(--color-muted);font-size:.78rem">(privzet ob prvem obisku; edini če switcher onemogočen)</span></label>
+                        <select id="r-primary-lang" style="border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none;min-width:220px">
+                            <?php foreach ($_langLabels as $_lc => $_label): ?>
+                                <option value="<?= $_lc ?>" <?= $_curPrimaryLang === $_lc ? 'selected' : '' ?>><?= strtoupper($_lc) ?> · <?= $_label ?></option>
+                            <?php endforeach; ?>
+                        </select>
                     </div>
                 </div>
   </div>
@@ -1484,10 +1485,18 @@ async function saveBookingSettings(triggerBtn) {
     allBtns.forEach(b => { b.disabled = true; b.textContent = '...'; });
     // Lang nastavitve
     const langSwitcher = document.getElementById('r-lang-switcher')?.checked ? 1 : 0;
-    const availLangs   = Array.from(document.querySelectorAll('input[name="r-avail-lang[]"]:checked')).map(cb => cb.value);
     const primaryLang  = document.getElementById('r-primary-lang')?.value || 'sl';
-    if (availLangs.length === 0) { showPageErr('Izberi vsaj en jezik.'); _reenableBookingBtns(); return; }
-    if (availLangs.indexOf(primaryLang) === -1) { showPageErr('Primarni jezik mora biti med razpoložljivimi.'); _reenableBookingBtns(); return; }
+    let availLangs;
+    if (langSwitcher) {
+        // Switcher omogočen — uporabi izbrane checkbox-e iz UI
+        availLangs = Array.from(document.querySelectorAll('input[name="r-avail-lang[]"]:checked')).map(cb => cb.value);
+        if (availLangs.length === 0) { showPageErr('Izberi vsaj en jezik za switcher.'); _reenableBookingBtns(); return; }
+        // Primarni mora biti med razpoložljivimi — če ni, ga avtomatsko dodaj
+        if (availLangs.indexOf(primaryLang) === -1) availLangs.unshift(primaryLang);
+    } else {
+        // Switcher onemogočen — available = samo primary (gostje ne morejo izbrati drugih)
+        availLangs = [primaryLang];
+    }
     try {
         await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}`, {
             booking_enabled: enabled, booking_slot_interval: interval,
