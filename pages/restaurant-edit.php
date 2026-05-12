@@ -2956,6 +2956,26 @@ function loadTables() { tablesLoaded = true; }
         try { preview.contentWindow.postMessage({ source: 'rz-branding', ...msg }, '*'); } catch (e) {}
     }
 
+    // Iframe URL helper — vključi ?p= / ?s= / ?hb= za nešifrirane preview override-e
+    function buildPreviewUrl(values) {
+        const base = '<?= BASE_PATH ?>/book.php?t=<?= htmlspecialchars($rest['booking_token']) ?>&preview=1';
+        const qs = [];
+        if (values?.primary)   qs.push('p=' + encodeURIComponent(values.primary));
+        if (values?.secondary) qs.push('s=' + encodeURIComponent(values.secondary));
+        if (values?.hide !== undefined) qs.push('hb=' + (values.hide ? '1' : '0'));
+        return base + (qs.length ? '&' + qs.join('&') : '');
+    }
+
+    // Debounced iframe reload — Tailwind v3 z CSS vars ne podpira opacity variantov,
+    // zato za točen rendering po spremembi barv reloadamo iframe z novimi parametri.
+    let _reloadTimer = null;
+    function schedulePreviewReload(delay) {
+        clearTimeout(_reloadTimer);
+        _reloadTimer = setTimeout(() => {
+            if (preview) preview.src = buildPreviewUrl(getValues());
+        }, delay || 500);
+    }
+
     // Sync color picker <-> hex text input
     function bindColor(picker, hex) {
         const p = document.getElementById(picker);
@@ -2979,8 +2999,11 @@ function loadTables() { tablesLoaded = true; }
 
     function livePreview() {
         const v = getValues();
+        // Takojšen update preko postMessage (deluje za CSS-var rules in nezagrnjene Tailwind class-e)
         postPreview({ type: 'colors', primary: v.primary, secondary: v.secondary });
         postPreview({ type: 'hide', hide: v.hide });
+        // + zakasnjen reload za Tailwind-compiled barve (terracotta, forest opacity variante)
+        schedulePreviewReload(600);
     }
 
     document.getElementById('brand-colors-reset')?.addEventListener('click', () => {

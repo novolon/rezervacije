@@ -229,12 +229,12 @@
   "book.err_server": "Napaka strežnika.",
   "book.err_field_required": "Polje \"{label}\" je obvezno.",
   "book.confirm_auto_icon": "✅",
-  "book.confirm_pending_icon": "📩",
+  "book.confirm_pending_icon": "",
   "book.confirm_auto_title": "Rezervacija potrjena!",
   "book.confirm_pending_title": "Prošnja sprejeta!",
   "book.confirm_auto_msg": "Vaša rezervacija je potrjena. Poslali smo vam potrditveni email.",
   "book.confirm_pending_msg": "Vaša prošnja za rezervacijo je bila sprejeta. Ko jo potrdimo, vas obvestimo po emailu.",
-  "book.waitlist_confirm_icon": "✉️",
+  "book.waitlist_confirm_icon": "",
   "book.waitlist_confirm_title": "Vpisani ste na čakalno listo!",
   "book.waitlist_confirm_msg": "Ko se sprosti termin, vas bomo obvestili po emailu. Imel/a boste 2 uri časa za potrditev.",
   "book.guest_label_1": "gost",
@@ -1880,7 +1880,6 @@
   "help_chat.error": "Napaka pri komunikaciji",
   "help_chat.footer": "Pomoč ponuja virtualna asistentka Mia",
   "nav.help": "Pomoč",
-
   "landing_aff.meta_title": "Affiliate program – Rezble",
   "landing_aff.meta_description": "Postanite Rezble affiliate. Zaslužite {pct}% provizije za vsako priporočeno restavracijo, {months} mesecev za vsako naročnino.",
   "landing_aff.nav_logo_suffix": "/ Affiliate",
@@ -2003,7 +2002,6 @@
   "landing_aff.footer_cookies_policy": "Politika piškotkov",
   "landing_aff.footer_cookies_settings": "Cookie nastavitve",
   "landing_aff.footer_copyright": "© {year} Rezble. Vse pravice pridržane.",
-
   "aff.brand_suffix": "/ Affiliate",
   "aff.role": "Affiliate",
   "aff.logout": "Odjava",
@@ -2018,7 +2016,6 @@
   "aff.common.save": "Shrani spremembe",
   "aff.common.saving": "Shranjujem…",
   "aff.common.required_marker": "*",
-
   "aff.materials.page_title": "Materiali – Affiliate",
   "aff.materials.title": "Materiali za promocijo",
   "aff.materials.subtitle": "Logotipi, social media slike in banner reklame – pripravljeno za neposredno uporabo.",
@@ -2041,7 +2038,6 @@
   "aff.materials.empty_category": "V tej kategoriji še ni materiala.",
   "aff.materials.download": "Prenesi",
   "aff.materials.copy_url": "Kopiraj URL",
-
   "aff.login.page_title": "Prijava – Affiliate",
   "aff.login.title": "Prijava",
   "aff.login.subtitle": "Dostop do affiliate dashboarda",
@@ -2057,7 +2053,6 @@
   "aff.login.err_rejected": "Vaša prijava je bila zavrnjena.",
   "aff.login.err_server": "Napaka strežnika. Poskusite znova.",
   "aff.login.err_suspended": "Vaš račun je bil suspendiran. Kontaktirajte nas za pomoč.",
-
   "aff.register.page_title": "Registracija – Affiliate",
   "aff.register.title": "Postanite affiliate",
   "aff.register.subtitle": "Zaslužite 20% provizije za vsako priporočeno restavracijo",
@@ -2088,7 +2083,6 @@
   "aff.register.err_terms": "Sprejeti morate pogoje programa.",
   "aff.register.err_dup": "Email naslov je že registriran.",
   "aff.register.err_server": "Napaka strežnika. Preverite, ali so bili SQL migracije izvedene, in poskusite znova.",
-
   "aff.forgot.page_title": "Pozabljeno geslo – Affiliate",
   "aff.forgot.title": "Pozabljeno geslo",
   "aff.forgot.subtitle": "Vnesite email in poslali vam bomo navodila za ponastavitev.",
@@ -2103,7 +2097,6 @@
   "aff.forgot.email_intro": "Klikni spodnji gumb za ponastavitev gesla:",
   "aff.forgot.email_btn": "Ponastavi geslo →",
   "aff.forgot.email_validity": "Povezava velja 1 uro. Če niste zahtevali ponastavitve, ignorirajte to sporočilo.",
-
   "aff.reset.page_title": "Novo geslo – Affiliate",
   "aff.reset.title": "Novo geslo",
   "aff.reset.password": "Novo geslo",
@@ -2115,7 +2108,6 @@
   "aff.reset.request_new": "Zahtevaj novo ponastavitev",
   "aff.reset.err_pwlen": "Geslo mora imeti vsaj 8 znakov.",
   "aff.reset.err_pwmatch": "Gesli se ne ujemata.",
-
   "aff.verify.page_title": "Potrditev emaila – Affiliate",
   "aff.verify.success_title": "Email potrjen!",
   "aff.verify.success_msg": "Email potrjen! Vaša prijava čaka na odobritev. Ko jo pregledamo, vas obvestimo.",
@@ -2124,7 +2116,6 @@
   "aff.verify.missing_token": "Manjka token.",
   "aff.verify.server_error": "Napaka strežnika. Poskusite znova.",
   "aff.verify.cta_login": "Na prijavo →",
-
   "aff.dashboard.page_title": "Pregled – Affiliate",
   "aff.dashboard.title": "Pregled",
   "aff.dashboard.subtitle": "Vaš affiliate dashboard",
@@ -2143,7 +2134,6 @@
   "aff.dashboard.discount_combo_label": "Kombinirani link (atribucija + popust):",
   "aff.dashboard.discount_redemptions": "Unovčenj",
   "aff.dashboard.discount_total_off": "Skupni popust",
-
   "aff.links.page_title": "Povezave & kode – Affiliate",
   "aff.links.title": "Povezave & kode",
   "aff.links.subtitle": "Vaše referenčne povezave, QR koda in marketinški materiali",
@@ -2176,7 +2166,6 @@
   "aff.links.text_long_discount_line": "Z mojo priporočilno kodo dobiš {pct}% popust na naročnino.\n\n",
   "aff.links.qr_modal_title": "QR koda – referenčna povezava",
   "aff.links.qr_modal_save_hint": "Shranite sliko z desnim klikom → Shrani sliko",
-
   "aff.referrals.page_title": "Priporočeni – Affiliate",
   "aff.referrals.title": "Priporočeni",
   "aff.referrals.subtitle": "Seznam vaših priporočenih (agregatni podatki, brez osebnih podatkov)",
@@ -2199,7 +2188,6 @@
   "aff.referrals.attr_cookie": "Cookie",
   "aff.referrals.attr_code": "Koda",
   "aff.referrals.attr_url": "URL",
-
   "aff.earnings.page_title": "Zaslužki – Affiliate",
   "aff.earnings.title": "Zaslužki",
   "aff.earnings.subtitle": "Pregled provizij in izplačil",
@@ -2232,7 +2220,6 @@
   "aff.earnings.loading": "Nalaganje…",
   "aff.earnings.error": "Napaka.",
   "aff.earnings.page_label": "Stran:",
-
   "aff.profile.page_title": "Profil – Affiliate",
   "aff.profile.title": "Profil",
   "aff.profile.subtitle": "Osebni podatki, bančne informacije in varnost",
@@ -2268,7 +2255,6 @@
   "aff.profile.status_suspended": "Suspendiran",
   "aff.profile.yes": "Da",
   "aff.profile.no": "Ne",
-
   "aff.terms.page_title": "Pogoji affiliate programa",
   "aff.terms.back_btn": "Nazaj na registracijo",
   "aff.terms.title": "Pogoji affiliate programa",

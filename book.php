@@ -69,18 +69,27 @@ $apiBase = BASE_PATH . '/api/book.php';
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <?php
-    $_bkPrimary   = htmlspecialchars($_bkBranding['primary']   ?? '#1B4332', ENT_QUOTES);
-    $_bkSecondary = htmlspecialchars($_bkBranding['secondary'] ?? '#C4704B', ENT_QUOTES);
+    $_bkPrimary   = $_bkBranding['primary']   ?? '#1B4332';
+    $_bkSecondary = $_bkBranding['secondary'] ?? '#C4704B';
+    // Preview mode lahko overrida barve preko ?p= in ?s= (samo preview, NE produkcija)
+    if (!empty($_GET['preview'])) {
+        if (!empty($_GET['p']) && preg_match('/^#[0-9A-Fa-f]{6}$/', $_GET['p'])) $_bkPrimary   = $_GET['p'];
+        if (!empty($_GET['s']) && preg_match('/^#[0-9A-Fa-f]{6}$/', $_GET['s'])) $_bkSecondary = $_GET['s'];
+        // Hide branding override
+        if (isset($_GET['hb'])) {
+            $_bkBranding['hide_branding'] = $_GET['hb'] === '1';
+        }
+    }
+    $_bkPrimary   = htmlspecialchars($_bkPrimary,   ENT_QUOTES);
+    $_bkSecondary = htmlspecialchars($_bkSecondary, ENT_QUOTES);
     ?>
     <script>
-    // Tailwind palete OSTANEJO konstantne (forest/terracotta). Brand barva se aplicira
-    // CILJNO na header in aktivni korak (glej spodaj v <style>).
     tailwind.config = {
         theme: { extend: {
             colors: {
-                forest:    { DEFAULT: '#1B4332', light: '#2D6A4F', dark: '#081C15' },
+                forest:    { DEFAULT: '<?= $_bkPrimary ?>', light: '#2D6A4F', dark: '#081C15' },
                 cream:     { DEFAULT: '#FAFAF5', dark: '#F0F0E6' },
-                terracotta:{ DEFAULT: '#C4704B', hover: '#A85D3B' },
+                terracotta:{ DEFAULT: '<?= $_bkSecondary ?>', hover: '#A85D3B' },
                 sage:      { DEFAULT: '#A3B18A', light: '#DAD7CD' },
             },
             fontFamily: { sans: ['"DM Sans"', 'sans-serif'] },
@@ -96,9 +105,9 @@ $apiBase = BASE_PATH . '/api/book.php';
         .step { display: none; }
         .step.active { display: block; }
         .guest-btn { transition: all .15s; }
-        .guest-btn.selected { background: #1B4332; color: #fff; border-color: #1B4332; }
+        .guest-btn.selected { background: var(--brand-primary); color: #fff; border-color: var(--brand-primary); }
         .slot-btn { transition: all .15s; }
-        .slot-btn.selected { background: #1B4332; color: #fff; border-color: #1B4332; }
+        .slot-btn.selected { background: var(--brand-primary); color: #fff; border-color: var(--brand-primary); }
         .slot-btn:disabled { opacity: .35; cursor: not-allowed; }
         .slot-btn.waitlist { border-color: #F59E0B; color: #92400E; background: #FFFBEB; }
         .slot-btn.waitlist:hover { background: #FEF3C7; border-color: #D97706; }
@@ -108,12 +117,12 @@ $apiBase = BASE_PATH . '/api/book.php';
                    border-radius: 9999px; font-size: .875rem; font-weight: 500; cursor: pointer;
                    transition: all .15s; }
         .cal-day.available:hover { background: #F0F0E6; }
-        .cal-day.selected { background: #1B4332; color: #fff; }
+        .cal-day.selected { background: var(--brand-primary); color: #fff; }
         .cal-day.disabled { color: #DAD7CD; cursor: default; pointer-events: none; }
-        .cal-day.today { font-weight: 700; color: #C4704B; }
+        .cal-day.today { font-weight: 700; color: var(--brand-secondary); }
         .cal-day.today.selected { color: #fff; }
 
-        /* Brand primary se uporablja SAMO na header (logo placeholder + ime restavracije) in aktivnem koraku */
+        /* Header + progress aktivni step uporabljata brand-primary (z !important da premagamo Tailwind) */
         #rest-initial { background: var(--brand-primary) !important; }
         #rest-name    { color: var(--brand-primary) !important; }
         .step-num-active { background: var(--brand-primary) !important; color: #fff !important; }
@@ -525,16 +534,20 @@ posthog_render_init([
         </div>
     </main>
 
-    <?php if (empty($_bkBranding['hide_branding'])): ?>
     <?php
         $_attribLabels = [
             'sl' => 'Brez skrbi z', 'en' => 'Powered by', 'de' => 'Bereitgestellt von',
             'es' => 'Funciona con', 'fr' => 'Propulsé par', 'hr' => 'Pokreće',
             'it' => 'Powered by',  'pt' => 'Com tecnologia',
         ];
-        $_attribLabel = $_attribLabels[get_lang()] ?? $_attribLabels['en'];
+        $_attribLabel  = $_attribLabels[get_lang()] ?? $_attribLabels['en'];
+        $_hideAttrib   = !empty($_bkBranding['hide_branding']);
+        $_previewMode  = !empty($_GET['preview']);
+        // V preview vedno renderiramo (skritje preko inline style), da lahko JS toggle pokaže/skrije.
+        // V produkciji: če hide_branding=1, element sploh ne pride do HTML-ja.
+        if (!$_hideAttrib || $_previewMode):
     ?>
-    <div class="rz-attribution"><?= htmlspecialchars($_attribLabel) ?> <a href="https://www.rezble.com" target="_blank" rel="noopener">Rezble</a></div>
+    <div class="rz-attribution"<?= $_hideAttrib ? ' style="display:none"' : '' ?>><?= htmlspecialchars($_attribLabel) ?> <a href="https://www.rezble.com" target="_blank" rel="noopener">Rezble</a></div>
     <?php endif; ?>
 </div>
 
