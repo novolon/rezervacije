@@ -8,15 +8,27 @@
  */
 
 require_once __DIR__ . '/email_provider.php';
+require_once __DIR__ . '/branding_helper.php';
 
 // Override config (thread-local).
 $GLOBALS['_mailer_override'] = null;
+$GLOBALS['_mailer_branding'] = null;
 
 function mailer_use_restaurant(PDO $pdo, int $restId): void {
     $GLOBALS['_mailer_override'] = get_restaurant_email_config($pdo, $restId);
+    // Naloži tudi branding (za skritje "Powered by Rezble" v footer-u, če je premium toggle).
+    $stmt = $pdo->prepare("SELECT id, owner_id, hide_branding FROM restaurants WHERE id = ?");
+    $stmt->execute([$restId]);
+    $row = $stmt->fetch();
+    $GLOBALS['_mailer_branding'] = $row ? get_restaurant_branding($pdo, $row) : null;
 }
 function mailer_use_default(): void {
     $GLOBALS['_mailer_override'] = null;
+    $GLOBALS['_mailer_branding'] = null;
+}
+function mailer_branding_hidden(): bool {
+    $b = $GLOBALS['_mailer_branding'] ?? null;
+    return $b !== null && !empty($b['hide_branding']);
 }
 
 function send_email(string $to, string $subject, string $html, string $text = ''): bool {
@@ -198,9 +210,21 @@ function _email_render_footer(string $footerNote, array $footerExtra, string $ye
     $type     = $footerExtra['type'] ?? 'default';
     $rezbleUrl = 'https://www.rezble.com';
     $bookedUrl = 'https://www.rezble.com/booked';
+    $hideRezble = function_exists('mailer_branding_hidden') && mailer_branding_hidden();
+    $lang       = $footerExtra['lang'] ?? 'sl';
+
+    // "Powered by Rezble" line — pridem v vse footer-je razen če je hide_branding=1 (Premium).
+    $poweredByLabels = [
+        'sl'=>'Brez skrbi z','en'=>'Powered by','de'=>'Bereitgestellt von',
+        'es'=>'Funciona con','fr'=>'Propulsé par','hr'=>'Pokreće',
+        'it'=>'Powered by','pt'=>'Com tecnologia',
+    ];
+    $poweredBy = $poweredByLabels[$lang] ?? $poweredByLabels['en'];
+    $rezbleLine = $hideRezble ? '' :
+        "<p style='margin:8px 0 0;font-size:11px;color:#8a948e;line-height:1.5'>{$poweredBy} "
+      . "<a href='{$rezbleUrl}' style='color:#8a948e;text-decoration:none;font-weight:600;border-bottom:1px solid #d4d4d4' target='_blank'>Rezble</a></p>";
 
     if ($type === 'guest') {
-        $lang        = $footerExtra['lang']         ?? 'sl';
         $restName    = htmlspecialchars((string)($footerExtra['rest_name']    ?? ''), ENT_QUOTES);
         $restAddress = htmlspecialchars((string)($footerExtra['rest_address'] ?? ''), ENT_QUOTES);
         $restEmail   = htmlspecialchars((string)($footerExtra['rest_email']   ?? ''), ENT_QUOTES);
@@ -220,11 +244,12 @@ function _email_render_footer(string $footerNote, array $footerExtra, string $ye
 
         return "<p style='margin:0 0 6px;font-size:12.5px;color:#5a655e;line-height:1.5;font-weight:600'>{$line1}</p>"
              . "<p style='margin:0 0 4px;font-size:11.5px;color:#8a948e;line-height:1.55'>{$reasonText}</p>"
-             . "<p style='margin:0 0 10px;font-size:11.5px;color:#8a948e;line-height:1.55'>"
+             . "<p style='margin:0 0 4px;font-size:11.5px;color:#8a948e;line-height:1.55'>"
              . "<a href='{$privacyUrl}' style='color:#8a948e;text-decoration:underline'>{$privacyLabel}</a>"
              . $contactBlock
              . "</p>"
-             . "<p style='margin:0;font-size:11px;color:#8a948e'>&copy; {$year} <a href='{$rezbleUrl}' style='color:#8a948e;text-decoration:none' target='_blank'>Rezble</a></p>";
+             . "<p style='margin:0;font-size:11px;color:#8a948e'>&copy; {$year} {$restName}</p>"
+             . $rezbleLine;
     }
 
     if ($type === 'booked') {
@@ -235,6 +260,8 @@ function _email_render_footer(string $footerNote, array $footerExtra, string $ye
     }
 
     // Default: minimalen footer (za auth, billing, affiliate, gdpr emaile)
+    // Default tip se uporablja za platform-level emaile (registracije, billing, GDPR) —
+    // pri teh hide_branding NE velja, ker so to Rezble emaili, ne restaurant-jevi.
     $extraNote = $footerNote !== '' ? "<p style='margin:0 0 4px;font-size:12.5px;color:#5a655e;line-height:1.5'>{$footerNote}</p>" : '';
     return $extraNote
          . "<p style='margin:0;font-size:11.5px;color:#8a948e'>&copy; {$year} "

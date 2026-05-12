@@ -71,7 +71,7 @@ function rezble_attribution_html(bool $hideBranding, string $lang = 'sl'): strin
     $label = $labels[$lang] ?? $labels['en'];
     return '<div class="rz-attribution" style="text-align:center;font-size:11px;color:rgba(0,0,0,.4);padding:10px 14px;line-height:1.4">'
         . htmlspecialchars($label) . ' '
-        . '<a href="https://rezble.com" target="_blank" rel="noopener" style="color:inherit;font-weight:600;text-decoration:none;border-bottom:1px solid rgba(0,0,0,.2)">Rezble</a>'
+        . '<a href="https://www.rezble.com" target="_blank" rel="noopener" style="color:inherit;font-weight:600;text-decoration:none;border-bottom:1px solid rgba(0,0,0,.2)">Rezble</a>'
         . '</div>';
 }
 

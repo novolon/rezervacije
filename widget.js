@@ -838,17 +838,17 @@ input,textarea{font-family:inherit}
 .w-attrib a{color:var(--f2);font-weight:600;text-decoration:none;border-bottom:1px solid var(--sl)}
 .w-attrib a:hover{color:var(--f);border-bottom-color:var(--f3)}
 
-/* Header */
+/* Header — uporablja primarno barvo brandinga (z fallback na forest) */
 .hdr{background:var(--wh);border-bottom:1px solid var(--sl);padding:13px 18px;display:flex;align-items:center;gap:11px}
-.logo{width:34px;height:34px;background:var(--f);border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;flex-shrink:0}
-.rname{font-weight:700;font-size:13px;color:var(--f)}
+.logo{width:34px;height:34px;background:var(--brand-p,var(--f));border-radius:9px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;flex-shrink:0}
+.rname{font-weight:700;font-size:13px;color:var(--brand-p,var(--f))}
 .rsub{font-size:11px;color:var(--f3);margin-top:1px}
 
-/* Progress */
+/* Progress — aktivni korak uporablja brand primary */
 .prog{background:var(--wh);border-bottom:1px solid var(--sl);padding:11px 18px;display:flex;align-items:center}
 .pi{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--f3)}
 .pi .n{width:20px;height:20px;border-radius:50%;background:var(--sl);color:var(--f3);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;transition:all .2s;flex-shrink:0}
-.pi.active{color:var(--f)}.pi.active .n{background:var(--f);color:#fff}
+.pi.active{color:var(--brand-p,var(--f))}.pi.active .n{background:var(--brand-p,var(--f));color:#fff}
 .pi.done .n{background:var(--sg);color:#fff}
 .ps{flex:1;height:1px;background:var(--sl);margin:0 5px}
 
@@ -1142,7 +1142,7 @@ input,textarea{font-family:inherit}
 
     </div>
   </div>
-  <div id="w-attrib" class="w-attrib">${wt('powered_by')} <a href="https://rezble.com" target="_blank" rel="noopener">Rezble</a></div>
+  <div id="w-attrib" class="w-attrib">${wt('powered_by')} <a href="https://www.rezble.com" target="_blank" rel="noopener">Rezble</a></div>
 </div>`;
 
     shadow.appendChild(styleEl);
@@ -1243,17 +1243,14 @@ input,textarea{font-family:inherit}
             $('wgdpr-link').href = privacyUrl;
 
             // ── Premium branding (logo, barve, hide "by Rezble") ─────────
+            // Pomembno: primarna barva se uporabi SAMO za header (logo + ime)
+            // in oznako trenutnega koraka. Gumbi/koledar ohranijo privzeti forest.
             const branding = json.data.branding || {};
             if (branding.primary) {
-                const p = branding.primary;
-                host.style.setProperty('--f', p);
-                // Derived (transparency-based) tones za sekundarne UI elemente
-                host.style.setProperty('--f2', _hexToRgba(p, 0.55));
-                host.style.setProperty('--f3', _hexToRgba(p, 0.35));
+                host.style.setProperty('--brand-p', branding.primary);
             }
             if (branding.secondary) {
-                host.style.setProperty('--tr', branding.secondary);
-                host.style.setProperty('--th', _hexShade(branding.secondary, -0.12));
+                host.style.setProperty('--brand-s', branding.secondary);
             }
             if (branding.logo_url) {
                 const logoEl = $('wlogo');

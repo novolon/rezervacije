@@ -1010,7 +1010,7 @@ require_once '../includes/html_head.php';
                     </select>
                 </div>
 
-                <div class="admin-field-row" id="email-from-row">
+                <div class="admin-field-row" id="email-from-row" style="display:none">
                     <div class="admin-field">
                         <label><?= t('re.email_from_name') ?></label>
                         <input id="email-from-name" type="text" placeholder="<?= h($rest['name']) ?>">
@@ -2823,6 +2823,8 @@ function loadTables() { tablesLoaded = true; }
         const p = providerSel.value;
         mgFields.style.display   = p === 'mailgun' ? '' : 'none';
         smtpFields.style.display = p === 'smtp'    ? '' : 'none';
+        const fromRow = document.getElementById('email-from-row');
+        if (fromRow) fromRow.style.display = (p === 'default') ? 'none' : '';
     }
     providerSel?.addEventListener('change', updateProviderUI);
 
@@ -2895,7 +2897,7 @@ function loadTables() { tablesLoaded = true; }
             });
             const j = await r.json();
             if (!j.success) throw new Error(j.error || 'Napaka');
-            showSuccess(window.t('re.email_saved') || 'Shranjeno. Pošljite testni email za verifikacijo.');
+            showPageOk(window.t('re.email_saved') || 'Shranjeno. Pošljite testni email za verifikacijo.');
             document.getElementById('email-verified').style.display     = 'none';
             document.getElementById('email-not-verified').style.display = j.data.provider !== 'default' ? '' : 'none';
         } catch (err) {
@@ -2921,7 +2923,7 @@ function loadTables() { tablesLoaded = true; }
             });
             const j = await r.json();
             if (!j.success) throw new Error(j.error || 'Napaka');
-            showSuccess(window.t('re.email_test_sent') || 'Test poslan in verificiran.');
+            showPageOk(window.t('re.email_test_sent') || 'Test poslan in verificiran.');
             document.getElementById('email-verified').style.display     = '';
             document.getElementById('email-not-verified').style.display = 'none';
             document.getElementById('email-verified-at').textContent = new Date(j.data.verified_at).toLocaleString();
@@ -3003,11 +3005,11 @@ function loadTables() { tablesLoaded = true; }
                 brand_secondary: v.secondary || null,
                 hide_branding:   v.hide,
             });
-            showSuccess(window.t('common.saved') || 'Shranjeno.');
+            showPageOk(window.t('common.saved') || 'Shranjeno.');
             // Reload preview za pravo backend rendering
             if (preview) preview.src = preview.src;
         } catch (err) {
-            showError(err.message || 'Napaka pri shranjevanju.');
+            showPageErr(err.message || 'Napaka pri shranjevanju.');
         } finally {
             btn.disabled = false;
             btn.textContent = oldText;
@@ -3044,7 +3046,7 @@ function loadTables() { tablesLoaded = true; }
                 bindRemove();
                 // Reload preview iframe
                 const f = document.getElementById('brand-preview'); if (f) f.src = f.src;
-                showSuccess(window.t('common.saved') || 'Naloženo.');
+                showPageOk(window.t('common.saved') || 'Naloženo.');
             } catch (err) {
                 errBox.textContent = err.message;
                 errBox.style.display = 'block';
@@ -3062,9 +3064,9 @@ function loadTables() { tablesLoaded = true; }
                 const preview = document.getElementById('brand-logo-preview');
                 preview.innerHTML = `<span style="color:var(--ink-mute);font-size:13px">${window.t('re.brand_logo_empty') || 'Še ni naloženega logotipa.'}</span>`;
                 const f = document.getElementById('brand-preview'); if (f) f.src = f.src;
-                showSuccess(window.t('common.saved') || 'Odstranjeno.');
+                showPageOk(window.t('common.saved') || 'Odstranjeno.');
             } catch (err) {
-                showError(err.message || 'Napaka.');
+                showPageErr(err.message || 'Napaka.');
             }
         });
     }

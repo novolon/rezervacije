@@ -73,12 +73,14 @@ $apiBase = BASE_PATH . '/api/book.php';
     $_bkSecondary = htmlspecialchars($_bkBranding['secondary'] ?? '#C4704B', ENT_QUOTES);
     ?>
     <script>
+    // Tailwind palete OSTANEJO konstantne (forest/terracotta). Brand barva se aplicira
+    // CILJNO na header in aktivni korak (glej spodaj v <style>).
     tailwind.config = {
         theme: { extend: {
             colors: {
-                forest:    { DEFAULT: '<?= $_bkPrimary ?>', light: '#2D6A4F', dark: '#081C15' },
+                forest:    { DEFAULT: '#1B4332', light: '#2D6A4F', dark: '#081C15' },
                 cream:     { DEFAULT: '#FAFAF5', dark: '#F0F0E6' },
-                terracotta:{ DEFAULT: '<?= $_bkSecondary ?>', hover: '#A85D3B' },
+                terracotta:{ DEFAULT: '#C4704B', hover: '#A85D3B' },
                 sage:      { DEFAULT: '#A3B18A', light: '#DAD7CD' },
             },
             fontFamily: { sans: ['"DM Sans"', 'sans-serif'] },
@@ -94,9 +96,9 @@ $apiBase = BASE_PATH . '/api/book.php';
         .step { display: none; }
         .step.active { display: block; }
         .guest-btn { transition: all .15s; }
-        .guest-btn.selected { background: var(--brand-primary); color: #fff; border-color: var(--brand-primary); }
+        .guest-btn.selected { background: #1B4332; color: #fff; border-color: #1B4332; }
         .slot-btn { transition: all .15s; }
-        .slot-btn.selected { background: var(--brand-primary); color: #fff; border-color: var(--brand-primary); }
+        .slot-btn.selected { background: #1B4332; color: #fff; border-color: #1B4332; }
         .slot-btn:disabled { opacity: .35; cursor: not-allowed; }
         .slot-btn.waitlist { border-color: #F59E0B; color: #92400E; background: #FFFBEB; }
         .slot-btn.waitlist:hover { background: #FEF3C7; border-color: #D97706; }
@@ -106,10 +108,17 @@ $apiBase = BASE_PATH . '/api/book.php';
                    border-radius: 9999px; font-size: .875rem; font-weight: 500; cursor: pointer;
                    transition: all .15s; }
         .cal-day.available:hover { background: #F0F0E6; }
-        .cal-day.selected { background: var(--brand-primary); color: #fff; }
+        .cal-day.selected { background: #1B4332; color: #fff; }
         .cal-day.disabled { color: #DAD7CD; cursor: default; pointer-events: none; }
-        .cal-day.today { font-weight: 700; color: var(--brand-secondary); }
+        .cal-day.today { font-weight: 700; color: #C4704B; }
         .cal-day.today.selected { color: #fff; }
+
+        /* Brand primary se uporablja SAMO na header (logo placeholder + ime restavracije) in aktivnem koraku */
+        #rest-initial { background: var(--brand-primary) !important; }
+        #rest-name    { color: var(--brand-primary) !important; }
+        .step-num-active { background: var(--brand-primary) !important; color: #fff !important; }
+        .step-lbl-active { color: var(--brand-primary) !important; }
+
         .rz-attribution { text-align:center; font-size:11px; color:rgba(0,0,0,.4); padding:14px 14px 18px; line-height:1.4; }
         .rz-attribution a { color:rgba(0,0,0,.6); font-weight:600; text-decoration:none; border-bottom:1px solid rgba(0,0,0,.2); }
         .rz-attribution a:hover { color:rgba(0,0,0,.85); }
@@ -139,6 +148,12 @@ posthog_render_init([
     </div>
 </div>
 <?php else: ?>
+
+<?php if (!empty($_GET['preview'])): ?>
+<div id="preview-banner" style="position:sticky;top:0;z-index:50;background:#FEF3C7;border-bottom:2px solid #F59E0B;color:#92400E;text-align:center;padding:6px 10px;font:600 11px system-ui,sans-serif;letter-spacing:.04em;text-transform:uppercase">
+    PREVIEW — rezervacije se ne shranijo
+</div>
+<?php endif; ?>
 
 <!-- Vsebina (JS naloži restavracijo) -->
 <div class="min-h-screen flex flex-col">
@@ -205,11 +220,11 @@ posthog_render_init([
                     <div class="flex items-center gap-1 flex-1 last:flex-none">
                         <div class="progress-step-<?= $n ?> flex items-center gap-1.5">
                             <div class="step-num-<?= $n ?> w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                                <?= $n === '1' ? 'bg-forest text-white' : 'bg-sage-light text-forest/40' ?>">
+                                <?= $n === '1' ? 'step-num-active' : 'bg-sage-light text-forest/40' ?>">
                                 <?= $n ?>
                             </div>
                             <span class="step-lbl-<?= $n ?> text-xs font-medium hidden sm:block
-                                <?= $n === '1' ? 'text-forest' : 'text-forest/40' ?>">
+                                <?= $n === '1' ? 'step-lbl-active' : 'text-forest/40' ?>">
                                 <?= $lbl ?>
                             </span>
                         </div>
@@ -519,7 +534,7 @@ posthog_render_init([
         ];
         $_attribLabel = $_attribLabels[get_lang()] ?? $_attribLabels['en'];
     ?>
-    <div class="rz-attribution"><?= htmlspecialchars($_attribLabel) ?> <a href="https://rezble.com" target="_blank" rel="noopener">Rezble</a></div>
+    <div class="rz-attribution"><?= htmlspecialchars($_attribLabel) ?> <a href="https://www.rezble.com" target="_blank" rel="noopener">Rezble</a></div>
     <?php endif; ?>
 </div>
 
@@ -1144,6 +1159,12 @@ document.getElementById('btn-submit').onclick = async () => {
 
     document.getElementById('form-error').classList.add('hidden');
 
+    // ── PREVIEW MODE: ne shrani rezervacije, samo pokaži potrditveno stran ──
+    if (PREVIEW_MODE) {
+        showConfirmation(state.restaurant?.auto_confirm);
+        return;
+    }
+
     // ── Čakalna lista ──
     if (state._isWaitlist) {
         setSubmitting(true);
@@ -1283,10 +1304,11 @@ function goStep(n) {
         const lbl = document.querySelector(`.step-lbl-${i}`);
         const done = i < progressStep;
         const active = i === progressStep;
+        // Aktivni korak uporabi brand-primary preko CSS razreda .step-num-active / .step-lbl-active
         num.className = `step-num-${i} w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ` +
-            (done ? 'bg-sage text-white' : active ? 'bg-forest text-white' : 'bg-sage-light text-forest/40');
+            (done ? 'bg-sage text-white' : active ? 'step-num-active' : 'bg-sage-light text-forest/40');
         if (lbl) lbl.className = `step-lbl-${i} text-xs font-medium hidden sm:block ` +
-            (done || active ? 'text-forest' : 'text-forest/40');
+            (done ? 'text-forest' : active ? 'step-lbl-active' : 'text-forest/40');
         if (done) num.textContent = '✓';
         else      num.textContent = i;
     }
