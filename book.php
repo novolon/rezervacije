@@ -9,18 +9,27 @@ $token = trim($_GET['t'] ?? '');
 $_bkLangSwitcher  = true;
 $_bkAvailLangs    = ['sl','en','de','it','fr','hr','es','pt'];
 $_bkPrimaryLang   = null;
+$_bkBranding      = null; // premium branding (logo + barve)
+$_bkRest          = null; // celota za inline preview
 if ($token) {
     try {
         $pdo = getDB();
-        $stmt = $pdo->prepare("SELECT booking_lang_switcher_enabled, booking_available_languages, booking_primary_language FROM restaurants WHERE booking_token = ? LIMIT 1");
+        // Najprej preverimo lang stolpce, nato pa še brand stolpce (oboje ločeno za varnost migracij).
+        $stmt = $pdo->prepare("SELECT * FROM restaurants WHERE booking_token = ? LIMIT 1");
         $stmt->execute([$token]);
         if ($r = $stmt->fetch()) {
-            $_bkLangSwitcher = $r['booking_lang_switcher_enabled'] === null ? true : (bool)$r['booking_lang_switcher_enabled'];
+            $_bkRest = $r;
+            $_bkLangSwitcher = !isset($r['booking_lang_switcher_enabled']) || $r['booking_lang_switcher_enabled'] === null ? true : (bool)$r['booking_lang_switcher_enabled'];
             if (!empty($r['booking_available_languages'])) {
                 $decoded = json_decode($r['booking_available_languages'], true);
                 if (is_array($decoded) && !empty($decoded)) $_bkAvailLangs = $decoded;
             }
             if (!empty($r['booking_primary_language'])) $_bkPrimaryLang = $r['booking_primary_language'];
+
+            // Premium branding
+            require_once 'includes/plans.php';
+            require_once 'includes/branding_helper.php';
+            $_bkBranding = get_restaurant_branding($pdo, $r);
         }
     } catch (Throwable $e) { /* stolpci morda še ne obstajajo */ }
 }
@@ -59,13 +68,17 @@ $apiBase = BASE_PATH . '/api/book.php';
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
+    <?php
+    $_bkPrimary   = htmlspecialchars($_bkBranding['primary']   ?? '#1B4332', ENT_QUOTES);
+    $_bkSecondary = htmlspecialchars($_bkBranding['secondary'] ?? '#C4704B', ENT_QUOTES);
+    ?>
     <script>
     tailwind.config = {
         theme: { extend: {
             colors: {
-                forest:    { DEFAULT: '#1B4332', light: '#2D6A4F', dark: '#081C15' },
+                forest:    { DEFAULT: '<?= $_bkPrimary ?>', light: '#2D6A4F', dark: '#081C15' },
                 cream:     { DEFAULT: '#FAFAF5', dark: '#F0F0E6' },
-                terracotta:{ DEFAULT: '#C4704B', hover: '#A85D3B' },
+                terracotta:{ DEFAULT: '<?= $_bkSecondary ?>', hover: '#A85D3B' },
                 sage:      { DEFAULT: '#A3B18A', light: '#DAD7CD' },
             },
             fontFamily: { sans: ['"DM Sans"', 'sans-serif'] },
@@ -73,13 +86,17 @@ $apiBase = BASE_PATH . '/api/book.php';
     }
     </script>
     <style>
+        :root {
+            --brand-primary: <?= $_bkPrimary ?>;
+            --brand-secondary: <?= $_bkSecondary ?>;
+        }
         html { scroll-behavior: smooth; }
         .step { display: none; }
         .step.active { display: block; }
         .guest-btn { transition: all .15s; }
-        .guest-btn.selected { background: #1B4332; color: #fff; border-color: #1B4332; }
+        .guest-btn.selected { background: var(--brand-primary); color: #fff; border-color: var(--brand-primary); }
         .slot-btn { transition: all .15s; }
-        .slot-btn.selected { background: #1B4332; color: #fff; border-color: #1B4332; }
+        .slot-btn.selected { background: var(--brand-primary); color: #fff; border-color: var(--brand-primary); }
         .slot-btn:disabled { opacity: .35; cursor: not-allowed; }
         .slot-btn.waitlist { border-color: #F59E0B; color: #92400E; background: #FFFBEB; }
         .slot-btn.waitlist:hover { background: #FEF3C7; border-color: #D97706; }
@@ -89,10 +106,14 @@ $apiBase = BASE_PATH . '/api/book.php';
                    border-radius: 9999px; font-size: .875rem; font-weight: 500; cursor: pointer;
                    transition: all .15s; }
         .cal-day.available:hover { background: #F0F0E6; }
-        .cal-day.selected { background: #1B4332; color: #fff; }
+        .cal-day.selected { background: var(--brand-primary); color: #fff; }
         .cal-day.disabled { color: #DAD7CD; cursor: default; pointer-events: none; }
-        .cal-day.today { font-weight: 700; color: #C4704B; }
+        .cal-day.today { font-weight: 700; color: var(--brand-secondary); }
         .cal-day.today.selected { color: #fff; }
+        .rz-attribution { text-align:center; font-size:11px; color:rgba(0,0,0,.4); padding:14px 14px 18px; line-height:1.4; }
+        .rz-attribution a { color:rgba(0,0,0,.6); font-weight:600; text-decoration:none; border-bottom:1px solid rgba(0,0,0,.2); }
+        .rz-attribution a:hover { color:rgba(0,0,0,.85); }
+        .brand-logo-img { max-width: 200px; max-height: 60px; object-fit: contain; }
     </style>
 <?php
 require_once __DIR__ . '/includes/posthog_init.php';
@@ -125,7 +146,11 @@ posthog_render_init([
     <!-- Header -->
     <header class="bg-white border-b border-sage-light px-4 py-4">
         <div class="max-w-lg mx-auto flex items-center gap-3">
-            <div class="w-8 h-8 bg-forest rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0">R</div>
+            <?php if (!empty($_bkBranding['logo_url'])): ?>
+                <img src="<?= htmlspecialchars($_bkBranding['logo_url'], ENT_QUOTES) ?>" alt="" class="brand-logo-img flex-shrink-0" style="max-height:48px">
+            <?php else: ?>
+                <div class="w-8 h-8 bg-forest rounded-lg flex items-center justify-center text-white font-bold text-sm flex-shrink-0" id="rest-initial">R</div>
+            <?php endif; ?>
             <div class="flex-1 min-w-0">
                 <div id="rest-name" class="font-bold text-forest text-sm truncate"><?= t('common.loading') ?></div>
                 <div class="text-xs text-forest/50"><?= t('book.subtitle') ?></div>
@@ -484,6 +509,18 @@ posthog_render_init([
         </div>
         </div>
     </main>
+
+    <?php if (empty($_bkBranding['hide_branding'])): ?>
+    <?php
+        $_attribLabels = [
+            'sl' => 'Brez skrbi z', 'en' => 'Powered by', 'de' => 'Bereitgestellt von',
+            'es' => 'Funciona con', 'fr' => 'Propulsé par', 'hr' => 'Pokreće',
+            'it' => 'Powered by',  'pt' => 'Com tecnologia',
+        ];
+        $_attribLabel = $_attribLabels[get_lang()] ?? $_attribLabels['en'];
+    ?>
+    <div class="rz-attribution"><?= htmlspecialchars($_attribLabel) ?> <a href="https://rezble.com" target="_blank" rel="noopener">Rezble</a></div>
+    <?php endif; ?>
 </div>
 
 <script>
@@ -523,6 +560,9 @@ const DAYS_SL = <?= lang_days_js() ?>;
         if (!json.success) throw new Error(json.error || t('common.error'));
         state.restaurant = json.data;
         document.getElementById('rest-name').textContent = json.data.name;
+        // Če nimamo logo_url-ja (non-premium) postavi inicialko restavracije v kvadratek.
+        const initEl = document.getElementById('rest-initial');
+        if (initEl) initEl.textContent = (json.data.name || 'R')[0].toUpperCase();
         document.getElementById('booking-main').classList.remove('hidden');
         buildGuestButtons();
         renderCalendar();

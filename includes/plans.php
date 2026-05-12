@@ -40,6 +40,8 @@ define('PLANS', [
                               'guest_emails', 'guest_reminders',
                               'public_booking', 'booking_approval',
                               'embed_widget', 'branding',
+                              'custom_logo', 'custom_colors', 'hide_branding',
+                              'custom_from_email',
                               'auto_confirm', 'sms_notifications',
                               'survey', 'survey_edit', 'survey_export',
                               'guest_database', 'waitlist',
@@ -69,6 +71,10 @@ const FEATURE_LABELS = [
     'guest_database'  => 'Baza gostov z zgodovino',
     'waitlist'        => 'Čakalna lista',
     'table_management'=> 'Upravljanje miz in zmogljivosti',
+    'custom_logo'     => 'Lasten logotip v widget/booking',
+    'custom_colors'   => 'Lastne barve widget/booking',
+    'hide_branding'   => 'Skritje "by Rezble" oznake',
+    'custom_from_email'=> 'Pošiljanje emailov z lastne domene',
 ];
 
 // ─── Pridobi aktivno naročnino admina ─────────────────────────

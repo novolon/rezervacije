@@ -12,6 +12,7 @@ require_once '../includes/plans.php';
 require_once '../includes/mailer.php';
 require_once '../includes/guest_helper.php';
 require_once '../includes/table_helper.php';
+require_once '../includes/branding_helper.php';
 
 header('Content-Type: application/json; charset=utf-8');
 header('Access-Control-Allow-Origin: *');
@@ -366,6 +367,7 @@ if ($method === 'GET') {
         'blackout_dates'   => $blackoutDates,
         'partial_blackouts'=> $partialBlackouts,
         'custom_fields'    => $customFields,
+        'branding'         => get_restaurant_branding($pdo, $rest),
         'waitlist_enabled'     => user_has_feature($pdo, (int)$rest['owner_id'], 'waitlist') && (bool)($rest['waitlist_enabled'] ?? 1),
         'waitlist_max_per_slot'=> (int)($rest['waitlist_max_per_slot'] ?? 3),
         'day_schedules'    => array_map(function($ds) use ($periodsMap) {

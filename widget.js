@@ -20,6 +20,7 @@
         sl: {
             loading:           'Nalagam...',
             subtitle:          'Spletna rezervacija',
+            powered_by:        'Brez skrbi z',
             step1:             'Gostje',
             step2:             'Datum',
             step3:             'Termin',
@@ -109,6 +110,7 @@
         en: {
             loading:           'Loading...',
             subtitle:          'Online reservation',
+            powered_by:        'Powered by',
             step1:             'Guests',
             step2:             'Date',
             step3:             'Time',
@@ -198,6 +200,7 @@
         de: {
             loading: 'Lädt...',
             subtitle: 'Online-Reservierung',
+            powered_by: 'Bereitgestellt von',
             step1: 'Gäste',
             step2: 'Datum',
             step3: 'Termin',
@@ -287,6 +290,7 @@
         it: {
             loading: 'Caricamento...',
             subtitle: 'Prenotazione online',
+            powered_by: 'Powered by',
             step1: 'Ospiti',
             step2: 'Data',
             step3: 'Orario',
@@ -376,6 +380,7 @@
         fr: {
             loading: 'Chargement...',
             subtitle: 'Réservation en ligne',
+            powered_by: 'Propulsé par',
             step1: 'Convives',
             step2: 'Date',
             step3: 'Créneau',
@@ -465,6 +470,7 @@
         hr: {
             loading: 'Učitavam...',
             subtitle: 'Online rezervacija',
+            powered_by: 'Pokreće',
             step1: 'Gosti',
             step2: 'Datum',
             step3: 'Termin',
@@ -554,6 +560,7 @@
         es: {
             loading: 'Cargando...',
             subtitle: 'Reserva en línea',
+            powered_by: 'Funciona con',
             step1: 'Comensales',
             step2: 'Fecha',
             step3: 'Horario',
@@ -643,6 +650,7 @@
         pt: {
             loading: 'A carregar...',
             subtitle: 'Reserva online',
+            powered_by: 'Com tecnologia',
             step1: 'Convidados',
             step2: 'Data',
             step3: 'Horário',
@@ -824,6 +832,11 @@ button{font-family:inherit;cursor:pointer}
 input,textarea{font-family:inherit}
 
 .root{background:var(--cr);border-radius:var(--br);overflow:hidden;border:1px solid var(--sl);max-width:520px}
+
+/* "Powered by Rezble" attribution */
+.w-attrib{text-align:center;font-size:11px;color:var(--f3);padding:9px 14px;border-top:1px solid var(--sl);background:var(--wh)}
+.w-attrib a{color:var(--f2);font-weight:600;text-decoration:none;border-bottom:1px solid var(--sl)}
+.w-attrib a:hover{color:var(--f);border-bottom-color:var(--f3)}
 
 /* Header */
 .hdr{background:var(--wh);border-bottom:1px solid var(--sl);padding:13px 18px;display:flex;align-items:center;gap:11px}
@@ -1129,6 +1142,7 @@ input,textarea{font-family:inherit}
 
     </div>
   </div>
+  <div id="w-attrib" class="w-attrib">${wt('powered_by')} <a href="https://rezble.com" target="_blank" rel="noopener">Rezble</a></div>
 </div>`;
 
     shadow.appendChild(styleEl);
@@ -1194,6 +1208,25 @@ input,textarea{font-family:inherit}
         if (n === 4) updateStep4Sub();
     }
 
+    // ── Helpers za barvno manipulacijo (brand colors) ─────────────
+    function _hexToRgba(hex, a) {
+        const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+        if (!m) return 'rgba(0,0,0,' + a + ')';
+        const n = parseInt(m[1], 16);
+        return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + a + ')';
+    }
+    function _hexShade(hex, amt) {
+        // amt: -1..1; pozitiven = svetlejši, negativen = temnejši
+        const m = /^#?([0-9a-f]{6})$/i.exec(String(hex || '').trim());
+        if (!m) return hex;
+        let r = (parseInt(m[1].substr(0,2),16));
+        let g = (parseInt(m[1].substr(2,2),16));
+        let b = (parseInt(m[1].substr(4,2),16));
+        const adj = (v) => Math.max(0, Math.min(255, Math.round(v + (amt < 0 ? v * amt : (255 - v) * amt))));
+        r = adj(r); g = adj(g); b = adj(b);
+        return '#' + [r,g,b].map(x => x.toString(16).padStart(2,'0')).join('');
+    }
+
     // ── Init: naloži restavracijo ─────────────────────────────────
     (async () => {
         try {
@@ -1208,6 +1241,30 @@ input,textarea{font-family:inherit}
             $('wname').textContent = json.data.name;
             $('wlogo').textContent = (json.data.name || 'R')[0].toUpperCase();
             $('wgdpr-link').href = privacyUrl;
+
+            // ── Premium branding (logo, barve, hide "by Rezble") ─────────
+            const branding = json.data.branding || {};
+            if (branding.primary) {
+                const p = branding.primary;
+                host.style.setProperty('--f', p);
+                // Derived (transparency-based) tones za sekundarne UI elemente
+                host.style.setProperty('--f2', _hexToRgba(p, 0.55));
+                host.style.setProperty('--f3', _hexToRgba(p, 0.35));
+            }
+            if (branding.secondary) {
+                host.style.setProperty('--tr', branding.secondary);
+                host.style.setProperty('--th', _hexShade(branding.secondary, -0.12));
+            }
+            if (branding.logo_url) {
+                const logoEl = $('wlogo');
+                logoEl.textContent = '';
+                logoEl.style.background = 'transparent';
+                logoEl.style.padding = '0';
+                logoEl.innerHTML = `<img src="${branding.logo_url}" alt="" style="max-width:100%;max-height:100%;object-fit:contain;display:block">`;
+            }
+            // Pokaži/skrij "by Rezble" attribution
+            const attribEl = $('w-attrib');
+            if (attribEl) attribEl.style.display = branding.hide_branding ? 'none' : '';
 
             // ── Lang nastavitve restavracije ──
             const langSwitcherEnabled = json.data.lang_switcher_enabled !== false;
