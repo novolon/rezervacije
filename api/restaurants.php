@@ -339,6 +339,20 @@ if ($method === 'PUT') {
 
     $notify_guest_email = isset($body['notify_guest_email']) ? ($body['notify_guest_email'] ? 1 : 0) : null;
 
+    // Branding (samo če ima admin premium feature; sicer ignoriraj)
+    require_once '../includes/plans.php';
+    $brand_primary   = array_key_exists('brand_primary',   $body) ? ($body['brand_primary']   ?: null) : false;
+    $brand_secondary = array_key_exists('brand_secondary', $body) ? ($body['brand_secondary'] ?: null) : false;
+    $hide_branding   = isset($body['hide_branding']) ? ($body['hide_branding'] ? 1 : 0) : null;
+    if ($brand_primary !== false && $brand_primary !== null && !preg_match('/^#[0-9A-Fa-f]{6}$/', $brand_primary)) {
+        json_response(false, null, 'Neveljaven format primarne barve.', 400);
+    }
+    if ($brand_secondary !== false && $brand_secondary !== null && !preg_match('/^#[0-9A-Fa-f]{6}$/', $brand_secondary)) {
+        json_response(false, null, 'Neveljaven format sekundarne barve.', 400);
+    }
+    $_hasCustomColors = user_has_feature($pdo, (int)$session['user_id'], 'custom_colors');
+    $_hasHideBranding = user_has_feature($pdo, (int)$session['user_id'], 'hide_branding');
+
     // Booking lang nastavitve
     $allowedLangs = ['sl','en','de','it','fr','hr','es','pt'];
     $booking_lang_switcher_enabled = isset($body['booking_lang_switcher_enabled']) ? ($body['booking_lang_switcher_enabled'] ? 1 : 0) : null;
@@ -388,6 +402,15 @@ if ($method === 'PUT') {
     if ($track_no_shows !== null)                  { $sets[] = 'track_no_shows = ?';                        $params[] = $track_no_shows; }
     if ($no_show_threshold !== null)               { $sets[] = 'no_show_threshold = ?';                     $params[] = $no_show_threshold; }
     if ($notify_guest_email !== null)              { $sets[] = 'notify_guest_email = ?';                    $params[] = $notify_guest_email; }
+
+    // Branding — pišemo samo če ima admin feature (silent ignore brez napake za nižje pakete)
+    if ($_hasCustomColors) {
+        if ($brand_primary   !== false) { $sets[] = 'brand_primary = ?';   $params[] = $brand_primary; }
+        if ($brand_secondary !== false) { $sets[] = 'brand_secondary = ?'; $params[] = $brand_secondary; }
+    }
+    if ($_hasHideBranding && $hide_branding !== null) {
+        $sets[] = 'hide_branding = ?'; $params[] = $hide_branding;
+    }
     // Lang stolpci samo če migration applied (booking_lang_*)
     $hasLangCols = false;
     try {

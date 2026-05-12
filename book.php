@@ -552,6 +552,23 @@ const state = {
 const MONTHS  = <?= lang_months_js() ?>;
 const DAYS_SL = <?= lang_days_js() ?>;
 
+// ── Live preview listener (postMessage iz restaurant-edit Branding tab-a) ──
+const PREVIEW_MODE = new URLSearchParams(location.search).get('preview') === '1';
+if (PREVIEW_MODE) {
+    window.addEventListener('message', (e) => {
+        if (!e.data || e.data.source !== 'rz-branding') return;
+        if (e.data.type === 'colors') {
+            const root = document.documentElement;
+            if (e.data.primary)   root.style.setProperty('--brand-primary',   e.data.primary);
+            if (e.data.secondary) root.style.setProperty('--brand-secondary', e.data.secondary);
+        }
+        if (e.data.type === 'hide') {
+            const a = document.querySelector('.rz-attribution');
+            if (a) a.style.display = e.data.hide ? 'none' : '';
+        }
+    });
+}
+
 // ── Init ──────────────────────────────────────────────────────
 (async () => {
     try {

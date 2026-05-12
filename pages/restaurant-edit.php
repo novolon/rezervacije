@@ -35,6 +35,11 @@ $activeTab = $_GET['tab'] ?? 'splosno';
 $hasSurvey      = user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey');
 $hasSurveyEdit  = user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey_edit');
 $hasTableMgmt   = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_management');
+$hasCustomLogo  = user_has_feature($pdo, (int)$_SESSION['user_id'], 'custom_logo');
+$hasCustomColors= user_has_feature($pdo, (int)$_SESSION['user_id'], 'custom_colors');
+$hasHideBranding= user_has_feature($pdo, (int)$_SESSION['user_id'], 'hide_branding');
+$hasCustomEmail = user_has_feature($pdo, (int)$_SESSION['user_id'], 'custom_from_email');
+$hasBrandingTab = $hasCustomLogo || $hasCustomColors || $hasHideBranding || $hasCustomEmail;
 
 $isAdmin = true;
 $stmt2 = $pdo->prepare("
@@ -170,6 +175,9 @@ require_once '../includes/html_head.php';
         <button class="re-tab" data-tab="polja"><?= t('re.tab_fields') ?></button>
         <button class="re-tab" data-tab="anketa"><?= t('re.tab_survey') ?></button>
         <button class="re-tab" data-tab="mize"><?= t('re.tab_tables') ?></button>
+        <?php if ($hasBrandingTab): ?>
+            <button class="re-tab" data-tab="branding"><?= t('re.tab_branding') ?></button>
+        <?php endif; ?>
     </div>
 
     <!-- ── Tab: Splošno ────────────────────────────────────── -->
@@ -886,6 +894,102 @@ require_once '../includes/html_head.php';
     <?php endif; ?>
     </div>
     </div>
+
+    <!-- ── Tab: Branding ─────────────────────────────────────── -->
+    <?php if ($hasBrandingTab): ?>
+    <div id="panel-branding" class="re-panel">
+        <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:24px;align-items:start">
+            <!-- Levo: form -->
+            <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+
+                <?php if ($hasCustomLogo): ?>
+                <div class="re-section">
+                    <?= card_head(t('re.brand_logo_title'), t('re.brand_logo_desc'), false, 'premium') ?>
+                    <div class="admin-form">
+                        <div id="brand-logo-preview" style="display:flex;align-items:center;gap:12px;padding:14px;border:1.5px dashed var(--line-strong);border-radius:8px;margin-bottom:10px;background:var(--bg-sunken,#FAFAF7);min-height:80px">
+                            <?php if (!empty($rest['logo_path'])): ?>
+                                <img id="brand-logo-img" src="<?= BASE_PATH . '/' . htmlspecialchars(ltrim($rest['logo_path'], '/'), ENT_QUOTES) ?>?v=<?= time() ?>" alt="Logo" style="max-width:200px;max-height:60px;object-fit:contain">
+                                <button type="button" id="brand-logo-remove" class="btn btn-ghost btn-danger-sm" style="margin-left:auto"><?= t('re.brand_logo_remove') ?></button>
+                            <?php else: ?>
+                                <span style="color:var(--ink-mute);font-size:13px"><?= t('re.brand_logo_empty') ?></span>
+                            <?php endif; ?>
+                        </div>
+                        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                            <input type="file" id="brand-logo-input" accept="image/png,image/jpeg,image/svg+xml,image/webp" style="display:none">
+                            <button type="button" class="btn btn-primary" onclick="document.getElementById('brand-logo-input').click()">
+                                <?= t('re.brand_logo_upload') ?>
+                            </button>
+                            <span style="font-size:11.5px;color:var(--ink-mute);line-height:1.5"><?= t('re.brand_logo_hint') ?></span>
+                        </div>
+                        <div id="brand-logo-err" style="display:none;margin-top:8px;background:#FEE2E2;color:#991B1B;padding:8px 12px;border-radius:6px;font-size:12.5px"></div>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <?php if ($hasCustomColors): ?>
+                <div class="re-section">
+                    <?= card_head(t('re.brand_colors_title'), t('re.brand_colors_desc'), false, 'premium') ?>
+                    <div class="admin-form">
+                        <div class="admin-field-row">
+                            <div class="admin-field">
+                                <label><?= t('re.brand_primary') ?></label>
+                                <div style="display:flex;gap:8px;align-items:center">
+                                    <input id="brand-primary" type="color" value="<?= htmlspecialchars($rest['brand_primary'] ?: '#1B4332') ?>" style="height:42px;width:60px;padding:4px;border:1px solid var(--line);border-radius:8px;cursor:pointer">
+                                    <input id="brand-primary-hex" type="text" value="<?= htmlspecialchars($rest['brand_primary'] ?: '#1B4332') ?>" maxlength="7" style="flex:1;font-family:var(--font-mono)" placeholder="#1B4332">
+                                </div>
+                            </div>
+                            <div class="admin-field">
+                                <label><?= t('re.brand_secondary') ?></label>
+                                <div style="display:flex;gap:8px;align-items:center">
+                                    <input id="brand-secondary" type="color" value="<?= htmlspecialchars($rest['brand_secondary'] ?: '#C4704B') ?>" style="height:42px;width:60px;padding:4px;border:1px solid var(--line);border-radius:8px;cursor:pointer">
+                                    <input id="brand-secondary-hex" type="text" value="<?= htmlspecialchars($rest['brand_secondary'] ?: '#C4704B') ?>" maxlength="7" style="flex:1;font-family:var(--font-mono)" placeholder="#C4704B">
+                                </div>
+                            </div>
+                        </div>
+                        <button type="button" id="brand-colors-reset" class="btn btn-ghost btn-sm" style="margin-top:8px"><?= t('re.brand_colors_reset') ?></button>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <?php if ($hasHideBranding): ?>
+                <div class="re-section">
+                    <?= card_head(t('re.brand_hide_title'), t('re.brand_hide_desc'), false, 'premium') ?>
+                    <div class="admin-form">
+                        <label class="toggle-wrap" style="cursor:pointer">
+                            <span class="toggle">
+                                <input type="checkbox" id="brand-hide" <?= (int)($rest['hide_branding'] ?? 0) === 1 ? 'checked' : '' ?>>
+                                <span class="toggle-track"></span>
+                            </span>
+                            <span class="toggle-label"><?= t('re.brand_hide_toggle') ?></span>
+                        </label>
+                    </div>
+                </div>
+                <?php endif; ?>
+
+                <div class="re-save-bar" style="position:sticky;bottom:10px;background:var(--bg-elev);padding:12px;border-radius:10px;border:1px solid var(--line);box-shadow:0 6px 14px rgba(0,0,0,.05);z-index:5">
+                    <button type="button" id="brand-save" class="btn btn-primary"><?= t('re.brand_save') ?></button>
+                </div>
+            </div>
+
+            <!-- Desno: preview -->
+            <div class="re-section" style="position:sticky;top:14px;min-width:0">
+                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+                    <h3 style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-mute);margin:0"><?= t('re.brand_preview') ?></h3>
+                    <a href="<?= BASE_PATH ?>/book.php?t=<?= htmlspecialchars($rest['booking_token']) ?>" target="_blank" rel="noopener" style="font-size:12px;color:var(--accent);text-decoration:none">
+                        <?= t('re.brand_preview_open') ?> →
+                    </a>
+                </div>
+                <iframe id="brand-preview"
+                        src="<?= BASE_PATH ?>/book.php?t=<?= htmlspecialchars($rest['booking_token']) ?>&preview=1"
+                        style="width:100%;height:640px;border:1px solid var(--line);border-radius:10px;background:#fff"
+                        title="Preview"></iframe>
+                <p style="font-size:11.5px;color:var(--ink-mute);margin:8px 0 0;line-height:1.5">
+                    <?= t('re.brand_preview_note') ?>
+                </p>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
 
 </div><!-- .rest-edit-wrap -->
 
@@ -2597,9 +2701,139 @@ function loadTables() { tablesLoaded = true; }
 // Ob zagonu aktiviraj tab iz hash-a
 (function() {
     const hash = location.hash.replace('#', '');
-    const valid = ['splosno','urnik','booking','zaposleni','polja','anketa','mize'];
+    const valid = ['splosno','urnik','booking','zaposleni','polja','anketa','mize','branding'];
     if (hash && valid.includes(hash)) activateTab(hash);
 })();
+
+<?php if ($hasBrandingTab): ?>
+// ── BRANDING tab ─────────────────────────────────────────────
+(function() {
+    const REST_ID = <?= (int)$rest['id'] ?>;
+    const BASE = '<?= BASE_PATH ?>';
+    const preview = document.getElementById('brand-preview');
+
+    function postPreview(msg) {
+        if (!preview || !preview.contentWindow) return;
+        try { preview.contentWindow.postMessage({ source: 'rz-branding', ...msg }, '*'); } catch (e) {}
+    }
+
+    // Sync color picker <-> hex text input
+    function bindColor(picker, hex) {
+        const p = document.getElementById(picker);
+        const h = document.getElementById(hex);
+        if (!p || !h) return;
+        p.addEventListener('input', () => { h.value = p.value.toUpperCase(); livePreview(); });
+        h.addEventListener('input', () => {
+            const v = h.value.trim();
+            if (/^#[0-9A-Fa-f]{6}$/.test(v)) { p.value = v; livePreview(); }
+        });
+    }
+    bindColor('brand-primary', 'brand-primary-hex');
+    bindColor('brand-secondary', 'brand-secondary-hex');
+
+    function getValues() {
+        const primary   = document.getElementById('brand-primary-hex')?.value.trim() || null;
+        const secondary = document.getElementById('brand-secondary-hex')?.value.trim() || null;
+        const hide      = document.getElementById('brand-hide')?.checked ? 1 : 0;
+        return { primary, secondary, hide };
+    }
+
+    function livePreview() {
+        const v = getValues();
+        postPreview({ type: 'colors', primary: v.primary, secondary: v.secondary });
+        postPreview({ type: 'hide', hide: v.hide });
+    }
+
+    document.getElementById('brand-colors-reset')?.addEventListener('click', () => {
+        const p = document.getElementById('brand-primary'); const ph = document.getElementById('brand-primary-hex');
+        const s = document.getElementById('brand-secondary'); const sh = document.getElementById('brand-secondary-hex');
+        if (p) p.value = '#1B4332'; if (ph) ph.value = '#1B4332';
+        if (s) s.value = '#C4704B'; if (sh) sh.value = '#C4704B';
+        livePreview();
+    });
+
+    document.getElementById('brand-hide')?.addEventListener('change', livePreview);
+
+    document.getElementById('brand-save')?.addEventListener('click', async (e) => {
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        const oldText = btn.textContent;
+        btn.textContent = window.t('common.saving') || 'Shranjujem...';
+        try {
+            const v = getValues();
+            await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}`, {
+                brand_primary:   v.primary || null,
+                brand_secondary: v.secondary || null,
+                hide_branding:   v.hide,
+            });
+            showSuccess(window.t('common.saved') || 'Shranjeno.');
+            // Reload preview za pravo backend rendering
+            if (preview) preview.src = preview.src;
+        } catch (err) {
+            showError(err.message || 'Napaka pri shranjevanju.');
+        } finally {
+            btn.disabled = false;
+            btn.textContent = oldText;
+        }
+    });
+
+    // Logo upload
+    const logoInput = document.getElementById('brand-logo-input');
+    if (logoInput) {
+        logoInput.addEventListener('change', async () => {
+            const file = logoInput.files?.[0];
+            if (!file) return;
+            const errBox = document.getElementById('brand-logo-err');
+            errBox.style.display = 'none';
+
+            if (file.size > 500 * 1024) {
+                errBox.textContent = window.t('re.brand_logo_err_size') || 'Datoteka je prevelika (max 500 KB).';
+                errBox.style.display = 'block';
+                logoInput.value = '';
+                return;
+            }
+            const fd = new FormData();
+            fd.append('logo', file);
+            fd.append('restaurant_id', REST_ID);
+            try {
+                const res = await fetch(BASE + '/api/upload_logo.php', {
+                    method: 'POST', credentials: 'same-origin', body: fd,
+                });
+                const j = await res.json();
+                if (!j.success) throw new Error(j.error || 'Upload failed');
+                // Posodobi preview slike
+                const preview = document.getElementById('brand-logo-preview');
+                preview.innerHTML = `<img id="brand-logo-img" src="${BASE}/${j.data.path}?v=${Date.now()}" alt="Logo" style="max-width:200px;max-height:60px;object-fit:contain"><button type="button" id="brand-logo-remove" class="btn btn-ghost btn-danger-sm" style="margin-left:auto">${window.t('re.brand_logo_remove') || 'Odstrani'}</button>`;
+                bindRemove();
+                // Reload preview iframe
+                const f = document.getElementById('brand-preview'); if (f) f.src = f.src;
+                showSuccess(window.t('common.saved') || 'Naloženo.');
+            } catch (err) {
+                errBox.textContent = err.message;
+                errBox.style.display = 'block';
+            } finally {
+                logoInput.value = '';
+            }
+        });
+    }
+
+    function bindRemove() {
+        document.getElementById('brand-logo-remove')?.addEventListener('click', async () => {
+            if (!confirm(window.t('re.brand_logo_confirm_remove') || 'Odstrani logotip?')) return;
+            try {
+                await apiCall('DELETE', `/api/upload_logo.php?id=${REST_ID}`, null);
+                const preview = document.getElementById('brand-logo-preview');
+                preview.innerHTML = `<span style="color:var(--ink-mute);font-size:13px">${window.t('re.brand_logo_empty') || 'Še ni naloženega logotipa.'}</span>`;
+                const f = document.getElementById('brand-preview'); if (f) f.src = f.src;
+                showSuccess(window.t('common.saved') || 'Odstranjeno.');
+            } catch (err) {
+                showError(err.message || 'Napaka.');
+            }
+        });
+    }
+    bindRemove();
+})();
+<?php endif; ?>
 </script>
 <script src="<?= BASE_PATH ?>/assets/js/translations_ui.js?v=1"></script>
 <script>window.APP_BASE = '<?= BASE_PATH ?>';</script>
