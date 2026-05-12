@@ -76,7 +76,7 @@ if (!empty($_GET['rest_id'])) {
     <title><?= t('nav.guests') ?> – <?= h(APP_NAME) ?></title>
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css?v=4">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/modal.css?v=3">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/rezble.css?v=3">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/rezble.css?v=<?= @filemtime(__DIR__ . '/../assets/css/rezble.css') ?>">
     <style>
         .guests-title { font-size: 1.4rem; font-weight: 700; color: #111827; margin: 0 0 20px; }
         .guests-toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; }
@@ -143,7 +143,7 @@ if (!empty($_GET['rest_id'])) {
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/design.css?v=1">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/design.css?v=<?= @filemtime(__DIR__ . '/../assets/css/design.css') ?>">
     <script>
     window.__LANG__ = '<?= get_lang() ?>';
     window.__T__ = <?= json_encode(get_lang_strings(), JSON_UNESCAPED_UNICODE) ?>;

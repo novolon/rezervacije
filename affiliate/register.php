@@ -1,6 +1,7 @@
 <?php
 require_once '../config.php';
 require_once '../includes/db.php';
+require_once '../includes/lang.php';
 require_once '../includes/affiliate_session.php';
 require_once '../includes/mailer.php';
 
@@ -20,14 +21,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $password           = $_POST['password']         ?? '';
     $confirm            = $_POST['password_confirm'] ?? '';
 
-    if (!$post['full_name']) $errors[] = 'Ime in priimek sta obvezna.';
-    if (!filter_var($post['email'], FILTER_VALIDATE_EMAIL)) $errors[] = 'Neveljaven email naslov.';
-    if (strlen($password) < 8) $errors[] = 'Geslo mora imeti vsaj 8 znakov.';
-    if ($password !== $confirm) $errors[] = 'Gesli se ne ujemata.';
+    if (!$post['full_name']) $errors[] = t('aff.register.err_name');
+    if (!filter_var($post['email'], FILTER_VALIDATE_EMAIL)) $errors[] = t('aff.register.err_email');
+    if (strlen($password) < 8) $errors[] = t('aff.register.err_pwlen');
+    if ($password !== $confirm) $errors[] = t('aff.register.err_pwmatch');
     if ($post['iban'] && !preg_match('/^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$/', $post['iban'])) {
-        $errors[] = 'IBAN ni v pravilni obliki (npr. SI56...).';
+        $errors[] = t('aff.register.err_iban');
     }
-    if (empty($_POST['terms_consent'])) $errors[] = 'Sprejeti morate pogoje programa.';
+    if (empty($_POST['terms_consent'])) $errors[] = t('aff.register.err_terms');
 
     if (empty($errors)) {
         try {
@@ -36,7 +37,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $dup = $pdo->prepare("SELECT 1 FROM affiliates WHERE email = ?");
             $dup->execute([$post['email']]);
             if ($dup->fetchColumn()) {
-                $errors[] = 'Email naslov je že registriran.';
+                $errors[] = t('aff.register.err_dup');
             } else {
                 require_once '../includes/affiliate_helper.php';
                 $refCode = affiliate_generate_ref_code($pdo);
@@ -66,38 +67,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         } catch (\Throwable $e) {
             error_log('Affiliate register error: ' . $e->getMessage());
-            $errors[] = 'Napaka strežnika. Preverite, ali so bili SQL migracije izvedene, in poskusite znova.';
+            $errors[] = t('aff.register.err_server');
         }
     }
 }
 
-$pageTitle = 'Registracija – Affiliate';
+$pageTitle = t('aff.register.page_title');
 $extraCss  = ['design.css'];
 require_once '../includes/html_head.php';
+
+$reqMark = ' ' . t('aff.common.required_marker');
 ?>
 <body>
 <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:40px 16px">
 <div style="width:100%;max-width:460px">
 
-    <a href="<?= BASE_PATH ?>/" style="display:flex;align-items:center;gap:10px;margin-bottom:32px;color:var(--ink);font-weight:700;font-size:17px;letter-spacing:-.02em;text-decoration:none">
-        <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true" style="flex:none">
-            <rect width="32" height="32" rx="7" fill="var(--accent)"/>
-            <path d="M9 8v16l4-4h5a5 5 0 0 0 5-5v-4a3 3 0 0 0-3-3H9Z" fill="#fff"/>
-        </svg>
-        Rezble <span style="font-weight:400;color:var(--ink-mute)">/ Affiliate</span>
+    <a href="<?= BASE_PATH ?>/" style="display:flex;align-items:center;gap:10px;margin-bottom:32px;text-decoration:none">
+        <img src="<?= BASE_PATH ?>/assets/images/Rezble.svg" alt="Rezble" style="height:24px;width:auto;display:block">
+        <span style="font-weight:500;color:var(--ink-mute);font-size:15px"><?= t('aff.brand_suffix') ?></span>
     </a>
 
     <?php if ($success): ?>
     <div class="rz-card" style="text-align:center;padding:40px 32px">
         <div style="font-size:2.5rem;margin-bottom:16px">✉️</div>
-        <h2 style="margin:0 0 10px;font-size:22px;font-weight:700;color:var(--ink)">Prijavnica oddana!</h2>
-        <p style="margin:0 0 24px;color:var(--ink-mute);font-size:14px;line-height:1.6">Poslali smo vam potrditveni email. Po potrditvi emaila bomo pregledali vašo prijavo in vas obvestili.</p>
-        <a href="<?= BASE_PATH ?>/affiliate/login.php" class="rz-btn rz-btn-primary" style="display:inline-flex">Na prijavo →</a>
+        <h2 style="margin:0 0 10px;font-size:22px;font-weight:700;color:var(--ink)"><?= t('aff.register.success_title') ?></h2>
+        <p style="margin:0 0 24px;color:var(--ink-mute);font-size:14px;line-height:1.6"><?= t('aff.register.success_text') ?></p>
+        <a href="<?= BASE_PATH ?>/affiliate/login.php" class="rz-btn rz-btn-primary" style="display:inline-flex"><?= t('aff.register.success_cta') ?></a>
     </div>
     <?php else: ?>
     <div class="rz-card">
-        <h1 class="rz-auth-title">Postanite affiliate</h1>
-        <p class="rz-auth-sub">Zaslužite 20% provizije za vsako priporočeno restavracijo</p>
+        <h1 class="rz-auth-title"><?= t('aff.register.title') ?></h1>
+        <p class="rz-auth-sub"><?= t('aff.register.subtitle') ?></p>
 
         <?php if ($errors): ?>
         <div style="background:color-mix(in oklab,var(--danger) 10%,transparent);color:var(--danger);border:1px solid color-mix(in oklab,var(--danger) 25%,transparent);border-radius:8px;padding:10px 14px;font-size:13px;margin-bottom:16px">
@@ -108,34 +108,34 @@ require_once '../includes/html_head.php';
         <form method="POST" autocomplete="off" class="rz-auth-form">
             <div class="rz-form-2">
                 <div class="rz-field">
-                    <label class="rz-field-label">Ime in priimek *</label>
+                    <label class="rz-field-label"><?= t('aff.register.full_name') . $reqMark ?></label>
                     <input type="text" name="full_name" class="rz-input" value="<?= htmlspecialchars($post['full_name'] ?? '', ENT_QUOTES) ?>" required autofocus>
                 </div>
                 <div class="rz-field">
-                    <label class="rz-field-label">Email naslov *</label>
+                    <label class="rz-field-label"><?= t('aff.register.email') . $reqMark ?></label>
                     <input type="email" name="email" class="rz-input" value="<?= htmlspecialchars($post['email'] ?? '', ENT_QUOTES) ?>" required autocomplete="email">
                 </div>
             </div>
             <div class="rz-field">
-                <label class="rz-field-label">Pravna oblika *</label>
+                <label class="rz-field-label"><?= t('aff.register.legal_form') . $reqMark ?></label>
                 <select name="legal_form" class="rz-input">
-                    <option value="individual" <?= ($post['legal_form'] ?? '') === 'individual' ? 'selected' : '' ?>>Fizična oseba</option>
-                    <option value="sole_trader" <?= ($post['legal_form'] ?? '') === 'sole_trader' ? 'selected' : '' ?>>Samostojni podjetnik (s.p.)</option>
-                    <option value="company" <?= ($post['legal_form'] ?? '') === 'company' ? 'selected' : '' ?>>Podjetje (d.o.o., d.d.)</option>
-                    <option value="foreign" <?= ($post['legal_form'] ?? '') === 'foreign' ? 'selected' : '' ?>>Tujina</option>
+                    <option value="individual"  <?= ($post['legal_form'] ?? '') === 'individual'  ? 'selected' : '' ?>><?= t('aff.register.legal_individual') ?></option>
+                    <option value="sole_trader" <?= ($post['legal_form'] ?? '') === 'sole_trader' ? 'selected' : '' ?>><?= t('aff.register.legal_sole_trader') ?></option>
+                    <option value="company"     <?= ($post['legal_form'] ?? '') === 'company'     ? 'selected' : '' ?>><?= t('aff.register.legal_company') ?></option>
+                    <option value="foreign"     <?= ($post['legal_form'] ?? '') === 'foreign'     ? 'selected' : '' ?>><?= t('aff.register.legal_foreign') ?></option>
                 </select>
             </div>
             <div class="rz-field">
-                <label class="rz-field-label">IBAN za izplačila</label>
+                <label class="rz-field-label"><?= t('aff.register.iban') ?></label>
                 <input type="text" name="iban" class="rz-input" value="<?= htmlspecialchars($post['iban'] ?? '', ENT_QUOTES) ?>" placeholder="SI56...">
             </div>
             <div class="rz-form-2">
                 <div class="rz-field">
-                    <label class="rz-field-label">Geslo *</label>
+                    <label class="rz-field-label"><?= t('aff.register.password') . $reqMark ?></label>
                     <input type="password" name="password" class="rz-input" required autocomplete="new-password">
                 </div>
                 <div class="rz-field">
-                    <label class="rz-field-label">Potrdi geslo *</label>
+                    <label class="rz-field-label"><?= t('aff.register.password_confirm') . $reqMark ?></label>
                     <input type="password" name="password_confirm" class="rz-input" required>
                 </div>
             </div>
@@ -143,20 +143,22 @@ require_once '../includes/html_head.php';
             <div style="border-top:1px solid var(--line);padding-top:16px;display:flex;flex-direction:column;gap:10px">
                 <label class="rz-check">
                     <input type="checkbox" name="terms_consent" required>
-                    Strinjam se s <a href="<?= BASE_PATH ?>/affiliate/terms.php" target="_blank" class="rz-link">pogoji affiliate programa</a>. *
+                    <?= t_raw('aff.register.terms_consent', [
+                        'terms_link' => '<a href="' . htmlspecialchars(BASE_PATH . '/affiliate/terms.php', ENT_QUOTES) . '" target="_blank" class="rz-link">' . t('aff.register.terms_link_text') . '</a>',
+                    ]) . ' ' . t('aff.common.required_marker') ?>
                 </label>
                 <label class="rz-check">
                     <input type="checkbox" name="marketing_consent">
-                    Strinjam se s prejemanjem novic in nasvetov programa.
+                    <?= t('aff.register.marketing_consent') ?>
                 </label>
             </div>
 
-            <button type="submit" class="rz-btn rz-btn-primary" style="width:100%;justify-content:center;padding:11px;margin-top:4px">Oddaj prijavnico</button>
+            <button type="submit" class="rz-btn rz-btn-primary" style="width:100%;justify-content:center;padding:11px;margin-top:4px"><?= t('aff.register.submit') ?></button>
         </form>
     </div>
 
     <p style="text-align:center;margin-top:16px;font-size:12px;color:var(--ink-mute)">
-        Že imate račun? <a href="<?= BASE_PATH ?>/affiliate/login.php" class="rz-link">Prijava</a>
+        <?= t('aff.register.already_account') ?> <a href="<?= BASE_PATH ?>/affiliate/login.php" class="rz-link"><?= t('aff.register.login_link') ?></a>
     </p>
     <?php endif; ?>
 </div>

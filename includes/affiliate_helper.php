@@ -44,8 +44,16 @@ function affiliate_generate_ref_code(PDO $pdo): string {
 /**
  * Nastavi affiliate tracking cookie.
  * Kličemo vedno, ko zaznamo ?ref= parameter na javni strani.
+ *
+ * Cookie consent: rez_aff je marketing/tracking cookie (ePrivacy 5(3)),
+ * zato ga postavimo SAMO če je uporabnik privolil v 'marketing' kategorijo.
+ * Klik vedno logiramo ločeno (affiliate_log_click) – to je server-side analitika
+ * brez piškotka in jo opravičuje legitimni interes affiliate priporočila.
  */
 function affiliate_set_cookie(string $refCode, array $params = []): void {
+    require_once __DIR__ . '/cookie_consent.php';
+    if (!rez_consent_allows('marketing')) return; // brez privolitve ne nastavimo
+
     $ttl  = 60 * 86400; // 60 dni
     $data = json_encode([
         'code'         => strtoupper($refCode),

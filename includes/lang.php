@@ -28,6 +28,17 @@ function _rz_load_lang(string $code): void {
     }
     $json = @file_get_contents($file);
     $__rz_lang_strings = ($json !== false) ? (json_decode($json, true) ?: []) : [];
+    // Fallback: če aktivni jezik ni SL, naloži tudi sl.json za manjkajoče ključe.
+    // To prepreči, da bi neprevedeni ključi (npr. "billing.period_month_short") padli skozi
+    // kot raw key string v UI.
+    if ($code !== 'sl') {
+        global $__rz_lang_fallback;
+        $slJson = @file_get_contents(__DIR__ . '/../lang/sl.json');
+        $__rz_lang_fallback = ($slJson !== false) ? (json_decode($slJson, true) ?: []) : [];
+    } else {
+        global $__rz_lang_fallback;
+        $__rz_lang_fallback = [];
+    }
     $__rz_app_lang = $code;
 }
 
@@ -38,8 +49,8 @@ function _rz_load_lang(string $code): void {
  * @param array<string,scalar> $params  Zamenjave, npr. ['count' => 3] → '{count}' → '3'
  */
 function t(string $key, array $params = []): string {
-    global $__rz_lang_strings;
-    $str = $__rz_lang_strings[$key] ?? $key;
+    global $__rz_lang_strings, $__rz_lang_fallback;
+    $str = $__rz_lang_strings[$key] ?? ($__rz_lang_fallback[$key] ?? $key);
     foreach ($params as $k => $v) {
         $str = str_replace('{' . $k . '}', (string)$v, $str);
     }
@@ -51,8 +62,8 @@ function t(string $key, array $params = []): string {
  * Uporabi kadar je vrednost zaupanja vredna (konstanta iz prevoda, ne uporabniški vnos).
  */
 function t_raw(string $key, array $params = []): string {
-    global $__rz_lang_strings;
-    $str = $__rz_lang_strings[$key] ?? $key;
+    global $__rz_lang_strings, $__rz_lang_fallback;
+    $str = $__rz_lang_strings[$key] ?? ($__rz_lang_fallback[$key] ?? $key);
     foreach ($params as $k => $v) {
         $str = str_replace('{' . $k . '}', (string)$v, $str);
     }

@@ -2,7 +2,7 @@
 // survey_builder.php je preseljen v restaurant-edit.php (tab Anketa)
 require_once '../includes/auth_check.php';
 if (is_logged_in()) {
-    header('Location: ' . BASE_PATH . '/pages/admin.php');
+    header('Location: ' . BASE_PATH . '/pages/restaurants.php');
     exit;
 }
 require_once '../includes/db.php';
@@ -140,7 +140,7 @@ if ($isAdmin) {
             <?= t('survey_builder.schedule_link') ?>
         </a>
         <?php if ($isAdmin): ?>
-        <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin">
+        <a href="<?= BASE_PATH ?>/pages/restaurants.php" class="btn-header btn-header-admin">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 1 0-16 0"/></svg>
             <?= t('survey_builder.admin_link') ?>
         </a>
@@ -161,7 +161,7 @@ if ($isAdmin) {
     <div class="mobile-nav-user">👤 <?= h($fullName) ?></div>
     <a href="<?= BASE_PATH ?>/pages/main.php" class="btn-header btn-header-admin"><?= t('survey_builder.schedule_link') ?></a>
     <?php if ($isAdmin): ?>
-    <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn-header btn-header-admin"><?= t('survey_builder.admin_link') ?></a>
+    <a href="<?= BASE_PATH ?>/pages/restaurants.php" class="btn-header btn-header-admin"><?= t('survey_builder.admin_link') ?></a>
     <a href="<?= BASE_PATH ?>/pages/survey_results.php" class="btn-header"><?= t('survey_builder.mobile_responses') ?></a>
     <?php endif; ?>
     <a href="<?= BASE_PATH ?>/pages/profile.php" class="btn-header"><?= t('survey_builder.profile_link') ?></a>
@@ -278,7 +278,7 @@ if ($isAdmin) {
 
     <div id="no-restaurant-msg" style="color:#9CA3AF;font-size:.9rem;padding:20px 0">
         <?php if (empty($restaurants)): ?>
-        <?= t('survey_builder.no_restaurant') ?> <a href="<?= BASE_PATH ?>/pages/admin.php" style="color:#F59E0B">Admin</a>.
+        <?= t('survey_builder.no_restaurant') ?> <a href="<?= BASE_PATH ?>/pages/restaurants.php" style="color:#F59E0B">Admin</a>.
         <?php endif; ?>
     </div>
 

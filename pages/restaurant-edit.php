@@ -22,13 +22,13 @@ if (!empty($_SESSION['payment_failed'])) {
 
 $restId = isset($_GET['id']) ? (int)$_GET['id'] : 0;
 if (!$restId || !admin_owns_restaurant($pdo, $_SESSION, $restId)) {
-    header('Location: ' . BASE_PATH . '/pages/admin.php'); exit;
+    header('Location: ' . BASE_PATH . '/pages/restaurants.php'); exit;
 }
 
 $stmt = $pdo->prepare("SELECT * FROM restaurants WHERE id = ?");
 $stmt->execute([$restId]);
 $rest = $stmt->fetch();
-if (!$rest) { header('Location: ' . BASE_PATH . '/pages/admin.php'); exit; }
+if (!$rest) { header('Location: ' . BASE_PATH . '/pages/restaurants.php'); exit; }
 
 $fullName  = $_SESSION['full_name'];
 $activeTab = $_GET['tab'] ?? 'splosno';
@@ -55,7 +55,7 @@ $pendingCount = (int) $stmt3->fetchColumn();
 ?>
 <?php
 $pageTitle = t('re.page_title_prefix') . ' – ' . $rest['name'];
-$extraCss  = ['main.css?v=4', 'admin.css?v=3', 'modal.css?v=3', 'design.css?v=1'];
+$extraCss  = ['main.css?v=4', 'admin.css?v=3', 'modal.css?v=3', 'design.css?v=2'];
 require_once '../includes/html_head.php';
 ?>
 <body>
@@ -68,7 +68,16 @@ require_once '../includes/html_head.php';
         .rest-color-dot { width:14px; height:14px; border-radius:50%; display:inline-block; vertical-align:middle; margin-right:6px; border:2px solid rgba(0,0,0,.1); }
 
         /* Tabs (Rezble-style) */
-        .re-tabs { display:flex; gap:4px; border-bottom:1px solid var(--line, var(--color-border)); margin-bottom:24px;}
+        .re-tabs { display:flex; gap:4px; border-bottom:1px solid var(--line, var(--color-border)); margin-bottom:24px; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+        .re-tabs::-webkit-scrollbar { display:none; }
+        @media (max-width: 900px) {
+            .re-tabs {
+                position: relative;
+                padding-right: 24px;
+                mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 24px), transparent 100%);
+                -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 24px), transparent 100%);
+            }
+        }
         .re-tab { padding:10px 14px; font-size:13px; font-weight:600; font-family:var(--font); color:var(--ink-mute, var(--color-muted)); background:transparent; border:none; cursor:pointer; border-bottom:2px solid transparent; transition:color .15s, border-color .15s; white-space:nowrap; border-radius:6px 6px 0 0; margin-bottom:-1px; }
         .re-tab:hover { color:var(--ink, var(--color-text)); background:var(--bg-sunken, transparent); }
         .re-tab.active { color:var(--accent, var(--color-accent)); border-bottom-color:var(--accent, var(--color-accent)); background:transparent; }
@@ -141,7 +150,7 @@ require_once '../includes/html_head.php';
     $topbarSubtitle = t('re.topbar_subtitle') . ' <span class="rest-color-dot" id="hdr-color-dot" style="background:' . h($rest['color']) . '"></span>'
                     . ' <span class="badge ' . ($rest['is_active'] ? 'badge-active' : 'badge-inactive') . '">' . ($rest['is_active'] ? t('re.status_active') : t('re.status_inactive')) . '</span>';
     ob_start(); ?>
-    <a href="<?= BASE_PATH ?>/pages/admin.php" class="rz-btn">
+    <a href="<?= BASE_PATH ?>/pages/restaurants.php" class="rz-btn">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg>
         <span><?= t('common.back') ?></span>
     </a>
@@ -272,6 +281,18 @@ require_once '../includes/html_head.php';
                             <label class="toggle-wrap" style="cursor:pointer;margin:0;flex-shrink:0">
                                 <span class="toggle">
                                     <input type="checkbox" id="r-employees-override">
+                                    <span class="toggle-track"></span>
+                                </span>
+                            </label>
+                        </div>
+                        <div class="rz-toggle-row">
+                            <div>
+                                <div class="rz-toggle-label"><?= t('re.toggle_notify_guest') ?></div>
+                                <div class="rz-toggle-hint"><?= t('re.toggle_notify_guest_hint') ?></div>
+                            </div>
+                            <label class="toggle-wrap" style="cursor:pointer;margin:0;flex-shrink:0">
+                                <span class="toggle">
+                                    <input type="checkbox" id="r-notify-guest" <?= ($rest['notify_guest_email'] ?? 1) ? 'checked' : '' ?>>
                                     <span class="toggle-track"></span>
                                 </span>
                             </label>
@@ -508,15 +529,12 @@ require_once '../includes/html_head.php';
                 $_langLabels = ['sl'=>'Slovenščina','en'=>'English','de'=>'Deutsch','it'=>'Italiano','fr'=>'Français','hr'=>'Hrvatski','es'=>'Español','pt'=>'Português'];
                 ?>
                 <div class="re-section">
-                    <?= card_head(t('re.card_settings'), 'Jeziki booking strani', false, 'advanced'); ?>
-                    <p class="nastavitve-intro">
-                        Določite, v katerih jezikih je booking stran na voljo gostom.
-                        Če omogočite preklop jezika, gostje izberejo sami; sicer vidijo samo primarni jezik.
-                    </p>
+                    <?= card_head(t('re.card_settings'), t('re.card_booking_languages'), false, 'advanced'); ?>
+                    <p class="nastavitve-intro"><?= t('re.booking_languages_intro') ?></p>
                     <div class="rz-toggle-row">
                         <div>
-                            <div class="rz-toggle-label">Pokaži preklop jezika gostom</div>
-                            <div class="rz-toggle-hint">Dropdown desno zgoraj v booking strani in widgetu.</div>
+                            <div class="rz-toggle-label"><?= t('re.toggle_lang_switcher') ?></div>
+                            <div class="rz-toggle-hint"><?= t('re.toggle_lang_switcher_hint') ?></div>
                         </div>
                         <label class="toggle-wrap" style="cursor:pointer;margin:0;flex-shrink:0">
                             <span class="toggle">
@@ -529,7 +547,7 @@ require_once '../includes/html_head.php';
 
                     <!-- Razpoložljivi jeziki: vidno samo če switcher omogočen -->
                     <div id="r-avail-langs-block" style="margin-top:16px;display:<?= $_curLangSwitcher ? 'flex' : 'none' ?>;flex-direction:column;gap:8px">
-                        <label style="font-size:.825rem;color:var(--color-muted);font-weight:600">Razpoložljivi jeziki (kateri so v switcherju):</label>
+                        <label style="font-size:.825rem;color:var(--color-muted);font-weight:600"><?= t('re.available_languages_label') ?></label>
                         <div style="display:flex;flex-wrap:wrap;gap:8px">
                             <?php foreach ($_langLabels as $_lc => $_label): ?>
                                 <label class="rz-tag-chip" style="display:inline-flex;align-items:center;gap:6px;padding:6px 12px;border:1.5px solid var(--color-border);border-radius:999px;font-size:.825rem;cursor:pointer;background:#fff">
@@ -542,7 +560,7 @@ require_once '../includes/html_head.php';
 
                     <!-- Primarni jezik: vedno viden -->
                     <div class="admin-field" style="padding:14px 0 0">
-                        <label>Primarni jezik <span style="font-weight:400;color:var(--color-muted);font-size:.78rem">(privzet ob prvem obisku; edini če switcher onemogočen)</span></label>
+                        <label><?= t('re.primary_language_label') ?> <span style="font-weight:400;color:var(--color-muted);font-size:.78rem"><?= t('re.primary_language_hint') ?></span></label>
                         <select id="r-primary-lang" style="border:1.5px solid var(--color-border);border-radius:8px;padding:8px 12px;font-size:.875rem;font-family:var(--font);outline:none;min-width:220px">
                             <?php foreach ($_langLabels as $_lc => $_label): ?>
                                 <option value="<?= $_lc ?>" <?= $_curPrimaryLang === $_lc ? 'selected' : '' ?>><?= strtoupper($_lc) ?> · <?= $_label ?></option>
@@ -887,6 +905,10 @@ window.APP_STATE = <?= json_encode([
     'restId'       => (int)$rest['id'],
     'token'        => $rest['booking_token'] ?? '',
     'surveyEdit'   => $hasSurveyEdit,
+    'primaryLang'  => !empty($rest['booking_primary_language']) ? $rest['booking_primary_language'] : 'sl',
+    'availLangs'   => !empty($rest['booking_available_languages'])
+        ? (json_decode($rest['booking_available_languages'], true) ?: ['sl'])
+        : ['sl'],
 ], JSON_UNESCAPED_UNICODE) ?>;
 
 const REST_ID = APP_STATE.restId;
@@ -1151,6 +1173,7 @@ document.getElementById('btn-save-splosno').addEventListener('click', async () =
     const contactEmail = document.getElementById('r-contact-email').value.trim();
     const contactPhone = document.getElementById('r-contact-phone').value.trim();
     const address      = document.getElementById('r-address')?.value.trim() || '';
+    const notifyGuest  = document.getElementById('r-notify-guest')?.checked ? 1 : 0;
     if (!name) { showPageErr(window.t('re.err_name_required')); return; }
     const btn = document.getElementById('btn-save-splosno');
     btn.disabled=true; btn.textContent='...';
@@ -1158,6 +1181,7 @@ document.getElementById('btn-save-splosno').addEventListener('click', async () =
         await apiCall('PUT', `/api/restaurants.php?id=${REST_ID}`, {
             name, color, is_active: active,
             contact_email: contactEmail, contact_phone: contactPhone, address: address,
+            notify_guest_email: notifyGuest,
         });
         document.querySelector('.rest-edit-title').innerHTML =
             `<span class="rest-color-dot" id="hdr-color-dot" style="background:${color}"></span>${h(name)}`;
@@ -1344,13 +1368,17 @@ function renderBlackouts() {
         el.innerHTML = '<p style="font-size:.825rem;color:var(--ink-mute);margin:4px 0">Ni blokiranih datumov.</p>';
         return;
     }
-    el.innerHTML = blackouts.map(b => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const upcoming = blackouts.filter(b => b.blackout_date >= todayStr);
+    const past     = blackouts.filter(b => b.blackout_date <  todayStr);
+
+    function row(b, isPast) {
         const sub = (b.block_start != null && b.block_end != null)
             ? `${window.t('re.blackout_partial_schedule')} ${fmtMins(b.block_start)}–${fmtMins(b.block_end)}`
             : window.t('re.day_closed');
         return `
-        <div style="display:grid;grid-template-columns:80px 1fr auto;align-items:center;gap:14px;padding:12px 4px;border-top:1px solid var(--line)" data-date="${h(b.blackout_date)}">
-            <span style="font-size:13px;font-weight:700;color:var(--accent);font-family:var(--font-mono)">${fmtBlackoutDate(b.blackout_date)}</span>
+        <div style="display:grid;grid-template-columns:90px 1fr auto;align-items:center;gap:14px;padding:12px 4px;border-top:1px solid var(--line);${isPast ? 'opacity:.6' : ''}" data-date="${h(b.blackout_date)}">
+            <span style="font-size:13px;font-weight:700;color:${isPast ? 'var(--ink-mute)' : 'var(--accent)'};font-family:var(--font-mono)">${fmtBlackoutDate(b.blackout_date)}</span>
             <div>
                 <div style="font-size:13px;font-weight:600;color:var(--ink)">${b.reason ? h(b.reason) : window.t('re.blackout_blocked')}</div>
                 <div style="font-size:11px;color:var(--ink-mute);margin-top:2px">${sub}</div>
@@ -1359,7 +1387,22 @@ function renderBlackouts() {
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
             </button>
         </div>`;
-    }).join('');
+    }
+
+    let html = '';
+    if (upcoming.length) {
+        html += upcoming.map(b => row(b, false)).join('');
+    } else {
+        html += '<p style="font-size:.825rem;color:var(--ink-mute);margin:4px 0">' + window.t('re.no_upcoming_blackouts') + '</p>';
+    }
+    if (past.length) {
+        html += `
+            <details style="margin-top:14px">
+                <summary style="cursor:pointer;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-mute);padding:6px 0">${window.t('re.archive_label')} (${past.length})</summary>
+                <div style="margin-top:6px">${past.map(b => row(b, true)).join('')}</div>
+            </details>`;
+    }
+    el.innerHTML = html;
 }
 
 window.removeBlackout = async (date, btn) => {
@@ -1637,6 +1680,7 @@ function cfAddCard(data = null) {
             <div style="flex:1;display:flex;flex-direction:column;gap:6px">
                 <input type="text" id="cflabel-${ck}" placeholder="${window.t('re.cf_label_placeholder')}" value="${h(label)}"
                     style="border:1.5px solid var(--color-border);border-radius:7px;padding:8px 10px;font-size:.875rem;font-family:var(--font);color:var(--color-text);width:100%;outline:none;box-sizing:border-box">
+                <div id="cftr-${ck}"></div>
                 <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
                     <select id="cftype-${ck}"
                         style="border:1.5px solid var(--color-border);border-radius:7px;padding:7px 10px;font-size:.825rem;font-family:var(--font);background:var(--color-surface)">${typeOpts}</select>
@@ -1669,6 +1713,27 @@ function cfAddCard(data = null) {
     document.getElementById(`cfaddopt-${ck}`).addEventListener('click', () => cfAddCardOpt(ck));
     document.getElementById(`cfsave-${ck}`).addEventListener('click', () => cfSaveCard(ck));
     document.getElementById(`cfdel-${ck}`).addEventListener('click', () => cfDeleteCard(ck));
+
+    // Jezikovni chips za polje (samo za shranjene)
+    if (id && window.TranslationsUI && APP_STATE.availLangs) {
+        const host = document.getElementById(`cftr-${ck}`);
+        fetch(`${APP_STATE.base}/api/translations.php?action=get&kind=custom_field&id=${id}`, { credentials: 'same-origin' })
+            .then(r => r.json()).then(j => {
+                const trans = {};
+                if (j && j.success && j.data) {
+                    Object.keys(j.data).forEach(lc => { if (j.data[lc] && j.data[lc].label) trans[lc] = j.data[lc].label; });
+                }
+                window.TranslationsUI.attach(host, {
+                    kind: 'custom_field',
+                    targetId: id,
+                    primaryLang: APP_STATE.primaryLang || 'sl',
+                    availableLangs: APP_STATE.availLangs,
+                    masterText: label,
+                    translations: trans,
+                    fieldKey: 'label',
+                });
+            }).catch(() => {});
+    }
 
     opts.forEach(o => cfAddCardOpt(ck, typeof o === 'string' ? o : o.label));
     cfTypeChange(ck);
@@ -1869,6 +1934,7 @@ function initSurveyDragDrop() {
 
 function fillSurveyForm(d) {
     const canEdit = APP_STATE.surveyEdit;
+    // d.title je že lokaliziran v primary lang (ali master če prevod manjka)
     document.getElementById('sf-title').value       = d.title || '';
     document.getElementById('sf-description').value = d.description || '';
     document.getElementById('sf-thankyou').value    = d.thank_you_message || '';
@@ -1877,6 +1943,9 @@ function fillSurveyForm(d) {
     document.getElementById('sf-incl-thankyou').checked = !!parseInt(d.include_thankyou);
     document.getElementById('sf-incl-survey').checked   = !!parseInt(d.include_survey);
     surveyToggleDelay();
+    window.__SURVEY_FORM_ID__ = d.id ? parseInt(d.id) : 0;
+    window.__SURVEY_FORM_TRANSLATIONS__ = d.translations || {};
+    surveyAttachFormChips();
 
     // Readonly za Advanced
     if (!canEdit) {
@@ -1913,12 +1982,16 @@ function surveyAddQuestion(data = null) {
     const qk      = `sfq${sfQCounter}`;
     const canEdit = APP_STATE.surveyEdit;
     const type    = data ? data.type : 'rating';
+    // data.question_text je že prevod za primary lang (ali master če prevod manjka)
     const text    = data ? (data.question_text || '') : '';
     const req     = data ? !!parseInt(data.is_required) : false;
     const opts    = data && data.options ? data.options : [];
+    const qid     = data && data.id ? parseInt(data.id) : 0;
+    const qTrans  = data && data.translations ? data.translations : {};
 
     const card = document.createElement('div');
     card.id = `sfcard-${qk}`;
+    if (qid) card.dataset.qid = qid;
     card.style.cssText = 'background:var(--color-bg);border:1px solid var(--color-border);border-radius:8px;padding:12px 14px';
 
     const typeOpts = Object.entries(SF_TYPE_LABELS()).map(([v,l]) =>
@@ -1946,6 +2019,7 @@ function surveyAddQuestion(data = null) {
                         <input type="checkbox" id="sfqreq-${qk}"${req?' checked':''} style="cursor:pointer;accent-color:var(--color-accent)"> ${window.t('re.cf_required')}
                     </label>
                 </div>
+                <div id="sfqtr-${qk}"></div>
                 <div id="sfqopts-${qk}" style="display:flex;flex-direction:column;gap:4px"></div>
                 <button id="sfqaddopt-${qk}" onclick="sfAddOpt('${qk}')" style="display:none;border:1px dashed var(--color-border);border-radius:6px;padding:5px 10px;font-size:.8rem;color:var(--color-muted);background:none;cursor:pointer;text-align:left">+ ${window.t('re.cf_add_option')}</button>
             </div>
@@ -1956,8 +2030,21 @@ function surveyAddQuestion(data = null) {
             </button>
         </div>`;
         document.getElementById('sf-question-list').appendChild(card);
-        opts.forEach(o => sfAddOpt(qk, o.label));
+        opts.forEach(o => sfAddOpt(qk, o));
         sfTypeChange(qk);
+
+        // Jezikovni chips za vprašanje (samo če ima id — torej shranjeno)
+        if (qid && window.TranslationsUI && APP_STATE.availLangs) {
+            window.TranslationsUI.attach(document.getElementById(`sfqtr-${qk}`), {
+                kind: 'survey_question',
+                targetId: qid,
+                primaryLang: APP_STATE.primaryLang || 'sl',
+                availableLangs: APP_STATE.availLangs,
+                masterText: text,
+                translations: qTrans,
+                multiline: text && text.length > 80,
+            });
+        }
     } else {
         // Readonly prikaz vprašanja
         const reqBadge = req ? `<span style="font-size:.72rem;background:#FEE2E2;color:#DC2626;padding:1px 6px;border-radius:10px;font-weight:600;margin-left:6px">${window.t('re.cf_required')}</span>` : '';
@@ -1987,19 +2074,76 @@ function sfTypeChange(qk) {
     else if (needsOpts && optsList.children.length === 0) sfAddOpt(qk);
 }
 
-function sfAddOpt(qk, value = '') {
+function sfAddOpt(qk, optOrValue = '') {
     sfOptCounter++;
     const ok = `sfo${sfOptCounter}`;
+    const isObj = optOrValue && typeof optOrValue === 'object';
+    const value = isObj ? (optOrValue.label || '') : (optOrValue || '');
+    const oid   = isObj && optOrValue.id ? parseInt(optOrValue.id) : 0;
+    const oTrans = isObj && optOrValue.translations ? optOrValue.translations : {};
+
     const row = document.createElement('div');
     row.id = `sfoptrow-${ok}`;
-    row.style.cssText = 'display:flex;align-items:center;gap:6px';
+    if (oid) row.dataset.oid = oid;
+    row.style.cssText = 'display:flex;align-items:center;gap:6px;flex-wrap:wrap';
     row.innerHTML = `
         <input type="text" id="${ok}" placeholder="${window.t('re.cf_opt_placeholder')}" value="${h(value)}"
-            style="flex:1;border:1.5px solid var(--color-border);border-radius:6px;padding:6px 9px;font-size:.83rem;font-family:var(--font);outline:none">
+            style="flex:1;min-width:180px;border:1.5px solid var(--color-border);border-radius:6px;padding:6px 9px;font-size:.83rem;font-family:var(--font);outline:none">
+        <div id="sfopttr-${ok}"></div>
         <button onclick="document.getElementById('sfoptrow-${ok}').remove()"
             style="background:none;border:none;cursor:pointer;color:var(--color-muted);font-size:1.1rem;line-height:1;padding:2px 5px"
             onmouseenter="this.style.color='#EF4444'" onmouseleave="this.style.color=''">×</button>`;
     document.getElementById(`sfqopts-${qk}`).appendChild(row);
+
+    if (oid && window.TranslationsUI && APP_STATE.availLangs) {
+        window.TranslationsUI.attach(document.getElementById(`sfopttr-${ok}`), {
+            kind: 'survey_option',
+            targetId: oid,
+            primaryLang: APP_STATE.primaryLang || 'sl',
+            availableLangs: APP_STATE.availLangs,
+            masterText: value,
+            translations: oTrans,
+        });
+    }
+}
+
+function surveyAttachFormChips() {
+    if (!window.TranslationsUI || !APP_STATE.availLangs) return;
+    const formId = window.__SURVEY_FORM_ID__ || 0;
+    if (!formId) return;
+    const trans = window.__SURVEY_FORM_TRANSLATIONS__ || {};
+    const primary = APP_STATE.primaryLang || 'sl';
+
+    // Po-polje "translation chips" (title, description, thank_you)
+    function ensureChipsAfter(elId, fieldKey, masterText) {
+        const el = document.getElementById(elId);
+        if (!el) return;
+        let chips = el.parentNode.querySelector('.rz-tr-chips-' + elId);
+        if (!chips) {
+            chips = document.createElement('div');
+            chips.className = 'rz-tr-chips-' + elId;
+            chips.style.marginTop = '4px';
+            el.parentNode.insertBefore(chips, el.nextSibling);
+        }
+        // Build per-lang map for this field only.
+        const perLang = {};
+        Object.keys(trans).forEach(function (lc) {
+            if (trans[lc] && trans[lc][fieldKey]) perLang[lc] = trans[lc][fieldKey];
+        });
+        window.TranslationsUI.attach(chips, {
+            kind: 'survey_form',
+            targetId: formId,
+            primaryLang: primary,
+            availableLangs: APP_STATE.availLangs,
+            masterText: masterText || el.value || '',
+            translations: perLang,
+            fieldKey: fieldKey,
+            multiline: fieldKey !== 'title',
+        });
+    }
+    ensureChipsAfter('sf-title',       'title');
+    ensureChipsAfter('sf-description', 'description');
+    ensureChipsAfter('sf-thankyou',    'thank_you_message');
 }
 
 function sfMoveQ(qk, dir) {
@@ -2013,14 +2157,22 @@ function collectSurveyQuestions() {
     return Array.from(document.querySelectorAll('#sf-question-list > div')).map(card => {
         const qk   = card.id.replace('sfcard-','');
         const type = document.getElementById(`sfqtype-${qk}`).value;
+        const qid  = card.dataset.qid ? parseInt(card.dataset.qid) : 0;
         const opts = [];
-        card.querySelectorAll(`#sfqopts-${qk} input[type=text]`).forEach(inp => {
-            const v = inp.value.trim(); if (v) opts.push({ label: v });
+        card.querySelectorAll(`#sfqopts-${qk} > div[id^="sfoptrow-"]`).forEach(row => {
+            const inp = row.querySelector('input[type=text]');
+            const v = inp ? inp.value.trim() : '';
+            if (!v) return;
+            const o = { label: v };
+            if (row.dataset.oid) o.id = parseInt(row.dataset.oid);
+            opts.push(o);
         });
-        return {
+        const obj = {
             question_text: document.getElementById(`sfqt-${qk}`).value.trim(),
             type, is_required: document.getElementById(`sfqreq-${qk}`).checked ? 1 : 0, options: opts,
         };
+        if (qid) obj.id = qid;
+        return obj;
     });
 }
 
@@ -2042,6 +2194,8 @@ async function saveSurveyForm() {
         });
         st.style.color = '#059669'; st.textContent = window.t('re.toast_saved');
         setTimeout(() => st.textContent = '', 3000);
+        // Po shranitvi ponovno naloži (potrebno za nova vprašanja, ki dobijo ID-je za prevode)
+        if (typeof surveyLoadForm === 'function') surveyLoadForm();
     } catch(e) {
         st.style.color = '#EF4444'; st.textContent = e.message || window.t('common.error');
     }
@@ -2215,10 +2369,11 @@ function renderAreasWithTables() {
         const activeChip = a.is_active
             ? `<span class="rz-chip rz-chip-ok">AKTIVNA</span>`
             : `<span class="rz-chip rz-chip-mute">NEAKTIVNA</span>`;
-        html += `<div id="area-block-${a.id}" style="border:1px solid var(--line);border-radius:10px;overflow:hidden">
-            <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--bg-sunken);border-bottom:1px solid var(--line)">
+        html += `<div id="area-block-${a.id}" data-area-id="${a.id}" data-area-name="${h(a.name)}" style="border:1px solid var(--line);border-radius:10px;overflow:hidden">
+            <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--bg-sunken);border-bottom:1px solid var(--line);flex-wrap:wrap">
                 <strong style="font-size:14px;color:var(--ink)">${h(a.name)}</strong>
                 ${activeChip}
+                <div class="rz-area-tr" data-area-tr-id="${a.id}"></div>
                 <span style="font-size:12px;color:var(--ink-mute)">${window.t('re.area_tables_count', {count: tables.length})}</span>
                 <div style="margin-left:auto;display:flex;gap:6px">
                     <button onclick="showTableForm(null,${a.id})" class="rz-btn rz-btn-primary" style="padding:5px 10px;font-size:12px"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg> ${window.t('re.btn_add_table')}</button>
@@ -2253,6 +2408,32 @@ function renderAreasWithTables() {
     }
 
     el.innerHTML = html;
+
+    // Attach prevodne chips za vsako cono
+    if (window.TranslationsUI && APP_STATE.availLangs) {
+        document.querySelectorAll('.rz-area-tr[data-area-tr-id]').forEach(function (host) {
+            const aid = parseInt(host.dataset.areaTrId);
+            const block = document.getElementById(`area-block-${aid}`);
+            const masterName = block ? (block.dataset.areaName || '') : '';
+            // Lazy-load prevodov ob attach (iz translations.php)
+            fetch(`${APP_STATE.base}/api/translations.php?action=get&kind=area&id=${aid}`, { credentials: 'same-origin' })
+                .then(r => r.json()).then(j => {
+                    const trans = {};
+                    if (j && j.success && j.data) {
+                        Object.keys(j.data).forEach(lc => { if (j.data[lc] && j.data[lc].name) trans[lc] = j.data[lc].name; });
+                    }
+                    window.TranslationsUI.attach(host, {
+                        kind: 'area',
+                        targetId: aid,
+                        primaryLang: APP_STATE.primaryLang || 'sl',
+                        availableLangs: APP_STATE.availLangs,
+                        masterText: masterName,
+                        translations: trans,
+                        fieldKey: 'name',
+                    });
+                }).catch(() => {});
+        });
+    }
 }
 
 function renderMergeGroups() {
@@ -2420,6 +2601,8 @@ function loadTables() { tablesLoaded = true; }
     if (hash && valid.includes(hash)) activateTab(hash);
 })();
 </script>
+<script src="<?= BASE_PATH ?>/assets/js/translations_ui.js?v=1"></script>
+<script>window.APP_BASE = '<?= BASE_PATH ?>';</script>
 <script src="<?= BASE_PATH ?>/assets/js/rezble-shell.js?v=1"></script>
 
 </main>

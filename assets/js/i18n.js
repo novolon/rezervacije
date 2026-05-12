@@ -19,7 +19,14 @@
      * @returns {string}
      */
     window.t = function (key, params) {
-        var s = (window.__T__ && window.__T__[key] != null) ? window.__T__[key] : key;
+        var s;
+        if (window.__T__ && window.__T__[key] != null) {
+            s = window.__T__[key];
+        } else if (window.__T_FALLBACK__ && window.__T_FALLBACK__[key] != null) {
+            s = window.__T_FALLBACK__[key];
+        } else {
+            s = key;
+        }
         if (params) {
             for (var k in params) {
                 if (Object.prototype.hasOwnProperty.call(params, k)) {

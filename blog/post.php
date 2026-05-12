@@ -14,6 +14,35 @@ require_once __DIR__ . '/../includes/blog_helpers.php';
 $slug = trim($_GET['slug'] ?? '');
 // Pomembno: ne uporabljaj get_lang() (cookie/session) — URL pot je avtoritativna.
 // .htaccess pošlje ?lang=$1 za /{lang}/booked/... rute, /booked/... pa default = 'sl'.
+// Izjema: če uporabnik prihaja z app rzlang cookie-jem (npr. 'de'), in URL nima lang prefixa,
+// preveri ali ima ta članek prevod v cookie jeziku in preusmeri.
+if (!isset($_GET['lang']) && $slug !== '' && preg_match('/^[a-z0-9-]{2,200}$/', $slug)) {
+    $pref = blog_user_preferred_lang();
+    if ($pref) {
+        $pdoTmp = getDB();
+        // Najdi post_id iz SL slug-a.
+        $r1 = $pdoTmp->prepare(
+            "SELECT post_id FROM blog_post_translations
+             WHERE slug = ? AND lang_code = 'sl' AND status = 'approved'
+             LIMIT 1"
+        );
+        $r1->execute([$slug]);
+        $postId = (int)$r1->fetchColumn();
+        if ($postId > 0) {
+            $r2 = $pdoTmp->prepare(
+                "SELECT slug FROM blog_post_translations
+                 WHERE post_id = ? AND lang_code = ? AND status = 'approved'
+                 LIMIT 1"
+            );
+            $r2->execute([$postId, $pref]);
+            $prefSlug = $r2->fetchColumn();
+            if ($prefSlug) {
+                header('Location: ' . blog_post_url((string)$prefSlug, $pref), true, 302);
+                exit;
+            }
+        }
+    }
+}
 $lang = $_GET['lang'] ?? 'sl';
 if (!in_array($lang, BLOG_LANGS, true)) $lang = 'sl';
 
@@ -255,7 +284,7 @@ $publishedDate = !empty($tr['published_at'] ?? $tr['updated_at']) ? date('j. n. 
                             <div class="flex items-center gap-2"><span style="width:6px;height:6px;border-radius:999px;background:var(--terracotta)"></span><?= t('booked.minute_read', ['minutes' => (int)$tr['reading_time_minutes']]) ?></div>
                         <?php endif; ?>
                         <?php if (!empty($tr['word_count'])): ?>
-                            <div><?= (int)$tr['word_count'] ?> besed</div>
+                            <div><?= t('booked.word_count', ['count' => (int)$tr['word_count']]) ?></div>
                         <?php endif; ?>
                     </div>
                     <?php endif; ?>

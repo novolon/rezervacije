@@ -29,6 +29,10 @@ const BLOG_AI_API_URL         = 'https://api.anthropic.com/v1/messages';
  * Sinhroniziran z includes/plans.php (`user_has_feature`).
  * ───────────────────────────────────────────────────────────────── */
 function blog_ai_app_facts() {
+    // Cene iz config.php → AI prompt vedno odraža trenutne cene paketov.
+    $bp = number_format(PLAN_PRICES['basic']['monthly'],    2, '.', '');
+    $ap = number_format(PLAN_PRICES['advanced']['monthly'], 2, '.', '');
+    $pp = number_format(PLAN_PRICES['premium']['monthly'],  2, '.', '');
     return <<<FACTS
 PRODUCT: Rezble (also called "Rezervacije") — multi-tenant SaaS reservation system for hospitality businesses (restaurants, pizzerias, cafes, bistros, taverns, gostilne).
 
@@ -44,7 +48,6 @@ CORE FEATURES (these are the ONLY features you may mention):
 - Auto-confirm mode: bookings confirmed instantly (Premium)
 - Email notifications: confirmation, cancellation, reservation summaries (Advanced/Premium)
 - 24h reminder emails to guests, sent automatically by background cron (Advanced/Premium)
-- SMS notifications: text message confirmations and reminders (Premium)
 - Table management: define tables, areas, capacity, merge groups for combining tables for big parties; auto-allocate or manual assignment (Advanced/Premium)
 - Waitlist: when slot is full, guest joins waitlist with 2-hour confirm window; cascade notifications when slot opens (Advanced/Premium)
 - Guest database: every booking enriches a per-restaurant guest profile with history, notes, allergies, contact (Advanced/Premium)
@@ -52,7 +55,7 @@ CORE FEATURES (these are the ONLY features you may mention):
 - Custom branding: hide "powered by Rezble", upload logo to public booking page (Premium)
 - GDPR compliance: data export, anonymization request handling, automated 3-year cleanup
 - Multi-language: full Slovenian/English/German/Italian/French/Croatian/Spanish/Portuguese support
-- Plans: Trial (free), Basic (4.99 EUR/mo), Advanced (6.99 EUR/mo), Premium (9.99 EUR/mo), with annual options
+- Plans: Trial (free), Basic ({$bp} EUR/mo), Advanced ({$ap} EUR/mo), Premium ({$pp} EUR/mo), with annual options
 
 EXPLICITLY NOT IN THE PRODUCT (do NOT mention or invent):
 - Online ordering / takeout / delivery
@@ -291,7 +294,7 @@ IMAGES — for the hero image and each placeholder, write a vivid, specific DALL
 - Each image needs an ALT text in {$langLabel} (descriptive, ≤120 chars).
 - Each image needs a CAPTION in {$langLabel} (REQUIRED, never empty): one short sentence (max ≤140 chars) that adds context to the image — link it to the surrounding article content. The caption is shown publicly under the image, so it must be a useful, complete sentence (not a duplicate of the alt). Examples:
   * "Spletni rezervacijski sistem omogoča gostom rezervacijo 24/7 — brez klicev v gostinski lokal."
-  * "Avtomatska SMS opomnika pošljeta sporočilo 24 ur in 2 uri pred rezervacijo."
+  * "24-urni email opomnik samodejno spomni gosta na rezervacijo dan pred prihodom."
 
 Adhere strictly to the FACTS. Do NOT invent features Rezble does not have.
 

@@ -48,6 +48,14 @@ if ($method === 'POST') {
         $_SESSION['full_name']     = $user['full_name'];
         $_SESSION['last_activity'] = time();
 
+        // Nastavi user-jev preferiran jezik (cookie + session) — perzistira čez vse strani.
+        // Cookie ime mora biti `rzlang` (skladno z includes/lang.php).
+        $userLang = isset($user['language']) ? (string)$user['language'] : 'sl';
+        $allowedLangs = ['sl','en','de','it','fr','hr','es','pt'];
+        if (!in_array($userLang, $allowedLangs, true)) $userLang = 'sl';
+        $_SESSION['lang'] = $userLang;
+        setcookie('rzlang', $userLang, time() + 365 * 86400, '/');
+
         // Remember me
         if (!empty($body['remember_me'])) {
             $raw     = bin2hex(random_bytes(32));
@@ -67,6 +75,13 @@ if ($method === 'POST') {
         $redirect = ($user['role'] === 'superadmin')
             ? BASE_PATH . '/pages/superadmin.php'
             : BASE_PATH . '/pages/main.php';
+
+        // Server-side login event (dvojni track: tudi če JS zataji)
+        require_once __DIR__ . '/../includes/analytics.php';
+        analytics_capture('login_success', $_SESSION['user_id'], [
+            'role'        => $_SESSION['role'],
+            'remember_me' => !empty($body['remember_me']),
+        ]);
 
         json_response(true, [
             'userId'       => $_SESSION['user_id'],

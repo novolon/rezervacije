@@ -2,12 +2,28 @@
  * Mesečni koledar – render in podatkovni load.
  */
 const Calendar = (() => {
-  const MONTHS_SL = [
+  // Localized: prefer i18n keys, fall back to SL.
+  const FALLBACK_MONTHS = [
     "Januar", "Februar", "Marec", "April", "Maj", "Junij",
     "Julij", "Avgust", "September", "Oktober", "November", "December",
   ];
-  const DAYS_FULL_SL = ["nedelja","ponedeljek","torek","sreda","četrtek","petek","sobota"];
-  const MONTHS_GEN_SL = ["jan","feb","mar","apr","maj","jun","jul","avg","sep","okt","nov","dec"];
+  const FALLBACK_DAYS_FULL = ["nedelja","ponedeljek","torek","sreda","četrtek","petek","sobota"];
+  function monthName(i) {
+    // months.X is 1..12 indexed in lang files
+    const k = "months." + (i + 1);
+    const v = (window.__T__ && window.__T__[k]) || (window.__T_FALLBACK__ && window.__T_FALLBACK__[k]);
+    return v || FALLBACK_MONTHS[i];
+  }
+  function dayFull(jsDayIdx) {
+    // days.X is 0..6 Mon-first; jsDayIdx is 0=Sun..6=Sat
+    const monIdx = (jsDayIdx + 6) % 7;
+    const k = "days." + monIdx;
+    const v = (window.__T__ && window.__T__[k]) || (window.__T_FALLBACK__ && window.__T_FALLBACK__[k]);
+    return v ? v.toLowerCase() : FALLBACK_DAYS_FULL[jsDayIdx];
+  }
+  function monthShort(i) {
+    return window.t ? window.t("months_short." + i) : FALLBACK_MONTHS[i].slice(0, 3).toLowerCase();
+  }
 
   let calendarData = {}; // { 'YYYY-MM-DD': { count, guests } }
   let selectedDate = APP_STATE.today;
@@ -22,7 +38,7 @@ const Calendar = (() => {
     currentMonth = month;
 
     const title = getEl("cal-title");
-    if (title) title.textContent = `${MONTHS_SL[month].toUpperCase()} ${year}`;
+    if (title) title.textContent = `${monthName(month).toUpperCase()} ${year}`;
 
     const grid = getEl("cal-grid");
     if (!grid) return;
@@ -154,7 +170,7 @@ const Calendar = (() => {
     if (!ds) { labelEl.textContent = "–"; statsEl.textContent = ""; return; }
 
     const d = new Date(ds + "T00:00:00");
-    labelEl.textContent = `${DAYS_FULL_SL[d.getDay()]}, ${d.getDate()}. ${MONTHS_GEN_SL[d.getMonth()]}`;
+    labelEl.textContent = `${dayFull(d.getDay())}, ${d.getDate()}. ${monthShort(d.getMonth())}`;
 
     const data = calendarData[ds];
     if (data && data.count > 0) {

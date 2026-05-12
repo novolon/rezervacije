@@ -1,6 +1,7 @@
 <?php
 require_once '../config.php';
 require_once '../includes/db.php';
+require_once '../includes/lang.php';
 require_once '../includes/affiliate_auth.php';
 require_once '../includes/affiliate_helper.php';
 require_once '../includes/affiliate_session.php';
@@ -11,7 +12,7 @@ $affId = (int)$sess['id'];
 $aff   = affiliate_get($pdo, $affId);
 $isPending = $aff && $aff['status'] === 'pending';
 
-$pageTitle = 'Pregled – Affiliate';
+$pageTitle = t('aff.dashboard.page_title');
 $extraCss  = ['design.css'];
 require_once '../includes/html_head.php';
 ?>
@@ -22,39 +23,39 @@ require_once '../includes/html_head.php';
 <main class="rz-main">
     <div class="rz-topbar">
         <div>
-            <h1 class="rz-h1">Pregled</h1>
-            <p class="rz-top-sub">Vaš affiliate dashboard</p>
+            <h1 class="rz-h1"><?= t('aff.dashboard.title') ?></h1>
+            <p class="rz-top-sub"><?= t('aff.dashboard.subtitle') ?></p>
         </div>
     </div>
 
     <?php if ($isPending): ?>
     <div class="rz-card" style="text-align:center;padding:40px;border:1.5px dashed var(--warning)">
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:14px"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-        <h2 style="margin:0 0 8px;font-size:18px;font-weight:700;color:var(--ink)">Čakamo na odobritev</h2>
-        <p style="margin:0;color:var(--ink-mute);font-size:14px;max-width:360px;margin:0 auto">Vaša prijava je pod pregledom. Ko jo odobrimo, boste prejeli email in dostop do polnega dashboarda.</p>
+        <h2 style="margin:0 0 8px;font-size:18px;font-weight:700;color:var(--ink)"><?= t('aff.dashboard.pending_title') ?></h2>
+        <p style="margin:0;color:var(--ink-mute);font-size:14px;max-width:360px;margin:0 auto"><?= t('aff.dashboard.pending_text') ?></p>
     </div>
     <?php else: ?>
 
     <!-- KPI pas -->
     <div class="rz-kpis" style="grid-template-columns:repeat(5,1fr)" id="kpis">
-        <div class="rz-kpi"><div class="rz-kpi-label">Kliki (30 dni)</div><div class="rz-kpi-value" id="stat-clicks">–</div></div>
-        <div class="rz-kpi"><div class="rz-kpi-label">Registracije</div><div class="rz-kpi-value" id="stat-referrals">–</div></div>
-        <div class="rz-kpi"><div class="rz-kpi-label">Aktivni plačniki</div><div class="rz-kpi-value" id="stat-converted">–</div></div>
-        <div class="rz-kpi is-accent"><div class="rz-kpi-label">Skupaj zasluženo</div><div class="rz-kpi-value" id="stat-earned">–</div></div>
-        <div class="rz-kpi is-accent"><div class="rz-kpi-label">Izplačljivo</div><div class="rz-kpi-value" id="stat-payable">–</div></div>
+        <div class="rz-kpi"><div class="rz-kpi-label"><?= t('aff.dashboard.kpi_clicks') ?></div><div class="rz-kpi-value" id="stat-clicks">–</div></div>
+        <div class="rz-kpi"><div class="rz-kpi-label"><?= t('aff.dashboard.kpi_referrals') ?></div><div class="rz-kpi-value" id="stat-referrals">–</div></div>
+        <div class="rz-kpi"><div class="rz-kpi-label"><?= t('aff.dashboard.kpi_converted') ?></div><div class="rz-kpi-value" id="stat-converted">–</div></div>
+        <div class="rz-kpi is-accent"><div class="rz-kpi-label"><?= t('aff.dashboard.kpi_earned') ?></div><div class="rz-kpi-value" id="stat-earned">–</div></div>
+        <div class="rz-kpi is-accent"><div class="rz-kpi-label"><?= t('aff.dashboard.kpi_payable') ?></div><div class="rz-kpi-value" id="stat-payable">–</div></div>
     </div>
 
     <!-- Ref koda -->
     <div class="rz-card">
         <div class="rz-card-head">
-            <h2 class="rz-card-title" style="font-size:15px">Vaša referenčna koda</h2>
+            <h2 class="rz-card-title" style="font-size:15px"><?= t('aff.dashboard.ref_card_title') ?></h2>
         </div>
         <div style="background:var(--accent-soft);border:1px solid color-mix(in oklab,var(--accent) 30%,transparent);border-radius:10px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px">
             <span style="font-size:1.4rem;font-weight:800;letter-spacing:.12em;color:var(--accent);font-family:var(--font-mono)" id="ref-code"><?= htmlspecialchars($aff['ref_code'] ?? '', ENT_QUOTES) ?></span>
-            <button class="rz-btn" onclick="copyText('<?= APP_URL . BASE_PATH ?>/?ref=<?= urlencode($aff['ref_code'] ?? '') ?>', this)" style="white-space:nowrap;flex-shrink:0">Kopiraj link</button>
+            <button class="rz-btn" onclick="copyText('<?= APP_URL . BASE_PATH ?>/?ref=<?= urlencode($aff['ref_code'] ?? '') ?>', this)" style="white-space:nowrap;flex-shrink:0"><?= t('aff.dashboard.ref_copy') ?></button>
         </div>
         <p style="margin:10px 0 0;font-size:12px;color:var(--ink-mute)">
-            Vaša referenčna povezava:
+            <?= t('aff.dashboard.ref_link_label') ?>
             <code style="background:var(--bg-sunken);border:1px solid var(--line);padding:2px 7px;border-radius:5px;font-family:var(--font-mono);font-size:11px"><?= htmlspecialchars(APP_URL . BASE_PATH . '/?ref=' . ($aff['ref_code'] ?? ''), ENT_QUOTES) ?></code>
         </p>
     </div>
@@ -63,18 +64,18 @@ require_once '../includes/html_head.php';
     <div id="discount-section" style="display:none">
         <div class="rz-card">
             <div class="rz-card-head">
-                <h2 class="rz-card-title" style="font-size:15px">Vaša popustna koda za stranke</h2>
+                <h2 class="rz-card-title" style="font-size:15px"><?= t('aff.dashboard.discount_title') ?></h2>
             </div>
             <div style="background:color-mix(in oklab,var(--success) 10%,transparent);border:1px solid color-mix(in oklab,var(--success) 25%,transparent);border-radius:10px;padding:14px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px">
                 <span style="font-size:1.4rem;font-weight:800;letter-spacing:.12em;color:var(--success);font-family:var(--font-mono)" id="discount-code">–</span>
-                <button class="rz-btn" onclick="copyDiscountCode(this)" style="flex-shrink:0">Kopiraj kombinirani link</button>
+                <button class="rz-btn" onclick="copyDiscountCode(this)" style="flex-shrink:0"><?= t('aff.dashboard.discount_combo_copy') ?></button>
             </div>
             <p style="margin:10px 0 10px;font-size:12px;color:var(--ink-mute)">
-                Kombinirani link (atribucija + popust): <code style="background:var(--bg-sunken);border:1px solid var(--line);padding:2px 7px;border-radius:5px;font-family:var(--font-mono);font-size:11px" id="combo-link">–</code>
+                <?= t('aff.dashboard.discount_combo_label') ?> <code style="background:var(--bg-sunken);border:1px solid var(--line);padding:2px 7px;border-radius:5px;font-family:var(--font-mono);font-size:11px" id="combo-link">–</code>
             </p>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px">
-                <div class="rz-kpi" style="padding:14px 16px"><div class="rz-kpi-label">Unovčenj</div><div class="rz-kpi-value" style="font-size:20px" id="disc-redemptions">–</div></div>
-                <div class="rz-kpi" style="padding:14px 16px"><div class="rz-kpi-label">Skupni popust</div><div class="rz-kpi-value" style="font-size:20px" id="disc-total-off">–</div></div>
+                <div class="rz-kpi" style="padding:14px 16px"><div class="rz-kpi-label"><?= t('aff.dashboard.discount_redemptions') ?></div><div class="rz-kpi-value" style="font-size:20px" id="disc-redemptions">–</div></div>
+                <div class="rz-kpi" style="padding:14px 16px"><div class="rz-kpi-label"><?= t('aff.dashboard.discount_total_off') ?></div><div class="rz-kpi-value" style="font-size:20px" id="disc-total-off">–</div></div>
             </div>
         </div>
     </div>
@@ -118,7 +119,7 @@ async function loadDiscount() {
 function copyText(text, btn) {
     navigator.clipboard.writeText(text).then(() => {
         const orig = btn.textContent;
-        btn.textContent = '✓ Kopirano!';
+        btn.textContent = <?= json_encode(t('aff.common.copied'), JSON_UNESCAPED_UNICODE) ?>;
         setTimeout(() => btn.textContent = orig, 2000);
     });
 }

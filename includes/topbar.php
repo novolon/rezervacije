@@ -17,7 +17,7 @@ $topbarActions  = $topbarActions  ?? null;
 $topbarShowCmd  = $topbarShowCmd  ?? true;
 ?>
 <div class="rz-topbar">
-    <div>
+    <div class="rz-topbar-main">
         <div class="flex flex--center flex--gap20">
         <h1 class="rz-h1 display" id="rz-topbar-title"><?= htmlspecialchars($topbarTitle) ?></h1>
         <button id="btn-today" type="button" class="rz-btn" style="display:none">
@@ -40,3 +40,12 @@ $topbarShowCmd  = $topbarShowCmd  ?? true;
         <?= $topbarActions ?>
     </div>
 </div>
+<?php
+// AI Help Chat — floating widget (loaded enkrat na stran, na vseh authenticated straneh).
+// superadmin nima help chat-a, ker ima drugo orodje (chat history pregled).
+$_hcSession = $_SESSION ?? [];
+if (!empty($_hcSession['user_id']) && ($_hcSession['role'] ?? '') !== 'superadmin'):
+?>
+<script>window.APP_BASE = window.APP_BASE || <?= json_encode(BASE_PATH) ?>;</script>
+<script src="<?= BASE_PATH ?>/assets/js/help_chat.js?v=2" defer></script>
+<?php endif; ?>

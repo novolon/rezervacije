@@ -13,20 +13,23 @@ $planName     = PLANS[$planSlug]['name'] ?? 'Basic';
 
 if (!$isOnTrial && !$trialExpired) return; // plačljivi aktivni paket – ni bannerja
 ?>
+<?php
+$dayWord = $daysLeft === 1 ? t('trial_banner.day_singular') : t('trial_banner.day_plural');
+?>
 <?php if ($trialExpired): ?>
 <div class="trial-banner trial-banner-expired">
-    <span>Vaš 30-dnevni brezplačni trial je potekel. Za nadaljevanje izberite in zakupite paket.</span>
-    <a href="<?= BASE_PATH ?>/pages/billing.php" class="trial-banner-btn">Zakupi paket</a>
+    <span><?= t('trial_banner.expired') ?></span>
+    <a href="<?= BASE_PATH ?>/pages/billing.php" class="trial-banner-btn"><?= t('trial_banner.expired_btn') ?></a>
 </div>
 <?php elseif ($daysLeft > 0 && $daysLeft <= 7): ?>
 <div class="trial-banner trial-banner-warning">
-    <span>Trial paketa <strong><?= h($planName) ?></strong> poteče čez <strong><?= $daysLeft ?> <?= $daysLeft === 1 ? 'dan' : 'dni' ?></strong>.</span>
-    <a href="<?= BASE_PATH ?>/pages/billing.php" class="trial-banner-btn">Zakupi paket →</a>
+    <span><?= t_raw('trial_banner.warning_html', ['plan' => h($planName), 'days' => $daysLeft, 'dayWord' => $dayWord]) ?></span>
+    <a href="<?= BASE_PATH ?>/pages/billing.php" class="trial-banner-btn"><?= t('trial_banner.warning_btn') ?></a>
 </div>
 <?php else: ?>
 <div class="trial-banner" style="background:#F0FDF4;border-bottom:1px solid #BBF7D0;color:#166534">
-    <span>Brezplačni trial paketa <strong><?= h($planName) ?></strong> je aktiven.</span>
-    <a href="<?= BASE_PATH ?>/pages/billing.php" class="trial-banner-btn" style="background:rgba(0,0,0,.07)">Preklapljaj pakete →</a>
+    <span><?= t_raw('trial_banner.active_html', ['plan' => h($planName)]) ?></span>
+    <a href="<?= BASE_PATH ?>/pages/billing.php" class="trial-banner-btn" style="background:rgba(0,0,0,.07)"><?= t('trial_banner.active_btn') ?></a>
 </div>
 <?php endif; ?>
 <script>document.body.classList.add('has-trial-banner');</script>

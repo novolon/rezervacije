@@ -290,7 +290,7 @@ async function loadTopCustomers() {
             return;
         }
         tbody.innerHTML = data.slice(0, 20).map((r, i) => {
-            const loyal   = parseInt(r.visits) >= 5 ? '<span class="loyal-badge">Zvest gost</span>' : '';
+            const loyal   = parseInt(r.visits) >= 5 ? '<span class="loyal-badge">' + window.t('stats.loyal_guest') + '</span>' : '';
             const name    = h(r.guest_name || '—');
             const contact = r.email
                 ? `<a href="mailto:${h(r.email)}" style="color:var(--color-accent)">${h(r.email)}</a>`

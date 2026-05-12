@@ -137,17 +137,17 @@ if ($method === 'POST') {
             return send_email_change_email($to, $name, $testToken, $lang);
         },
         'payment_failed' => function() use ($to, $name, $in3Days, $lang) {
-            return send_payment_failed_email($to, $name, 'Advanced', 6.99, 2, $in3Days, $lang);
+            return send_payment_failed_email($to, $name, 'Advanced', PLAN_PRICES['advanced']['monthly'], 2, $in3Days, $lang);
         },
         'upcoming_invoice' => function() use ($to, $name, $in7Days, $lang) {
-            return send_upcoming_invoice_email($to, $name, 'Advanced', 69.99, $in7Days, $lang);
+            return send_upcoming_invoice_email($to, $name, 'Advanced', PLAN_PRICES['advanced']['yearly'], $in7Days, $lang);
         },
         'plan_changed' => function() use ($to, $name, $lang) {
-            return send_plan_changed_email($to, $name, 'Premium', 'monthly', 9.99, $lang);
+            return send_plan_changed_email($to, $name, 'Premium', 'monthly', PLAN_PRICES['premium']['monthly'], $lang);
         },
         'invoice_request' => function() use ($to, $lang) {
             // Ta email gre superadminu kot obvestilo, da je admin zahteval predračun
-            return send_invoice_request_email($to, 'Janez Novak', 'admin@example.com', 'advanced', 69.99, $lang);
+            return send_invoice_request_email($to, 'Janez Novak', 'admin@example.com', 'advanced', PLAN_PRICES['advanced']['yearly'], $lang);
         },
         'booking_pending_guest' => function() use ($to, $guestName, $resName, $date, $time, $guests, $contactE, $contactP, $lang, $resAddress) {
             return send_booking_pending_guest($to, $guestName, $resName, $date, $time, $guests, 'EDIT_TEST_TOKEN', $contactE, $contactP, $lang, $resAddress);

@@ -10,23 +10,31 @@ const DailyReport = (() => {
 .dr-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0,0,0,.5);
-    backdrop-filter: blur(3px);
+    background: rgba(0,0,0,.22);
+    backdrop-filter: blur(2px);
     z-index: 1000;
     display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
+    justify-content: flex-end;
+    animation: dr-fade-in .2s ease;
 }
 .dr-modal {
     background: white;
-    border-radius: 12px;
-    width: 100%;
-    max-width: 860px;
-    max-height: 90vh;
+    width: 880px;
+    max-width: 96vw;
+    height: 100%;
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+    box-shadow: -12px 0 60px -20px rgba(0,0,0,.25);
+    animation: dr-slide-right .28s cubic-bezier(.22,1,.36,1);
+}
+@keyframes dr-fade-in {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+@keyframes dr-slide-right {
+    from { transform: translateX(40px); opacity: 0; }
+    to   { transform: translateX(0); opacity: 1; }
 }
 .dr-header {
     padding: 20px 24px;
@@ -160,11 +168,14 @@ const DailyReport = (() => {
         z-index: auto !important;
     }
     .dr-modal {
+        width: auto !important;
         max-width: none !important;
         max-height: none !important;
+        height: auto !important;
         box-shadow: none !important;
         border-radius: 0 !important;
         margin: 0 !important;
+        animation: none !important;
     }
     .dr-btn-print,
     .dr-btn-close,
@@ -179,12 +190,23 @@ const DailyReport = (() => {
     document.head.appendChild(style);
 
     // ── Pomožne funkcije za datum ────────────────────────────────────
-    const DAYS   = ['Nedelja','Ponedeljek','Torek','Sreda','Četrtek','Petek','Sobota'];
-    const MONTHS = ['januar','februar','marec','april','maj','junij','julij','avgust','september','oktober','november','december'];
+    const FALLBACK_DAYS   = ['Nedelja','Ponedeljek','Torek','Sreda','Četrtek','Petek','Sobota'];
+    const FALLBACK_MONTHS = ['januar','februar','marec','april','maj','junij','julij','avgust','september','oktober','november','december'];
+
+    function dayName(jsDayIdx) {
+        const monIdx = (jsDayIdx + 6) % 7;
+        const v = window.__T__ && window.__T__['days.' + monIdx];
+        return v || FALLBACK_DAYS[jsDayIdx];
+    }
+    function monthName(i) {
+        if ((window.__LANG__ || 'sl') === 'sl') return FALLBACK_MONTHS[i];
+        const v = window.__T__ && window.__T__['months.' + (i + 1)];
+        return v || FALLBACK_MONTHS[i];
+    }
 
     function formatDateSl(date) {
         const d = (date instanceof Date) ? date : new Date(date + 'T00:00:00');
-        return DAYS[d.getDay()] + ', ' + d.getDate() + '. ' + MONTHS[d.getMonth()] + ' ' + d.getFullYear();
+        return dayName(d.getDay()) + ', ' + d.getDate() + '. ' + monthName(d.getMonth()) + ' ' + d.getFullYear();
     }
 
     function formatTime(timeStr) {
@@ -195,9 +217,9 @@ const DailyReport = (() => {
 
     function statusLabel(status) {
         switch (status) {
-            case 'confirmed': return { text: 'Potrjena',  cls: 'dr-status-confirmed' };
-            case 'pending':   return { text: 'Čakajoča',  cls: 'dr-status-pending'   };
-            case 'arrived':   return { text: 'Prišel',    cls: 'dr-status-arrived'   };
+            case 'confirmed': return { text: window.t('daily_report.status_confirmed'), cls: 'dr-status-confirmed' };
+            case 'pending':   return { text: window.t('daily_report.status_pending'),   cls: 'dr-status-pending'   };
+            case 'arrived':   return { text: window.t('daily_report.status_arrived'),   cls: 'dr-status-arrived'   };
             default:          return { text: status || '—', cls: '' };
         }
     }
@@ -230,7 +252,7 @@ const DailyReport = (() => {
         // Tabela vrstic
         let rows = '';
         if (sorted.length === 0) {
-            rows = `<tr><td colspan="6" style="text-align:center;padding:24px;color:#6b7280;">Ni rezervacij za ta dan.</td></tr>`;
+            rows = `<tr><td colspan="6" style="text-align:center;padding:24px;color:#6b7280;">${window.t('daily_report.no_reservations')}</td></tr>`;
         } else {
             for (const r of sorted) {
                 const sl = statusLabel(r.status);
@@ -250,16 +272,16 @@ const DailyReport = (() => {
 <div class="dr-modal" id="dr-modal-inner">
     <div class="dr-header">
         <div>
-            <div class="dr-eyebrow">DNEVNO POROČILO</div>
+            <div class="dr-eyebrow">${window.t('daily_report.eyebrow')}</div>
             <div class="dr-title">${escHtml(dateLabel)}</div>
             <div class="dr-subtitle">${escHtml(restName)}</div>
         </div>
         <div class="dr-header-actions">
             <button type="button" class="rz-btn rz-btn-primary dr-btn-print" onclick="window.print()">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/></svg>
-                Natisni
+                ${window.t('common.print')}
             </button>
-            <button type="button" class="rz-iconbtn dr-btn-close" id="dr-close-btn" title="Zapri">
+            <button type="button" class="rz-iconbtn dr-btn-close" id="dr-close-btn" title="${window.t('common.close')}">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
             </button>
         </div>
@@ -267,15 +289,15 @@ const DailyReport = (() => {
 
     <div class="dr-kpis">
         <div class="dr-kpi">
-            <div class="dr-kpi-label">Skupaj rezervacij</div>
+            <div class="dr-kpi-label">${window.t('stats.kpi_total')}</div>
             <div class="dr-kpi-value">${total}</div>
         </div>
         <div class="dr-kpi">
-            <div class="dr-kpi-label">Skupaj gostov</div>
+            <div class="dr-kpi-label">${window.t('stats.kpi_guests')}</div>
             <div class="dr-kpi-value">${guests}</div>
         </div>
         <div class="dr-kpi">
-            <div class="dr-kpi-label">Čakajočih</div>
+            <div class="dr-kpi-label">${window.t('daily_report.kpi_pending')}</div>
             <div class="dr-kpi-value">${pending}</div>
         </div>
     </div>
@@ -284,12 +306,12 @@ const DailyReport = (() => {
         <table class="dr-table">
             <thead>
                 <tr>
-                    <th>Čas</th>
-                    <th>Ime</th>
-                    <th>Gostje</th>
-                    <th>Miza</th>
-                    <th>Status</th>
-                    <th>Opomba</th>
+                    <th>${window.t('waitlist.col_time')}</th>
+                    <th>${window.t('waitlist.col_name')}</th>
+                    <th>${window.t('nav.guests')}</th>
+                    <th>${window.t('daily_report.col_table')}</th>
+                    <th>${window.t('re.field_status')}</th>
+                    <th>${window.t('daily_report.col_notes')}</th>
                 </tr>
             </thead>
             <tbody>${rows}</tbody>
@@ -297,7 +319,7 @@ const DailyReport = (() => {
     </div>
 
     <div class="dr-footer">
-        <button type="button" class="btn btn-ghost dr-btn-close">Zapri</button>
+        <button type="button" class="btn btn-ghost dr-btn-close">${window.t('common.close')}</button>
     </div>
 </div>`;
     }

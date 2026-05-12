@@ -73,6 +73,7 @@ $fullName = $_SESSION['full_name'];
         <button class="admin-tab" data-tab="sa-system"><?= t('superadmin.tab_system') ?></button>
         <a href="<?= BASE_PATH ?>/pages/gdpr.php" class="admin-tab" style="text-decoration:none"><?= t('superadmin.tab_gdpr') ?></a>
         <a href="<?= BASE_PATH ?>/pages/superadmin_blog.php" class="admin-tab" style="text-decoration:none">Booked</a>
+        <a href="<?= BASE_PATH ?>/pages/superadmin_help.php" class="admin-tab" style="text-decoration:none">AI Help Chat</a>
     </div>
 
     <!-- Panel: Admini -->

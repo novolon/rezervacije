@@ -16,6 +16,8 @@ if ($method === 'GET' && $pubToken) {
     $rest = $stmt->fetch();
     if (!$rest) json_response(false, null, 'Restavracija ni najdena.', 404);
 
+    $reqLang = trim($_GET['lang'] ?? '');
+
     $stmt = $pdo->prepare("
         SELECT id, label, field_type, options, is_required
         FROM restaurant_custom_fields
@@ -24,8 +26,31 @@ if ($method === 'GET' && $pubToken) {
     ");
     $stmt->execute([$rest['id']]);
     $fields = $stmt->fetchAll();
+
+    // Naloži prevode za zahtevani jezik (eno query za vse polja)
+    $trMap = [];
+    if ($reqLang && $fields) {
+        try {
+            $ids = array_column($fields, 'id');
+            $ph  = implode(',', array_fill(0, count($ids), '?'));
+            $tStmt = $pdo->prepare("SELECT field_id, label, options_json FROM restaurant_custom_field_translations WHERE field_id IN ($ph) AND lang_code = ?");
+            $tStmt->execute(array_merge($ids, [$reqLang]));
+            foreach ($tStmt->fetchAll() as $r) {
+                $trMap[(int)$r['field_id']] = [
+                    'label'   => $r['label'],
+                    'options' => $r['options_json'] ? (json_decode($r['options_json'], true) ?: null) : null,
+                ];
+            }
+        } catch (PDOException $e) { /* tabela morda manjka */ }
+    }
+
     foreach ($fields as &$f) {
         $f['options'] = $f['options'] ? json_decode($f['options'], true) : [];
+        $tr = $trMap[(int)$f['id']] ?? null;
+        if ($tr) {
+            if (!empty($tr['label']))   $f['label']   = $tr['label'];
+            if (!empty($tr['options'])) $f['options'] = $tr['options'];
+        }
     }
     json_response(true, $fields);
 }

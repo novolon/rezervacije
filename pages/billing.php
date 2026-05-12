@@ -156,8 +156,8 @@ if ($isActive && $cycle === 'monthly' && ($sub['payment_method'] ?? '') === 'str
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/design.css?v=1">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/rezble.css?v=1">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/design.css?v=2">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/rezble.css?v=<?= @filemtime(__DIR__ . '/../assets/css/rezble.css') ?>">
 </head>
 <body>
 

@@ -55,10 +55,13 @@ if (!hash_equals(make_action_sig($id, $action), $sig)) {
 
 $pdo = getDB();
 
-// Naloži rezervacijo
+// Naloži rezervacijo (defenzivno če res.address še ni v shemi).
+$hasAddrCol = false;
+try { $hasAddrCol = (bool)$pdo->query("SHOW COLUMNS FROM restaurants LIKE 'address'")->fetch(); } catch (Throwable $e) {}
+$addrSel = $hasAddrCol ? 'res.address AS restaurant_address' : 'NULL AS restaurant_address';
 $stmt = $pdo->prepare("
     SELECT r.*, res.name AS restaurant_name, res.reservation_duration AS restaurant_duration,
-           res.contact_email, res.contact_phone, res.address AS restaurant_address
+           res.contact_email, res.contact_phone, {$addrSel}
     FROM reservations r
     JOIN restaurants res ON r.restaurant_id = res.id
     WHERE r.id = ?

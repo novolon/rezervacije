@@ -110,6 +110,15 @@ function handle_checkout_completed(PDO $pdo, array $obj): void {
     $pdo->prepare("UPDATE users SET subscription_status = 'active' WHERE id = ?")
         ->execute([$userId]);
 
+    // Analytics: plan upgraded/downgraded
+    require_once __DIR__ . '/../includes/analytics.php';
+    analytics_capture('plan_activated', $userId, [
+        'plan'           => $planSlug,
+        'billing_cycle'  => $billingCycle,
+        'payment_method' => 'stripe',
+    ]);
+    analytics_set_person($userId, ['plan' => $planSlug, 'billing_cycle' => $billingCycle]);
+
     // Potrditveni email ob aktivaciji naročnine
     try {
         require_once __DIR__ . '/../includes/mailer.php';

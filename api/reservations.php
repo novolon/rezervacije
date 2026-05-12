@@ -184,6 +184,51 @@ if ($method === 'GET') {
     $rest_id_param = isset($_GET['restaurant_id']) ? (int)$_GET['restaurant_id'] : null;
     $rest_id       = resolve_restaurant_filter($pdo, $session, $rest_id_param);
 
+    // ── Hitri search (cmd palette / global iskalnik) ─────────────────
+    // ?action=search&q=novak&limit=8 — vrne ujemajoče rezervacije po imenu/email/tel.
+    if (($_GET['action'] ?? '') === 'search') {
+        $q     = trim($_GET['q'] ?? '');
+        $limit = max(1, min(100, (int)($_GET['limit'] ?? 8)));
+        if ($q === '' || mb_strlen($q) < 2) json_response(true, []);
+
+        // Določi restaurant_id (URL ali session) + dovoljene restavracije za admin.
+        $rid = isset($_GET['restaurant_id']) ? (int)$_GET['restaurant_id'] : (int)($_SESSION['restaurant_id'] ?? 0);
+        $like = '%' . $q . '%';
+        $params = [$like, $like, $like];
+
+        if ($session['role'] === 'superadmin') {
+            $where = '(r.guest_name LIKE ? OR r.email LIKE ? OR r.phone LIKE ?)';
+        } elseif ($session['role'] === 'admin') {
+            // vse restavracije, ki jih admin lasti
+            $where = '(r.guest_name LIKE ? OR r.email LIKE ? OR r.phone LIKE ?) AND r.restaurant_id IN (SELECT restaurant_id FROM restaurant_admins WHERE user_id = ?)';
+            $params[] = (int)$session['user_id'];
+        } else {
+            if (!$rid) json_response(true, []);
+            $where = '(r.guest_name LIKE ? OR r.email LIKE ? OR r.phone LIKE ?) AND r.restaurant_id = ?';
+            $params[] = $rid;
+        }
+
+        // Razvrsti od »najbliže« (prihodnji rez. najprej, v naraščajočem vrstnem redu),
+        // pretekle na koncu (najnovejša najprej).
+        $stmt = $pdo->prepare("
+            SELECT r.id, r.guest_name, r.email, r.phone, r.guest_count,
+                   r.reservation_date, r.reservation_time, r.status,
+                   res.name AS restaurant_name,
+                   CASE WHEN r.reservation_date >= CURDATE() THEN 0 ELSE 1 END AS is_past
+            FROM reservations r
+            JOIN restaurants res ON r.restaurant_id = res.id
+            WHERE {$where}
+            ORDER BY is_past ASC,
+                     CASE WHEN r.reservation_date >= CURDATE() THEN r.reservation_date END ASC,
+                     CASE WHEN r.reservation_date >= CURDATE() THEN r.reservation_time END ASC,
+                     CASE WHEN r.reservation_date <  CURDATE() THEN r.reservation_date END DESC,
+                     CASE WHEN r.reservation_date <  CURDATE() THEN r.reservation_time END DESC
+            LIMIT {$limit}
+        ");
+        $stmt->execute($params);
+        json_response(true, $stmt->fetchAll());
+    }
+
     // Posamezna rezervacija po ID (za view z vsemi podrobnostmi)
     if (isset($_GET['id'])) {
         $rid = (int)$_GET['id'];
@@ -405,8 +450,28 @@ if ($method === 'POST' && ($_GET['action'] ?? '') === 'mark_arrived') {
             if (!$stmt->fetchColumn()) {
                 $token       = bin2hex(random_bytes(32));
                 $scheduledAt = date('Y-m-d H:i:s', time() + $form['send_delay_hours'] * 3600);
-                $pdo->prepare("INSERT INTO survey_responses (survey_id, reservation_id, email, token, scheduled_send_at) VALUES (?,?,?,?,?)")
-                    ->execute([$form['id'], $id, $res['guest_email'], $token, $scheduledAt]);
+
+                // survey_language: guest_language iz rezervacije > restaurant primary > 'sl'
+                $sLang = !empty($res['guest_language']) ? (string)$res['guest_language'] : '';
+                if (!in_array($sLang, ['sl','en','de','it','fr','hr','es','pt'], true)) {
+                    $rqLang = $pdo->prepare("SELECT booking_primary_language FROM restaurants WHERE id=?");
+                    try { $rqLang->execute([(int)$res['restaurant_id']]); $sLang = (string)$rqLang->fetchColumn(); } catch (PDOException $e) { $sLang = 'sl'; }
+                    if (!in_array($sLang, ['sl','en','de','it','fr','hr','es','pt'], true)) $sLang = 'sl';
+                }
+
+                $hasLangCol = false;
+                try {
+                    $c = $pdo->query("SHOW COLUMNS FROM survey_responses LIKE 'survey_language'");
+                    $hasLangCol = (bool)$c->fetch();
+                } catch (PDOException $e) {}
+
+                if ($hasLangCol) {
+                    $pdo->prepare("INSERT INTO survey_responses (survey_id, reservation_id, email, token, scheduled_send_at, survey_language) VALUES (?,?,?,?,?,?)")
+                        ->execute([$form['id'], $id, $res['guest_email'], $token, $scheduledAt, $sLang]);
+                } else {
+                    $pdo->prepare("INSERT INTO survey_responses (survey_id, reservation_id, email, token, scheduled_send_at) VALUES (?,?,?,?,?)")
+                        ->execute([$form['id'], $id, $res['guest_email'], $token, $scheduledAt]);
+                }
                 $surveyCreated = true;
             }
         }
@@ -673,8 +738,9 @@ if ($method === 'POST') {
             ]);
         }
 
-        // Pošlji email gostu (če ima email)
-        if ($guestEmail) {
+        // Pošlji email gostu (če ima email IN je restavracija to vklopila)
+        $notifyGuest = !isset($restRow2['notify_guest_email']) || !empty($restRow2['notify_guest_email']);
+        if ($guestEmail && $notifyGuest) {
             try {
                 $restName2   = $restRow2['rest_name']     ?? '';
                 $cEmail      = $restRow2['contact_email'] ?? '';
@@ -726,11 +792,18 @@ if ($method === 'POST') {
 
 // ─── PUT (uredi / approve / reject) ───────────────────────────
 if ($method === 'PUT') {
+    // Globalni guard za diagnostiko 500 napak.
+    try {
     $id     = isset($_GET['id'])     ? (int)$_GET['id']    : 0;
     $action = trim($_GET['action'] ?? '');
     if (!$id) json_response(false, null, 'ID ni določen.', 400);
 
-    $stmt = $pdo->prepare("SELECT r.*, res.name AS restaurant_name, res.reservation_duration AS restaurant_duration, res.contact_email, res.contact_phone, res.address AS restaurant_address FROM reservations r JOIN restaurants res ON r.restaurant_id = res.id WHERE r.id = ?");
+    // Defenzivno: če stolpec res.address ne obstaja (migracija ni bila aplicirana),
+    // ga zamenjamo z NULL alias, da SQL ne crashne.
+    $hasAddrCol = false;
+    try { $hasAddrCol = (bool)$pdo->query("SHOW COLUMNS FROM restaurants LIKE 'address'")->fetch(); } catch (Throwable $e) {}
+    $addrSel = $hasAddrCol ? 'res.address AS restaurant_address' : "NULL AS restaurant_address";
+    $stmt = $pdo->prepare("SELECT r.*, res.name AS restaurant_name, res.reservation_duration AS restaurant_duration, res.contact_email, res.contact_phone, {$addrSel} FROM reservations r JOIN restaurants res ON r.restaurant_id = res.id WHERE r.id = ?");
     $stmt->execute([$id]);
     $existing = $stmt->fetch();
     if (!$existing) json_response(false, null, 'Rezervacija ne obstaja.', 404);
@@ -910,9 +983,22 @@ if ($method === 'PUT') {
         if ($putTableWarning) $putResponseData['table_warning'] = $putTableWarning;
         json_response(true, $putResponseData);
 
-    } catch (PDOException $e) {
-        error_log('Reservation update error: ' . $e->getMessage());
-        json_response(false, null, 'Napaka pri posodabljanju.', 500);
+    } catch (Throwable $e) {
+        error_log('Reservation update error: ' . $e->getMessage() . ' [' . $e->getFile() . ':' . $e->getLine() . ']');
+        // V dev modu vrni sporočilo direktno za diagnostiko.
+        $msg = (defined('APP_URL') && strpos(APP_URL, 'dev.') !== false)
+            ? ('Napaka: ' . $e->getMessage() . ' @ ' . basename($e->getFile()) . ':' . $e->getLine())
+            : 'Napaka pri posodabljanju.';
+        json_response(false, null, $msg, 500);
+    }
+
+    } catch (Throwable $e) {
+        // Globalni catch za PUT – uvozi tudi pred-update faze (validacija, lookup ...).
+        error_log('PUT global error: ' . $e->getMessage() . ' [' . $e->getFile() . ':' . $e->getLine() . ']');
+        $msg = (defined('APP_URL') && strpos(APP_URL, 'dev.') !== false)
+            ? ('Napaka (PUT): ' . $e->getMessage() . ' @ ' . basename($e->getFile()) . ':' . $e->getLine())
+            : 'Napaka pri posodabljanju.';
+        json_response(false, null, $msg, 500);
     }
 }
 

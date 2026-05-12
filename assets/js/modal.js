@@ -98,11 +98,11 @@ const ReservationModal = (() => {
     if (existing) existing.remove();
 
     const overlay = document.createElement("div");
-    overlay.className = "modal-overlay";
+    overlay.className = "rz-drawer-wrap";
     overlay.id = "modal-overlay";
 
     const box = document.createElement("div");
-    box.className = "modal-box";
+    box.className = "rz-drawer rz-drawer-form";
 
     // Glava
     const header = document.createElement("div");
@@ -376,6 +376,13 @@ const ReservationModal = (() => {
     if (data.phone) addCell("Telefon", data.phone, true);
     if (data.email) addCell("E-pošta", data.email);
     if (data.staff_name) addCell("Sprejel", data.staff_name);
+    if (data.guest_language) {
+      const langLabels = {sl:"Slovenščina",en:"English",de:"Deutsch",it:"Italiano",fr:"Français",hr:"Hrvatski",es:"Español",pt:"Português"};
+      addCell(
+        window.t ? window.t("res_edit.guest_language_label") : "Jezik gosta",
+        langLabels[data.guest_language] || data.guest_language.toUpperCase()
+      );
+    }
     if (data.arrived_at) {
       const d = new Date(data.arrived_at.replace(" ", "T"));
       addCell(
@@ -1601,21 +1608,8 @@ const ReservationModal = (() => {
   function formatDate(ds) {
     if (!ds) return "";
     const [y, m, d] = ds.split("-");
-    const months = [
-      "jan",
-      "feb",
-      "mar",
-      "apr",
-      "maj",
-      "jun",
-      "jul",
-      "avg",
-      "sep",
-      "okt",
-      "nov",
-      "dec",
-    ];
-    return `${parseInt(d)}. ${months[parseInt(m) - 1]} ${y}`;
+    const monthIdx = parseInt(m) - 1;
+    return `${parseInt(d)}. ${window.t("months_short." + monthIdx)} ${y}`;
   }
 
   // ── Prestavi mizo (dialog) ────────────────────────────────────
@@ -1799,6 +1793,9 @@ const ReservationModal = (() => {
   return { open, close };
 })();
 
+// Expose za deep-link iz cmd palette / drugih strani.
+window.ReservationModal = ReservationModal;
+
 /**
  * Modal za odobritev/zavrnitev pending rezervacij.
  */
@@ -1812,21 +1809,8 @@ const PendingModal = (() => {
   function formatDate(ds) {
     if (!ds) return "";
     const [y, m, d] = ds.split("-");
-    const months = [
-      "jan",
-      "feb",
-      "mar",
-      "apr",
-      "maj",
-      "jun",
-      "jul",
-      "avg",
-      "sep",
-      "okt",
-      "nov",
-      "dec",
-    ];
-    return `${parseInt(d)}. ${months[parseInt(m) - 1]} ${y}`;
+    const monthIdx = parseInt(m) - 1;
+    return `${parseInt(d)}. ${window.t("months_short." + monthIdx)} ${y}`;
   }
 
   function open(pendingList) {
@@ -1989,23 +1973,9 @@ const PendingSection = (() => {
 
   function formatDate(ds) {
     if (!ds) return "";
-    const days = ["ned", "pon", "tor", "sre", "čet", "pet", "sob"];
-    const months = [
-      "jan",
-      "feb",
-      "mar",
-      "apr",
-      "maj",
-      "jun",
-      "jul",
-      "avg",
-      "sep",
-      "okt",
-      "nov",
-      "dec",
-    ];
     const dt = new Date(ds + "T00:00:00");
-    return `${days[dt.getDay()]}, ${dt.getDate()}. ${months[dt.getMonth()]}`;
+    const dayIdx = (dt.getDay() + 6) % 7;
+    return `${window.t("days_short3." + dayIdx)}, ${dt.getDate()}. ${window.t("months_short." + dt.getMonth())}`;
   }
 
   async function load() {

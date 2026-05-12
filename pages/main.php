@@ -204,7 +204,7 @@ if ($restaurants) {
 ?>
 <?php
 $pageTitle = t('nav.today');
-$extraCss  = ['main.css?v=4', 'calendar.css?v=2', 'schedule.css?v=7', 'modal.css?v=3', 'design.css?v=1'];
+$extraCss  = ['main.css?v=4', 'calendar.css?v=2', 'schedule.css?v=7', 'modal.css?v=3', 'design.css?v=2'];
 require_once '../includes/html_head.php';
 ?>
 <body>
@@ -222,7 +222,7 @@ require_once '../includes/html_head.php';
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#D1D5DB" stroke-width="1.5" style="margin-bottom:20px"><path d="M3 2h18v4H3zM3 10h18v4H3zM3 18h18v4H3z"/></svg>
         <h2 style="font-size:1.25rem;font-weight:700;color:#111827;margin:0 0 10px"><?= t('main.no_restaurants') ?></h2>
         <p style="color:#6B7280;font-size:.9rem;margin:0 0 24px;line-height:1.5"><?= t('main.no_restaurants_desc') ?></p>
-        <a href="<?= BASE_PATH ?>/pages/admin.php" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:8px;text-decoration:none">
+        <a href="<?= BASE_PATH ?>/pages/restaurants.php?add=1" class="btn btn-primary" style="display:inline-flex;align-items:center;gap:8px;text-decoration:none">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 5v14M5 12h14"/></svg>
             <?= t('main.add_restaurant') ?>
         </a>
@@ -244,7 +244,7 @@ require_once '../includes/html_head.php';
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
         <span><?= t('main.daily_report') ?></span>
     </button>
-    <button id="btn-add-reservation" type="button" class="rz-btn rz-btn-primary" style="display:none">
+    <button id="btn-add-reservation" type="button" class="rz-btn rz-btn-primary">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
         <span><?= t('main.new_reservation') ?></span>
     </button>
@@ -282,7 +282,7 @@ require_once '../includes/html_head.php';
         <div class="rz-card-head">
             <div>
                 <div class="rz-card-eyebrow mono">
-                    <span id="sched-eyebrow-view">TIMELINE</span> · <span id="sched-eyebrow-date"></span>
+                    <span id="sched-eyebrow-view"><?= t('main.timeline_label') ?></span> · <span id="sched-eyebrow-date"></span>
                 </div>
                 <h2 class="rz-card-title display"><?= t('main.schedule_title') ?></h2>
             </div>
@@ -444,6 +444,62 @@ if (new URLSearchParams(location.search).get('new') === '1') {
         }, 200);
     });
 }
+
+// Deep-link iz cmd palette: ?date=YYYY-MM-DD&res=ID → preklopi datum + odpri rezervacijo.
+(function() {
+    var params = new URLSearchParams(location.search);
+    var deepDate = params.get('date');
+    var deepRes  = params.get('res');
+    if (!deepDate && !deepRes) return;
+
+    document.addEventListener('DOMContentLoaded', function() {
+        function tryOpen(retries) {
+            retries = retries || 0;
+            if (retries > 50) return; // ~5s
+            var appReady   = window.App   && typeof window.App.onDayClick === 'function';
+            var modalReady = typeof window.ReservationModal === 'object' && typeof window.ReservationModal.open === 'function';
+            if (!appReady) return setTimeout(function() { tryOpen(retries + 1); }, 100);
+
+            // 1. Preklopi datum (App.onDayClick pričakuje Date objekt).
+            if (deepDate && /^\d{4}-\d{2}-\d{2}$/.test(deepDate)) {
+                try {
+                    var parts = deepDate.split('-');
+                    var d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+                    window.App.onDayClick(d);
+                } catch (e) {}
+            }
+
+            // 2. Odpri modal po krajši zamiki, da se schedule naloži.
+            if (deepRes && /^\d+$/.test(deepRes) && modalReady) {
+                setTimeout(function() {
+                    var rid = parseInt(deepRes);
+                    // Najprej preveri, če je rezervacija že v UI-ju (z restaurant_id).
+                    var card = document.querySelector('[data-reservation-id="' + rid + '"]');
+                    if (card) card.click();
+                    else {
+                        // Fallback: pokliči API za podrobnosti, nato odpri modal.
+                        fetch(APP_STATE.base + '/api/reservations.php?id=' + rid)
+                            .then(function(r) { return r.json(); })
+                            .then(function(json) {
+                                if (json && json.success && json.data) {
+                                    window.ReservationModal.open('view', json.data);
+                                }
+                            }).catch(function() {});
+                    }
+                }, 600);
+            }
+
+            // Počisti URL.
+            try {
+                var u = new URL(location.href);
+                u.searchParams.delete('date');
+                u.searchParams.delete('res');
+                history.replaceState(null, '', u.toString());
+            } catch (e) {}
+        }
+        tryOpen();
+    });
+})();
 </script>
 <script src="<?= BASE_PATH ?>/assets/js/api.js?v=<?= $cv ?>"></script>
 <script src="<?= BASE_PATH ?>/assets/js/calendar.js?v=<?= $cv ?>"></script>

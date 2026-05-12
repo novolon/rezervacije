@@ -42,7 +42,8 @@ function check_rest_access(PDO $pdo, array $session, int $rest_id): void {
 
 // ─── GET ───────────────────────────────────────────────────────
 if ($method === 'GET') {
-    $rest_id = isset($_GET['restaurant_id']) ? (int)$_GET['restaurant_id'] : 0;
+    // Fallback na session restaurant_id (npr. pri klicu iz cmd palette).
+    $rest_id = isset($_GET['restaurant_id']) ? (int)$_GET['restaurant_id'] : (int)($_SESSION['restaurant_id'] ?? 0);
     if (!$rest_id) json_response(false, null, 'restaurant_id je obvezen.', 400);
     check_rest_access($pdo, $session, $rest_id);
 
@@ -94,8 +95,10 @@ if ($method === 'GET') {
 
     if ($search) {
         $like = '%' . $search . '%';
-        $where  .= " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?)";
-        $params  = array_merge($params, [$like, $like, $like, $like]);
+        // Iskanje po imenu, priimku, emailu, telefonu IN tag-ih (tags je shranjen kot CSV ali JSON).
+        // Ujemanje "vip" ujame "vip", "VIP", "vip,redni"; ujemanje "vegan" ujame "vegan" v JSON arrayu.
+        $where  .= " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ? OR tags LIKE ?)";
+        $params  = array_merge($params, [$like, $like, $like, $like, $like]);
     }
 
     $stmt = $pdo->prepare("

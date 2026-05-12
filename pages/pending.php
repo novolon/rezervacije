@@ -72,7 +72,7 @@ if (!$activeRestId && !empty($restaurants)) {
 ?>
 <?php
 $pageTitle = t('pending.title');
-$extraCss  = ['main.css?v=4', 'modal.css?v=3', 'design.css?v=1'];
+$extraCss  = ['main.css?v=4', 'modal.css?v=3', 'design.css?v=2'];
 require_once '../includes/html_head.php';
 ?>
 <body>

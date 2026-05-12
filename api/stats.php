@@ -2,6 +2,7 @@
 require_once '../includes/auth_check.php';
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
+require_once '../includes/lang.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -483,7 +484,16 @@ if ($section === 'export') {
 // ─── Sekcija: insights ────────────────────────────────────────
 if ($section === 'insights') {
     $insights = [];
-    $days7Labels = ['Nedelja','Ponedeljek','Torek','Sreda','Četrtek','Petek','Sobota'];
+    // days.0 = monday in lang files; rebuild Sun..Sat order to match DAYOFWEEK() (1..7 = Sun..Sat).
+    $days7Labels = [
+        t_raw('days.6'), // Sunday
+        t_raw('days.0'), // Monday
+        t_raw('days.1'), // Tuesday
+        t_raw('days.2'), // Wednesday
+        t_raw('days.3'), // Thursday
+        t_raw('days.4'), // Friday
+        t_raw('days.5'), // Saturday
+    ];
 
     // 1) Najprometnjeji dan v tednu (zadnjih 90 dni)
     $d90from = date('Y-m-d', strtotime('-90 days'));
@@ -497,7 +507,7 @@ if ($section === 'insights') {
     $busiest = $stmt->fetch();
     if ($busiest && $busiest['cnt'] >= 3) {
         $dayName = $days7Labels[$busiest['dow'] - 1] ?? '';
-        $insights[] = ['icon' => 'fire', 'text' => "{$dayName} je v zadnjih 90 dneh najprometnješi dan ({$busiest['cnt']} rezervacij)."];
+        $insights[] = ['icon' => 'fire', 'text' => t_raw('stats.insight_busiest_day', ['day' => $dayName, 'count' => $busiest['cnt']])];
     }
 
     // 2) Najpogostejša ura rezervacij
@@ -510,7 +520,7 @@ if ($section === 'insights') {
     $stmt->execute(array_merge($rf['params'], [$from, $to]));
     $peakHour = $stmt->fetch();
     if ($peakHour && $peakHour['cnt'] >= 3) {
-        $insights[] = ['icon' => 'clock', 'text' => "Koničasta ura v izbranem obdobju: {$peakHour['h']}:00 ({$peakHour['cnt']} rezervacij)."];
+        $insights[] = ['icon' => 'clock', 'text' => t_raw('stats.insight_peak_hour', ['hour' => $peakHour['h'], 'count' => $peakHour['cnt']])];
     }
 
     // 3) No-show stopnja
@@ -559,7 +569,7 @@ if ($section === 'insights') {
     $stmt->execute(array_merge($rf['params'], [$from, $to]));
     $grp = $stmt->fetch();
     if ($grp && $grp['cnt'] >= 3) {
-        $insights[] = ['icon' => 'group', 'text' => "Najpogostejša skupina ima {$grp['guest_count']} gost(a/ov) ({$grp['cnt']}× v obdobju)."];
+        $insights[] = ['icon' => 'group', 'text' => t_raw('stats.insight_top_group_size', ['size' => $grp['guest_count'], 'count' => $grp['cnt']])];
     }
 
     json_response(true, ['insights' => $insights]);

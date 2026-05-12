@@ -33,6 +33,20 @@ define('STRIPE_SECRET_KEY',      '');   // sk_live_... ali sk_test_...
 define('STRIPE_PUBLISHABLE_KEY', '');   // pk_live_... ali pk_test_...
 define('STRIPE_WEBHOOK_SECRET',  '');   // whsec_... (iz Stripe dashboard → Webhooks)
 
+// Cene paketov (EUR). Single source of truth — uporablja jih landing, register, billing,
+// blog AI prompt. Spremeni tukaj → posodobljeno povsod.
+define('PLAN_PRICES', [
+    'basic'    => ['monthly' => 9.99,  'yearly' => 99.00],
+    'advanced' => ['monthly' => 29.99, 'yearly' => 299.00],
+    'premium'  => ['monthly' => 69.99, 'yearly' => 699.00],
+]);
+
+// PostHog analytics (cloud EU region). Brezplačno do 1M dogodkov/mesec.
+// Pridobi public API key na https://eu.posthog.com → Project settings → Project API key.
+// Pusti prazno, da onemogočiš analitiko.
+define('POSTHOG_KEY',  '');                        // phc_xxxxxxxxxxxxxxxxxxxxxxxx
+define('POSTHOG_HOST', 'https://eu.i.posthog.com'); // EU region (GDPR friendly). Za US: https://us.i.posthog.com
+
 ini_set('display_errors', '0');
 ini_set('log_errors',     '1');
 date_default_timezone_set(TIMEZONE);

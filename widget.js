@@ -1197,7 +1197,7 @@ input,textarea{font-family:inherit}
     // ── Init: naloži restavracijo ─────────────────────────────────
     (async () => {
         try {
-            const res  = await fetch(`${apiUrl}?t=${encodeURIComponent(token)}`);
+            const res  = await fetch(`${apiUrl}?t=${encodeURIComponent(token)}&lang=${encodeURIComponent(_wLang)}`);
             const json = await res.json();
             if (!json.success) throw new Error(json.error || 'Napaka');
             state.rest = json.data;
@@ -1433,7 +1433,7 @@ input,textarea{font-family:inherit}
 
         try {
             const guestParam = state.guests ? `&guest_count=${state.guests}` : '';
-            const res  = await fetch(`${apiUrl}?t=${encodeURIComponent(token)}&date=${date}${guestParam}`);
+            const res  = await fetch(`${apiUrl}?t=${encodeURIComponent(token)}&date=${date}${guestParam}&lang=${encodeURIComponent(_wLang)}`);
             const json = await res.json();
             if (!json.success) throw new Error(json.error);
             const slots = json.data.slots || [];
@@ -1532,7 +1532,7 @@ input,textarea{font-family:inherit}
         $('ws3bsub').textContent = `${DAYS_SL[(dt.getDay()+6)%7]}, ${dt.getDate()}. ${MONTHS[dt.getMonth()]} · ${time} · ${state.guests} ${guestLbl(state.guests)}`;
 
         try {
-            const res  = await fetch(`${apiUrl}?t=${encodeURIComponent(token)}&date=${date}&time=${time}&guest_count=${state.guests||1}`);
+            const res  = await fetch(`${apiUrl}?t=${encodeURIComponent(token)}&date=${date}&time=${time}&guest_count=${state.guests||1}&lang=${encodeURIComponent(_wLang)}`);
             const json = await res.json();
             if (!json.success) throw new Error(json.error);
 

@@ -41,8 +41,24 @@ const Schedule = (() => {
     return parseInt(p[0]) * 60 + parseInt(p[1]);
   }
 
+  function dayName(jsDayIdx) {
+    const monIdx = (jsDayIdx + 6) % 7;
+    const v = window.__T__ && window.__T__["days." + monIdx];
+    return v || DAYS_SL[jsDayIdx];
+  }
+  function monthName(i) {
+    // Use lang months for non-SL; SL keeps the genitive form for natural reading.
+    if ((window.__LANG__ || "sl") === "sl") return MONTHS_SL[i];
+    const v = window.__T__ && window.__T__["months." + (i + 1)];
+    return v || MONTHS_SL[i];
+  }
+  function monthNameNom(i) {
+    if ((window.__LANG__ || "sl") === "sl") return MONTHS_SL_NOM[i];
+    const v = window.__T__ && window.__T__["months." + (i + 1)];
+    return v || MONTHS_SL_NOM[i];
+  }
   function formatDateLabel(date) {
-    return `${DAYS_SL[date.getDay()]}, ${date.getDate()}. ${MONTHS_SL[date.getMonth()]} ${date.getFullYear()}`;
+    return `${dayName(date.getDay())}, ${date.getDate()}. ${monthName(date.getMonth())} ${date.getFullYear()}`;
   }
 
   const MONTHS_SL_NOM = [
@@ -60,7 +76,7 @@ const Schedule = (() => {
     "december",
   ];
   function formatTopbarTitle(date) {
-    return `${DAYS_SL[date.getDay()]}, ${date.getDate()}. ${MONTHS_SL_NOM[date.getMonth()]}`;
+    return `${dayName(date.getDay())}, ${date.getDate()}. ${monthNameNom(date.getMonth())}`;
   }
 
   function dateToStr(d) {
@@ -431,18 +447,18 @@ const Schedule = (() => {
     table.className = "rz-table";
 
     table.innerHTML = `<thead><tr>
-      <th style="width:70px">URA</th>
-      <th>GOST</th>
-      <th>MIZA</th>
-      <th style="width:60px" class="rz-th-num">OSEB</th>
-      <th>OPOMBA</th>
-      <th style="width:130px">STATUS</th>
+      <th style="width:70px">${window.t("waitlist.col_time").toUpperCase()}</th>
+      <th>${window.t("waitlist.col_name").toUpperCase()}</th>
+      <th>${window.t("daily_report.col_table").toUpperCase()}</th>
+      <th style="width:60px" class="rz-th-num">${window.t("nav.guests").toUpperCase()}</th>
+      <th>${window.t("daily_report.col_notes").toUpperCase()}</th>
+      <th style="width:130px">${window.t("re.field_status").toUpperCase()}</th>
     </tr></thead>`;
 
     const tbody = document.createElement("tbody");
     if (sorted.length === 0) {
       const tr = document.createElement("tr");
-      tr.innerHTML = `<td colspan="6" style="text-align:center;color:var(--ink-mute);padding:32px">Ni rezervacij za ta dan</td>`;
+      tr.innerHTML = `<td colspan="6" style="text-align:center;color:var(--ink-mute);padding:32px">${window.t("upnext.no_reservations_for_day").replace(/\.$/, "")}</td>`;
       tbody.appendChild(tr);
     } else {
       sorted.forEach((r) => {
@@ -519,10 +535,9 @@ const Schedule = (() => {
     const eyebrowDate = document.getElementById("sched-eyebrow-date");
     if (eyebrowDate) {
       const d = date;
-      const short = ["ned", "pon", "tor", "sre", "čet", "pet", "sob"][
-        d.getDay()
-      ];
-      eyebrowDate.textContent = `${short.toUpperCase()} ${d.getDate()}. ${d.getMonth() + 1}.`;
+      const monIdx = (d.getDay() + 6) % 7;
+      const short = window.t("days_short3." + monIdx).toUpperCase();
+      eyebrowDate.textContent = `${short} ${d.getDate()}. ${d.getMonth() + 1}.`;
     }
 
     // Glava panela — topbar naslov (datum) in podnaslov (statistika)
@@ -827,7 +842,9 @@ const Schedule = (() => {
     currentView = view;
     const eyebrowView = document.getElementById("sched-eyebrow-view");
     if (eyebrowView)
-      eyebrowView.textContent = view === "list" ? "SEZNAM" : "TIMELINE";
+      eyebrowView.textContent = view === "list"
+        ? window.t("main.list_label")
+        : window.t("main.timeline_label");
     document.querySelectorAll("#sched-view-seg button").forEach((btn) => {
       btn.classList.toggle("is-sel", btn.dataset.view === view);
     });

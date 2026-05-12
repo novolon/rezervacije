@@ -59,6 +59,7 @@
     state.calendarMonth = new Date().getMonth();
     Calendar.render(state.calendarYear, state.calendarMonth);
     Calendar.loadMonth(state.calendarYear, state.calendarMonth);
+    Calendar.setSelected(APP_STATE.today);
     loadSchedule();
     updateTodayBtn();
   }
@@ -68,7 +69,7 @@
     const btn = document.getElementById("btn-add-reservation");
     if (!btn) return;
     const isPast = dateStr(state.currentDate) < APP_STATE.today;
-    btn.style.display = isPast ? "none" : "flex";
+    btn.style.display = isPast ? "none" : "";
   }
 
   // ── Izračunaj overlay info za blokirane/zaprte intervale ──────
@@ -306,6 +307,8 @@
         Calendar.render(newY, newM);
         Calendar.loadMonth(newY, newM);
       }
+      // Označi nov dan v koledarju
+      Calendar.setSelected(dateStr(d));
       loadSchedule();
       updateTodayBtn();
       updateAddBtn();

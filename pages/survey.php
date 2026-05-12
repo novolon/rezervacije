@@ -5,8 +5,22 @@
  */
 require_once '../config.php';
 require_once '../includes/lang.php';
+require_once '../includes/db.php';
 
 $token = trim($_GET['t'] ?? '');
+
+// Naloži UI v jeziku, v katerem je bila gostu poslana anketa.
+if ($token) {
+    try {
+        $pdo = getDB();
+        $stmt = $pdo->prepare("SELECT survey_language FROM survey_responses WHERE token = ?");
+        $stmt->execute([$token]);
+        $sLang = $stmt->fetchColumn();
+        if ($sLang && in_array($sLang, ['sl','en','de','it','fr','hr','es','pt'], true)) {
+            _rz_load_lang($sLang);
+        }
+    } catch (PDOException $e) { /* ignore — fallback na privzet jezik */ }
+}
 ?>
 <!DOCTYPE html>
 <html lang="<?= get_lang() ?>">

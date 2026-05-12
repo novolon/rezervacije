@@ -63,7 +63,7 @@ if (!$activeRestId && !empty($restaurants)) {
 ?>
 <?php
 $pageTitle = t('stats.title');
-$extraCss  = ['main.css?v=4', 'stats.css?v=1', 'design.css?v=1'];
+$extraCss  = ['main.css?v=4', 'stats.css?v=1', 'design.css?v=2'];
 require_once '../includes/html_head.php';
 ?>
 <body>

@@ -121,9 +121,12 @@
             } else {
                 const rows = items.map(it => {
                     const meta = (it.category || '') + (it.reading_time_minutes ? ' · ' + it.reading_time_minutes + ' min' : '');
+                    const thumb = it.image_url
+                        ? '<img src="' + escapeAttr(it.image_url) + '" alt="" loading="lazy" style="width:44px;height:44px;border-radius:8px;flex-shrink:0;object-fit:cover">'
+                        : '<span style="width:44px;height:44px;border-radius:8px;background:var(--cream);flex-shrink:0;display:inline-flex;align-items:center;justify-content:center"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" style="color:var(--muted)"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg></span>';
                     return ''
                         + '<a class="bk-search-result" href="' + escapeAttr(it.url) + '">'
-                        + '<span style="width:36px;height:36px;border-radius:8px;background:var(--cream);flex-shrink:0"></span>'
+                        + thumb
                         + '<div style="flex:1;min-width:0">'
                         + '<div class="bk-search-result__title">' + escapeHtml(it.title) + '</div>'
                         + (meta ? '<div class="bk-search-result__excerpt">' + escapeHtml(meta) + '</div>' : '')

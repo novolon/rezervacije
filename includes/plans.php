@@ -1,10 +1,14 @@
 <?php
 /**
  * Plan engine – definicije paketov, feature gating, subscription helper.
+ *
+ * Cene se berejo iz `config.php` → `PLAN_PRICES` (single source of truth).
+ * Za spremembo cen popravi config; ta fajl jih samo uporablja.
  */
 
 // ─── Definicije paketov ────────────────────────────────────────
-const PLANS = [
+// `define()` ker `const` array ne podpira runtime izrazov (PLAN_PRICES je define).
+define('PLANS', [
     // 'trial' je ohranjen samo za legacy zapise v bazi – ne prikazuj v UI
     'trial' => [
         'name'            => 'Basic',   // legacy: stari trial zapisi → enako kot Basic
@@ -14,24 +18,24 @@ const PLANS = [
     ],
     'basic' => [
         'name'            => 'Basic',
-        'monthly_price'   => 4.99,
-        'yearly_price'    => 49.99,
+        'monthly_price'   => PLAN_PRICES['basic']['monthly'],
+        'yearly_price'    => PLAN_PRICES['basic']['yearly'],
         'features'        => ['reservations', 'restaurants', 'staff'],
     ],
     'advanced' => [
         'name'            => 'Advanced',
-        'monthly_price'   => 6.99,
-        'yearly_price'    => 69.99,
+        'monthly_price'   => PLAN_PRICES['advanced']['monthly'],
+        'yearly_price'    => PLAN_PRICES['advanced']['yearly'],
         'features'        => ['reservations', 'restaurants', 'staff',
                               'guest_emails', 'guest_reminders',
                               'public_booking', 'booking_approval',
-                              'survey', 'guest_database', 'waitlist',
+                              'guest_database',
                               'table_management'],
     ],
     'premium' => [
         'name'            => 'Premium',
-        'monthly_price'   => 9.99,
-        'yearly_price'    => 99.99,
+        'monthly_price'   => PLAN_PRICES['premium']['monthly'],
+        'yearly_price'    => PLAN_PRICES['premium']['yearly'],
         'features'        => ['reservations', 'restaurants', 'staff',
                               'guest_emails', 'guest_reminders',
                               'public_booking', 'booking_approval',
@@ -41,7 +45,7 @@ const PLANS = [
                               'guest_database', 'waitlist',
                               'table_management'],
     ],
-];
+]);
 
 // Vrstni red paketov (za zaznavo nadgradnje)
 const PLAN_RANK = ['trial' => 1, 'basic' => 1, 'advanced' => 2, 'premium' => 3];

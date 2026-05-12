@@ -1,6 +1,7 @@
 <?php
 require_once '../config.php';
 require_once '../includes/db.php';
+require_once '../includes/lang.php';
 
 $token = trim($_GET['token'] ?? '');
 $msg   = '';
@@ -17,19 +18,19 @@ if ($token) {
             $pdo->prepare("UPDATE affiliates SET email_verified_at = NOW(), verification_token = NULL WHERE id = ?")
                 ->execute([$aff['id']]);
             $ok  = true;
-            $msg = 'Email potrjen! Vaša prijava čaka na odobritev. Ko jo pregledamo, vas obvestimo.';
+            $msg = t('aff.verify.success_msg');
         } else {
-            $msg = 'Neveljaven ali porabljen token.';
+            $msg = t('aff.verify.invalid_token');
         }
     } catch (\Throwable $e) {
         error_log('Affiliate verify-email error: ' . $e->getMessage());
-        $msg = 'Napaka strežnika. Poskusite znova.';
+        $msg = t('aff.verify.server_error');
     }
 } else {
-    $msg = 'Manjka token.';
+    $msg = t('aff.verify.missing_token');
 }
 
-$pageTitle = 'Potrditev emaila – Affiliate';
+$pageTitle = t('aff.verify.page_title');
 $extraCss  = ['design.css'];
 require_once '../includes/html_head.php';
 ?>
@@ -37,12 +38,9 @@ require_once '../includes/html_head.php';
 <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:40px 16px">
 <div style="width:100%;max-width:420px">
 
-    <a href="<?= BASE_PATH ?>/" style="display:flex;align-items:center;gap:10px;margin-bottom:32px;color:var(--ink);font-weight:700;font-size:17px;letter-spacing:-.02em;text-decoration:none">
-        <svg width="28" height="28" viewBox="0 0 32 32" aria-hidden="true" style="flex:none">
-            <rect width="32" height="32" rx="7" fill="var(--accent)"/>
-            <path d="M9 8v16l4-4h5a5 5 0 0 0 5-5v-4a3 3 0 0 0-3-3H9Z" fill="#fff"/>
-        </svg>
-        Rezble <span style="font-weight:400;color:var(--ink-mute)">/ Affiliate</span>
+    <a href="<?= BASE_PATH ?>/" style="display:flex;align-items:center;gap:10px;margin-bottom:32px;text-decoration:none">
+        <img src="<?= BASE_PATH ?>/assets/images/Rezble.svg" alt="Rezble" style="height:24px;width:auto;display:block">
+        <span style="font-weight:500;color:var(--ink-mute);font-size:15px"><?= t('aff.brand_suffix') ?></span>
     </a>
 
     <div class="rz-card" style="text-align:center;padding:40px 32px">
@@ -50,15 +48,15 @@ require_once '../includes/html_head.php';
         <div style="width:64px;height:64px;border-radius:50%;background:color-mix(in oklab,var(--success) 12%,transparent);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m5 12 5 5 9-11"/></svg>
         </div>
-        <h1 style="margin:0 0 10px;font-size:22px;font-weight:700;color:var(--ink)">Email potrjen!</h1>
+        <h1 style="margin:0 0 10px;font-size:22px;font-weight:700;color:var(--ink)"><?= t('aff.verify.success_title') ?></h1>
         <?php else: ?>
         <div style="width:64px;height:64px;border-radius:50%;background:color-mix(in oklab,var(--danger) 10%,transparent);display:flex;align-items:center;justify-content:center;margin:0 auto 20px">
             <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 6l12 12M6 18 18 6"/></svg>
         </div>
-        <h1 style="margin:0 0 10px;font-size:22px;font-weight:700;color:var(--ink)">Napaka</h1>
+        <h1 style="margin:0 0 10px;font-size:22px;font-weight:700;color:var(--ink)"><?= t('aff.verify.invalid_title') ?></h1>
         <?php endif; ?>
         <p style="color:var(--ink-mute);margin:0 0 28px;font-size:14px;line-height:1.6"><?= htmlspecialchars($msg, ENT_QUOTES) ?></p>
-        <a href="<?= BASE_PATH ?>/affiliate/login.php" class="rz-btn rz-btn-primary" style="display:inline-flex">Na prijavo →</a>
+        <a href="<?= BASE_PATH ?>/affiliate/login.php" class="rz-btn rz-btn-primary" style="display:inline-flex"><?= t('aff.verify.cta_login') ?></a>
     </div>
 </div>
 </div>

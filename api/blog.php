@@ -34,15 +34,24 @@ if ($action === 'search') {
     if ($q === '' || mb_strlen($q) < 2) {
         json_response(true, []);
     }
+    // Helper: pretvori blog_media stolpca filename+variants v URL za 480px ali fallback.
+    $resolveImg = function($filename, $variantsJson) {
+        if (!$filename && !$variantsJson) return null;
+        $variants = $variantsJson ? json_decode($variantsJson, true) : [];
+        $src = $variants[480] ?? (reset($variants) ?: '') ?: $filename;
+        return $src ? BASE_PATH . '/' . ltrim((string)$src, '/') : null;
+    };
     try {
         $stmt = $pdo->prepare(
             "SELECT t.slug, t.title, t.excerpt, t.lang_code, t.reading_time_minutes,
                     COALESCE(ct.name, c.slug) AS category,
+                    m.filename AS hero_filename, m.variants AS hero_variants,
                     MATCH(t.title, t.excerpt, t.content_md) AGAINST (? IN NATURAL LANGUAGE MODE) AS rel
              FROM blog_post_translations t
              JOIN blog_posts p           ON p.id = t.post_id
              LEFT JOIN blog_categories c            ON c.id = p.category_id
              LEFT JOIN blog_category_translations ct ON ct.category_id = c.id AND ct.lang_code = t.lang_code
+             LEFT JOIN blog_media m                  ON m.id = p.hero_media_id
              WHERE t.lang_code = ?
                AND t.status = 'approved' AND p.status = 'published'
                AND (p.published_at IS NULL OR p.published_at <= NOW())
@@ -60,6 +69,7 @@ if ($action === 'search') {
                 'url'     => blog_post_url($r['slug'], $r['lang_code']),
                 'category' => $r['category'],
                 'reading_time_minutes' => (int)$r['reading_time_minutes'],
+                'image_url' => $resolveImg($r['hero_filename'] ?? null, $r['hero_variants'] ?? null),
             ];
         }
         json_response(true, $out);
@@ -68,11 +78,13 @@ if ($action === 'search') {
         $like = '%' . str_replace(['%','_'], ['\\%','\\_'], $q) . '%';
         $stmt = $pdo->prepare(
             "SELECT t.slug, t.title, t.excerpt, t.lang_code, t.reading_time_minutes,
-                    COALESCE(ct.name, c.slug) AS category
+                    COALESCE(ct.name, c.slug) AS category,
+                    m.filename AS hero_filename, m.variants AS hero_variants
              FROM blog_post_translations t
              JOIN blog_posts p           ON p.id = t.post_id
              LEFT JOIN blog_categories c            ON c.id = p.category_id
              LEFT JOIN blog_category_translations ct ON ct.category_id = c.id AND ct.lang_code = t.lang_code
+             LEFT JOIN blog_media m                  ON m.id = p.hero_media_id
              WHERE t.lang_code = ?
                AND t.status = 'approved' AND p.status = 'published'
                AND (p.published_at IS NULL OR p.published_at <= NOW())
@@ -90,6 +102,7 @@ if ($action === 'search') {
                 'url'     => blog_post_url($r['slug'], $r['lang_code']),
                 'category' => $r['category'],
                 'reading_time_minutes' => (int)$r['reading_time_minutes'],
+                'image_url' => $resolveImg($r['hero_filename'] ?? null, $r['hero_variants'] ?? null),
             ];
         }
         json_response(true, $out);

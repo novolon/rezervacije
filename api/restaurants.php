@@ -40,7 +40,17 @@ function fetch_day_schedules(PDO $pdo, int $id): array {
 
 function fetch_blackouts(PDO $pdo, int $id): array {
     try {
-        $stmt = $pdo->prepare("SELECT blackout_date, reason, block_start, block_end FROM restaurant_blackouts WHERE restaurant_id = ? AND blackout_date >= CURDATE() ORDER BY blackout_date");
+        // VSI blokirani datumi (prihodnji + arhiv). UI razdeli vizualno.
+        // Sortirano: prihodnji najprej (po naraščajočem datumu), nato pretekli (najnovejši najprej).
+        $stmt = $pdo->prepare("
+            SELECT blackout_date, reason, block_start, block_end,
+                   CASE WHEN blackout_date >= CURDATE() THEN 0 ELSE 1 END AS is_past
+            FROM restaurant_blackouts
+            WHERE restaurant_id = ?
+            ORDER BY is_past ASC,
+                     CASE WHEN blackout_date >= CURDATE() THEN blackout_date END ASC,
+                     CASE WHEN blackout_date <  CURDATE() THEN blackout_date END DESC
+        ");
         $stmt->execute([$id]);
         return $stmt->fetchAll();
     } catch (PDOException $e) { return []; }
@@ -186,6 +196,11 @@ if ($method === 'POST') {
     $allow_custom = isset($body['allow_custom_duration']) ? ($body['allow_custom_duration'] ? 1 : 0) : 0;
     $color        = preg_match('/^#[0-9A-Fa-f]{6}$/', $body['color'] ?? '') ? $body['color'] : '#F59E0B';
 
+    // Kontaktni podatki (opcijsko)
+    $contact_email = isset($body['contact_email']) ? (trim((string)$body['contact_email']) ?: null) : null;
+    $contact_phone = isset($body['contact_phone']) ? (trim((string)$body['contact_phone']) ?: null) : null;
+    $address       = isset($body['address'])       ? (trim((string)$body['address'])       ?: null) : null;
+
     // Izračunaj schedule_start/end iz day_schedules (če so podane), sicer default
     $daySchedules = !empty($body['day_schedules']) && is_array($body['day_schedules']) ? $body['day_schedules'] : null;
     $sched_start  = 480; $sched_end = 1380; $openDaysMask = 127;
@@ -205,11 +220,21 @@ if ($method === 'POST') {
     try {
         $pdo->beginTransaction();
         $bookingToken = bin2hex(random_bytes(32));
-        $pdo->prepare("INSERT INTO restaurants (name, owner_id, reservation_duration, allow_custom_duration, schedule_start, schedule_end, color, booking_token, booking_open_days) VALUES (?,?,?,?,?,?,?,?,?)")
-            ->execute([$name, $session['user_id'], $duration, $allow_custom, $sched_start, $sched_end, $color, $bookingToken, $openDaysMask]);
+        $pdo->prepare("INSERT INTO restaurants (name, owner_id, reservation_duration, allow_custom_duration, schedule_start, schedule_end, color, booking_token, booking_open_days, contact_email, contact_phone) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+            ->execute([$name, $session['user_id'], $duration, $allow_custom, $sched_start, $sched_end, $color, $bookingToken, $openDaysMask, $contact_email, $contact_phone]);
         $id = (int) $pdo->lastInsertId();
 
         $pdo->prepare("INSERT INTO restaurant_admins (restaurant_id, user_id) VALUES (?,?)")->execute([$id, $session['user_id']]);
+
+        // Address stolpec dodan preko migracije; varno preskoči če manjka.
+        if ($address !== null) {
+            try {
+                $colCheck = $pdo->query("SHOW COLUMNS FROM restaurants LIKE 'address'");
+                if ($colCheck->fetch()) {
+                    $pdo->prepare("UPDATE restaurants SET address = ? WHERE id = ?")->execute([$address, $id]);
+                }
+            } catch (Throwable $e) { /* skip */ }
+        }
 
         // Shrani day_schedules
         if ($daySchedules) {
@@ -312,6 +337,8 @@ if ($method === 'PUT') {
     $track_no_shows    = isset($body['track_no_shows'])    ? ($body['track_no_shows'] ? 1 : 0) : null;
     $no_show_threshold = isset($body['no_show_threshold']) ? max(1, (int)$body['no_show_threshold']) : null;
 
+    $notify_guest_email = isset($body['notify_guest_email']) ? ($body['notify_guest_email'] ? 1 : 0) : null;
+
     // Booking lang nastavitve
     $allowedLangs = ['sl','en','de','it','fr','hr','es','pt'];
     $booking_lang_switcher_enabled = isset($body['booking_lang_switcher_enabled']) ? ($body['booking_lang_switcher_enabled'] ? 1 : 0) : null;
@@ -360,6 +387,7 @@ if ($method === 'PUT') {
     if ($employees_can_override_schedule !== null) { $sets[] = 'employees_can_override_schedule = ?';        $params[] = $employees_can_override_schedule; }
     if ($track_no_shows !== null)                  { $sets[] = 'track_no_shows = ?';                        $params[] = $track_no_shows; }
     if ($no_show_threshold !== null)               { $sets[] = 'no_show_threshold = ?';                     $params[] = $no_show_threshold; }
+    if ($notify_guest_email !== null)              { $sets[] = 'notify_guest_email = ?';                    $params[] = $notify_guest_email; }
     // Lang stolpci samo če migration applied (booking_lang_*)
     $hasLangCols = false;
     try {

@@ -16,6 +16,19 @@ function blog_base_url(): string {
     return rtrim(BASE_PATH, '/');
 }
 
+/**
+ * Vrne uporabnikov preferirani blog jezik iz `rzlang` cookie-ja (postavi ga app login / lang switcher),
+ * ali null če ni nastavljen / je nevalden / je 'sl'.
+ *
+ * Uporabljaj za redirect z `/booked` na `/{lang}/booked`, ko je app v ne-SL jeziku.
+ */
+function blog_user_preferred_lang(): ?string {
+    $c = $_COOKIE['rzlang'] ?? '';
+    if (!is_string($c) || $c === '' || $c === 'sl') return null;
+    if (!in_array($c, BLOG_LANGS, true)) return null;
+    return $c;
+}
+
 /** Public URL za blog post v želenem jeziku. */
 function blog_post_url(string $slug, string $lang = 'sl'): string {
     $base = blog_base_url();

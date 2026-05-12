@@ -77,7 +77,7 @@ if ($method === 'GET' && $action === 'get_by_token') {
     if (!$token) json_response(false, null, 'Token manjka.', 400);
 
     $stmt = $pdo->prepare("
-        SELECT sr.*, sf.title, sf.description, r.name AS restaurant_name
+        SELECT sr.*, sf.restaurant_id, r.name AS restaurant_name
         FROM survey_responses sr
         JOIN survey_forms sf ON sr.survey_id = sf.id
         JOIN restaurants r  ON sf.restaurant_id = r.id
@@ -88,25 +88,25 @@ if ($method === 'GET' && $action === 'get_by_token') {
     if (!$response) json_response(false, null, 'Neveljavna povezava.', 404);
     if ($response['submitted_at']) json_response(false, ['already_submitted' => true], '');
 
-    $stmt = $pdo->prepare("SELECT * FROM survey_questions WHERE survey_id = ? ORDER BY sort_order, id");
-    $stmt->execute([$response['survey_id']]);
-    $questions = $stmt->fetchAll();
-
-    if ($questions) {
-        $qids = array_column($questions, 'id');
-        $placeholders = implode(',', array_fill(0, count($qids), '?'));
-        $stmt = $pdo->prepare("SELECT * FROM survey_question_options WHERE question_id IN ($placeholders) ORDER BY sort_order");
-        $stmt->execute($qids);
-        $optMap = [];
-        foreach ($stmt->fetchAll() as $o) $optMap[$o['question_id']][] = $o;
-        foreach ($questions as &$q) $q['options'] = $optMap[$q['id']] ?? [];
-    }
+    // Naloži anketo v jeziku, v katerem je bila poslana gostu
+    $surveyLang = $response['survey_language'] ?? 'sl';
+    $form = load_survey($pdo, (int)$response['restaurant_id'], $surveyLang);
+    if (!$form) json_response(false, null, 'Anketa ne obstaja.', 404);
 
     json_response(true, [
         'restaurant_name' => $response['restaurant_name'],
-        'title'           => $response['title'],
-        'description'     => $response['description'],
-        'questions'       => $questions,
+        'title'           => $form['title'],
+        'description'     => $form['description'],
+        'questions'       => array_map(function($q) {
+            // Stripe out admin-only fields
+            unset($q['translations'], $q['_master_text']);
+            $q['options'] = array_map(function($o) {
+                unset($o['translations'], $o['_master_label']);
+                return $o;
+            }, $q['options'] ?? []);
+            return $q;
+        }, $form['questions'] ?? []),
+        'lang' => $surveyLang,
     ]);
 }
 
@@ -128,12 +128,28 @@ if ($method === 'GET' && $action === 'get_form') {
     $form = load_survey($pdo, $restaurant_id);
     if (!$form) {
         seed_default_survey($pdo, $restaurant_id);
-        $form = load_survey($pdo, $restaurant_id);
     }
+    // Backfill prevodov za default vsebino (idempotent, ne dotika se admin edit-a)
+    try { backfill_default_survey_translations($pdo, $restaurant_id); } catch (Throwable $e) {}
+
+    // Naloži v primary jeziku restavracije, da admin vidi vsebino v "svojem" jeziku.
+    // Master (SL) ostane v _master_* poljih za fallback.
+    $primary = 'sl';
+    try {
+        $pStmt = $pdo->prepare("SELECT booking_primary_language FROM restaurants WHERE id=?");
+        $pStmt->execute([$restaurant_id]);
+        $p = $pStmt->fetchColumn();
+        if ($p && in_array($p, SURVEY_ALLOWED_LANGS, true)) $primary = $p;
+    } catch (PDOException $e) {}
+
+    $form = load_survey($pdo, $restaurant_id, $primary);
+    if (is_array($form)) $form['_primary_lang'] = $primary;
     json_response(true, $form);
 }
 
 // ─── POST save_form ────────────────────────────────────────────────────────────
+// Ohrani question/option ID-je (potreben za _translations cascade), izbriši samo tiste,
+// ki niso več prisotni. To prepreči izgubo prevodov pri vsaki shranitvi.
 if ($method === 'POST' && $action === 'save_form') {
     require_feature($pdo, $session, 'survey_edit');
     $body          = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -151,12 +167,22 @@ if ($method === 'POST' && $action === 'save_form') {
     $incl_survey    = (int)(bool)($body['include_survey']   ?? 1);
     $questions      = $body['questions'] ?? [];
 
+    // Določi primary jezik restavracije — admin tipka v primary, zato shranimo
+    // tudi v <kind>_translations[primary], da se prevod ne zgubi pri SL fallbacku.
+    $primaryLang = 'sl';
+    try {
+        $pStmt = $pdo->prepare("SELECT booking_primary_language FROM restaurants WHERE id=?");
+        $pStmt->execute([$restaurant_id]);
+        $p = $pStmt->fetchColumn();
+        if ($p && in_array($p, SURVEY_ALLOWED_LANGS, true)) $primaryLang = $p;
+    } catch (PDOException $e) {}
+
     $pdo->beginTransaction();
     try {
         // Ustvari ali posodobi anketo
         $existing = $pdo->prepare("SELECT id FROM survey_forms WHERE restaurant_id = ? LIMIT 1");
         $existing->execute([$restaurant_id]);
-        $survey_id = $existing->fetchColumn();
+        $survey_id = (int)$existing->fetchColumn();
 
         if ($survey_id) {
             $pdo->prepare("
@@ -173,33 +199,130 @@ if ($method === 'POST' && $action === 'save_form') {
             $survey_id = (int)$pdo->lastInsertId();
         }
 
-        // Shrani vprašanja (briši vse in vstavi znova)
-        $pdo->prepare("DELETE FROM survey_questions WHERE survey_id = ?")->execute([$survey_id]);
-
-        $qStmt = $pdo->prepare("
+        $qInsert = $pdo->prepare("
             INSERT INTO survey_questions (survey_id, sort_order, question_text, type, is_required)
             VALUES (?,?,?,?,?)
         ");
-        $oStmt = $pdo->prepare("
+        $qUpdate = $pdo->prepare("
+            UPDATE survey_questions SET sort_order=?, question_text=?, type=?, is_required=? WHERE id=? AND survey_id=?
+        ");
+        $oInsert = $pdo->prepare("
             INSERT INTO survey_question_options (question_id, sort_order, label) VALUES (?,?,?)
         ");
+        $oUpdate = $pdo->prepare("
+            UPDATE survey_question_options SET sort_order=?, label=? WHERE id=? AND question_id=?
+        ");
+
+        // ID-ji vprašanj/opcij, ki ostanejo po shranitvi (drugi se izbrišejo).
+        $keepQids = [];
+        $keepOidsByQ = [];
 
         foreach ($questions as $i => $q) {
             $type = in_array($q['type'] ?? '', ['checkbox','rating','radio','text','textarea'])
                 ? $q['type'] : 'text';
-            $qStmt->execute([
-                $survey_id,
-                $i + 1,
-                trim($q['question_text'] ?? ''),
-                $type,
-                (int)(bool)($q['is_required'] ?? 0),
-            ]);
-            $question_id = (int)$pdo->lastInsertId();
+            $qid = isset($q['id']) ? (int)$q['id'] : 0;
+            $text = trim($q['question_text'] ?? '');
+
+            if ($qid > 0) {
+                // Posodobi obstoječe vprašanje (preveri pripadnost)
+                $chk = $pdo->prepare("SELECT 1 FROM survey_questions WHERE id=? AND survey_id=?");
+                $chk->execute([$qid, $survey_id]);
+                if ($chk->fetchColumn()) {
+                    $qUpdate->execute([$i + 1, $text, $type, (int)(bool)($q['is_required'] ?? 0), $qid, $survey_id]);
+                } else {
+                    $qid = 0;
+                }
+            }
+            if ($qid === 0) {
+                $qInsert->execute([$survey_id, $i + 1, $text, $type, (int)(bool)($q['is_required'] ?? 0)]);
+                $qid = (int)$pdo->lastInsertId();
+            }
+            $keepQids[] = $qid;
+            $keepOidsByQ[$qid] = [];
 
             if (in_array($type, ['radio', 'checkbox'])) {
                 foreach ($q['options'] ?? [] as $j => $opt) {
-                    $label = trim(is_array($opt) ? ($opt['label'] ?? '') : $opt);
-                    if ($label !== '') $oStmt->execute([$question_id, $j + 1, $label]);
+                    $oid   = is_array($opt) && isset($opt['id']) ? (int)$opt['id'] : 0;
+                    $label = trim(is_array($opt) ? ($opt['label'] ?? '') : (string)$opt);
+                    if ($label === '') continue;
+                    if ($oid > 0) {
+                        $chk = $pdo->prepare("SELECT 1 FROM survey_question_options WHERE id=? AND question_id=?");
+                        $chk->execute([$oid, $qid]);
+                        if ($chk->fetchColumn()) {
+                            $oUpdate->execute([$j + 1, $label, $oid, $qid]);
+                        } else {
+                            $oid = 0;
+                        }
+                    }
+                    if ($oid === 0) {
+                        $oInsert->execute([$qid, $j + 1, $label]);
+                        $oid = (int)$pdo->lastInsertId();
+                    }
+                    $keepOidsByQ[$qid][] = $oid;
+                }
+            }
+        }
+
+        // Pobriši odstranjena vprašanja
+        if ($keepQids) {
+            $ph = implode(',', array_fill(0, count($keepQids), '?'));
+            $delQ = $pdo->prepare("DELETE FROM survey_questions WHERE survey_id=? AND id NOT IN ($ph)");
+            $delQ->execute(array_merge([$survey_id], $keepQids));
+        } else {
+            $pdo->prepare("DELETE FROM survey_questions WHERE survey_id=?")->execute([$survey_id]);
+        }
+
+        // Pobriši odstranjene opcije znotraj vsakega vprašanja
+        foreach ($keepOidsByQ as $qid => $oids) {
+            if ($oids) {
+                $ph = implode(',', array_fill(0, count($oids), '?'));
+                $pdo->prepare("DELETE FROM survey_question_options WHERE question_id=? AND id NOT IN ($ph)")
+                    ->execute(array_merge([$qid], $oids));
+            } else {
+                $pdo->prepare("DELETE FROM survey_question_options WHERE question_id=?")->execute([$qid]);
+            }
+        }
+
+        // Če je primary != 'sl', shrani uvodne (admin-tipkane) vrednosti tudi
+        // kot prevode v primary jeziku — admin je tipkal v primary, naj se to
+        // odraža v survey_*_translations[primary]. SL master ostane kot fallback.
+        if ($primaryLang !== 'sl') {
+            // Form
+            $pdo->prepare("
+                INSERT INTO survey_form_translations (form_id, lang_code, title, description, thank_you_message)
+                VALUES (?,?,?,?,?)
+                ON DUPLICATE KEY UPDATE title=VALUES(title), description=VALUES(description), thank_you_message=VALUES(thank_you_message)
+            ")->execute([$survey_id, $primaryLang, $title, $description, $thank_you]);
+
+            // Vprašanja in opcije po istem zaporedju kot zgoraj (uporabimo trenutni body)
+            $qtIns = $pdo->prepare("
+                INSERT INTO survey_question_translations (question_id, lang_code, question_text)
+                VALUES (?,?,?)
+                ON DUPLICATE KEY UPDATE question_text=VALUES(question_text)
+            ");
+            $otIns = $pdo->prepare("
+                INSERT INTO survey_question_option_translations (option_id, lang_code, label)
+                VALUES (?,?,?)
+                ON DUPLICATE KEY UPDATE label=VALUES(label)
+            ");
+            // Re-iteriraj vprašanja in poveži z novimi ID-ji preko keepQids/keepOidsByQ
+            $idx = 0;
+            foreach ($questions as $q) {
+                $qid = $keepQids[$idx] ?? null;
+                $idx++;
+                if (!$qid) continue;
+                $text = trim($q['question_text'] ?? '');
+                if ($text !== '') $qtIns->execute([$qid, $primaryLang, $text]);
+
+                if (in_array($q['type'] ?? '', ['radio','checkbox'])) {
+                    $oidIdx = 0;
+                    foreach ($q['options'] ?? [] as $opt) {
+                        $label = trim(is_array($opt) ? ($opt['label'] ?? '') : (string)$opt);
+                        if ($label === '') continue;
+                        $oid = $keepOidsByQ[$qid][$oidIdx] ?? null;
+                        $oidIdx++;
+                        if ($oid && $label !== '') $otIns->execute([$oid, $primaryLang, $label]);
+                    }
                 }
             }
         }
@@ -209,6 +332,85 @@ if ($method === 'POST' && $action === 'save_form') {
     } catch (PDOException $e) {
         $pdo->rollBack();
         error_log('Survey save_form error: ' . $e->getMessage());
+        json_response(false, null, 'Napaka pri shranjevanju.', 500);
+    }
+}
+
+// ─── POST save_translation ─────────────────────────────────────────────────────
+// Body: { kind: 'form'|'question'|'option', target_id: N, lang_code: 'de', fields: {...} }
+//   form     fields: { title?, description?, thank_you_message? }
+//   question fields: { question_text }
+//   option   fields: { label }
+if ($method === 'POST' && $action === 'save_translation') {
+    require_feature($pdo, $session, 'survey_edit');
+    $body      = json_decode(file_get_contents('php://input'), true) ?? [];
+    $kind      = $body['kind']      ?? '';
+    $targetId  = (int)($body['target_id'] ?? 0);
+    $langCode  = $body['lang_code'] ?? '';
+    $fields    = $body['fields']    ?? [];
+    if (!in_array($langCode, SURVEY_ALLOWED_LANGS, true)) json_response(false, null, 'Neveljaven jezik.', 400);
+    if (!$targetId) json_response(false, null, 'target_id manjka.', 400);
+
+    // Authz: preveri, da resource pripada admin-owned restavraciji
+    if ($kind === 'form') {
+        $stmt = $pdo->prepare("SELECT restaurant_id FROM survey_forms WHERE id=?");
+    } elseif ($kind === 'question') {
+        $stmt = $pdo->prepare("SELECT sf.restaurant_id FROM survey_questions sq JOIN survey_forms sf ON sq.survey_id=sf.id WHERE sq.id=?");
+    } elseif ($kind === 'option') {
+        $stmt = $pdo->prepare("SELECT sf.restaurant_id FROM survey_question_options sqo JOIN survey_questions sq ON sqo.question_id=sq.id JOIN survey_forms sf ON sq.survey_id=sf.id WHERE sqo.id=?");
+    } else {
+        json_response(false, null, 'Neznana vrsta.', 400);
+    }
+    $stmt->execute([$targetId]);
+    $restId = (int)$stmt->fetchColumn();
+    if (!$restId || !admin_owns_restaurant($pdo, $session, $restId)) {
+        json_response(false, null, 'Dostop zavrnjen.', 403);
+    }
+
+    try {
+        if ($kind === 'form') {
+            $title  = trim($fields['title'] ?? '');
+            $desc   = trim($fields['description'] ?? '');
+            $thanks = trim($fields['thank_you_message'] ?? '');
+            // Vse polja prazna → izbriši vrstico
+            if ($title === '' && $desc === '' && $thanks === '') {
+                $pdo->prepare("DELETE FROM survey_form_translations WHERE form_id=? AND lang_code=?")
+                    ->execute([$targetId, $langCode]);
+            } else {
+                $pdo->prepare("
+                    INSERT INTO survey_form_translations (form_id, lang_code, title, description, thank_you_message)
+                    VALUES (?,?,?,?,?)
+                    ON DUPLICATE KEY UPDATE title=VALUES(title), description=VALUES(description), thank_you_message=VALUES(thank_you_message)
+                ")->execute([$targetId, $langCode, $title, $desc, $thanks]);
+            }
+        } elseif ($kind === 'question') {
+            $text = trim($fields['question_text'] ?? '');
+            if ($text === '') {
+                $pdo->prepare("DELETE FROM survey_question_translations WHERE question_id=? AND lang_code=?")
+                    ->execute([$targetId, $langCode]);
+            } else {
+                $pdo->prepare("
+                    INSERT INTO survey_question_translations (question_id, lang_code, question_text)
+                    VALUES (?,?,?)
+                    ON DUPLICATE KEY UPDATE question_text=VALUES(question_text)
+                ")->execute([$targetId, $langCode, $text]);
+            }
+        } elseif ($kind === 'option') {
+            $label = trim($fields['label'] ?? '');
+            if ($label === '') {
+                $pdo->prepare("DELETE FROM survey_question_option_translations WHERE option_id=? AND lang_code=?")
+                    ->execute([$targetId, $langCode]);
+            } else {
+                $pdo->prepare("
+                    INSERT INTO survey_question_option_translations (option_id, lang_code, label)
+                    VALUES (?,?,?)
+                    ON DUPLICATE KEY UPDATE label=VALUES(label)
+                ")->execute([$targetId, $langCode, $label]);
+            }
+        }
+        json_response(true, null);
+    } catch (PDOException $e) {
+        error_log('Survey save_translation error: ' . $e->getMessage());
         json_response(false, null, 'Napaka pri shranjevanju.', 500);
     }
 }
@@ -438,8 +640,22 @@ if ($method === 'POST' && $action === 'send_now') {
         if (!$form) json_response(false, null, 'Anketa za to restavracijo ne obstaja.', 404);
 
         $token = bin2hex(random_bytes(32));
-        $pdo->prepare("INSERT INTO survey_responses (survey_id, reservation_id, email, token, scheduled_send_at) VALUES (?,?,?,?,NOW())")
-            ->execute([$form['id'], $reservation_id, $res['email'], $token]);
+        // survey_language: guest_language iz rezervacije > restaurant primary > 'sl'
+        $sLang = !empty($res['guest_language']) ? (string)$res['guest_language'] : '';
+        if (!in_array($sLang, SURVEY_ALLOWED_LANGS, true)) {
+            $rq = $pdo->prepare("SELECT booking_primary_language FROM restaurants WHERE id=?");
+            try { $rq->execute([(int)$res['restaurant_id']]); $sLang = (string)$rq->fetchColumn(); } catch (PDOException $e) { $sLang = 'sl'; }
+            if (!in_array($sLang, SURVEY_ALLOWED_LANGS, true)) $sLang = 'sl';
+        }
+        $hasLangCol = false;
+        try { $hasLangCol = (bool)$pdo->query("SHOW COLUMNS FROM survey_responses LIKE 'survey_language'")->fetch(); } catch (PDOException $e) {}
+        if ($hasLangCol) {
+            $pdo->prepare("INSERT INTO survey_responses (survey_id, reservation_id, email, token, scheduled_send_at, survey_language) VALUES (?,?,?,?,NOW(),?)")
+                ->execute([$form['id'], $reservation_id, $res['email'], $token, $sLang]);
+        } else {
+            $pdo->prepare("INSERT INTO survey_responses (survey_id, reservation_id, email, token, scheduled_send_at) VALUES (?,?,?,?,NOW())")
+                ->execute([$form['id'], $reservation_id, $res['email'], $token]);
+        }
         $srId = (int)$pdo->lastInsertId();
 
         $stmt = $pdo->prepare("SELECT * FROM survey_responses WHERE id = ?");

@@ -12,10 +12,12 @@ const UpNext = (() => {
   }
 
   function formatMinsUntil(mins) {
-    if (mins < 60) return `čez ${mins} min`;
+    if (mins < 60) return window.t("upnext.in_minutes", { min: mins });
     const h = Math.floor(mins / 60);
     const m = mins % 60;
-    return m > 0 ? `čez ${h}h ${m}m` : `čez ${h}h`;
+    return m > 0
+      ? window.t("upnext.in_hours_minutes", { h: h, m: m })
+      : window.t("upnext.in_hours", { h: h });
   }
 
   function render(reservations, currentDate) {
@@ -30,25 +32,14 @@ const UpNext = (() => {
     const now = new Date();
     const nowMin = now.getHours() * 60 + now.getMinutes();
 
-    const DAYS_SHORT = ["ned", "pon", "tor", "sre", "čet", "pet", "sob"];
-    const MONTHS_GEN = [
-      "jan",
-      "feb",
-      "mar",
-      "apr",
-      "maj",
-      "jun",
-      "jul",
-      "avg",
-      "sep",
-      "okt",
-      "nov",
-      "dec",
-    ];
-    const dayLabel = `${DAYS_SHORT[currentDate.getDay()].toUpperCase()} · ${currentDate.getDate()}. ${MONTHS_GEN[currentDate.getMonth()]}`;
+    // Mon-first 0..6 day index (Date.getDay() returns 0=Sun..6=Sat)
+    const dayIdxMon = (currentDate.getDay() + 6) % 7;
+    const dayShort = window.t("days_short3." + dayIdxMon).toUpperCase();
+    const monthShort = window.t("months_short." + currentDate.getMonth());
+    const dayLabel = `${dayShort} · ${currentDate.getDate()}. ${monthShort}`;
 
     if (eyebrow)
-      eyebrow.textContent = isToday ? "DANES · DO KONCA DNE" : dayLabel;
+      eyebrow.textContent = isToday ? window.t("upnext.eyebrow_today") : dayLabel;
 
     // Danes: skrij pretekle (končane, ki niso arrived); ostali dnevi: vse
     const upcoming = (reservations || [])
@@ -67,7 +58,10 @@ const UpNext = (() => {
           (s, r) => s + (parseInt(r.guest_count) || 0),
           0,
         );
-        countEl.textContent = `${upcoming.length} rezervacij · ${totalGuests} gostov`;
+        countEl.textContent = window.t("upnext.count_summary", {
+          count: upcoming.length,
+          guests: totalGuests,
+        });
       } else {
         countEl.textContent = "";
       }
@@ -79,10 +73,8 @@ const UpNext = (() => {
       const empty = document.createElement("div");
       empty.className = "rz-upnext-empty";
       empty.textContent = isToday
-        ? "Za danes ni več prihajajočih rezervacij."
-        : ds < APP_STATE.today
-          ? "Ni rezervacij za ta dan."
-          : "Za ta dan ni rezervacij.";
+        ? window.t("upnext.no_more_today")
+        : window.t("upnext.no_reservations_for_day");
       list.appendChild(empty);
       return;
     }
@@ -112,7 +104,7 @@ const UpNext = (() => {
         const inSpan = document.createElement("span");
         inSpan.className = "rz-upn-in";
         if (minsUntil > 0) inSpan.textContent = formatMinsUntil(minsUntil);
-        else inSpan.textContent = "zdaj";
+        else inSpan.textContent = window.t("upnext.now");
         timeDiv.appendChild(inSpan);
       }
       row.appendChild(timeDiv);

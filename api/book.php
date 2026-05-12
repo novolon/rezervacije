@@ -105,12 +105,25 @@ if ($method === 'GET') {
             $stmtAreas->execute([$restId]);
             $areas = $stmtAreas->fetchAll(PDO::FETCH_ASSOC);
 
+            // Apliciraj prevode imen za zahtevani jezik (?lang=de)
+            $reqLang = trim($_GET['lang'] ?? '');
+            $trMap = [];
+            if ($reqLang && $areas) {
+                try {
+                    $aids = array_column($areas, 'id');
+                    $ph   = implode(',', array_fill(0, count($aids), '?'));
+                    $tStmt = $pdo->prepare("SELECT area_id, name FROM restaurant_area_translations WHERE area_id IN ($ph) AND lang_code = ?");
+                    $tStmt->execute(array_merge($aids, [$reqLang]));
+                    foreach ($tStmt->fetchAll() as $r) $trMap[(int)$r['area_id']] = $r['name'];
+                } catch (PDOException $e) { /* tabela morda manjka */ }
+            }
+
             $result = [];
             foreach ($areas as $area) {
                 $avail = find_available_table($pdo, $restId, $date, substr($timeParam, 0, 5), $duration, $guestCount, null, (int)$area['id']);
                 $result[] = [
                     'id'        => (int)$area['id'],
-                    'name'      => $area['name'],
+                    'name'      => $trMap[(int)$area['id']] ?? $area['name'],
                     'available' => $avail !== false,
                 ];
             }
@@ -298,9 +311,33 @@ if ($method === 'GET') {
         ");
         $cfStmt->execute([$rest['id']]);
         $customFields = $cfStmt->fetchAll();
+
+        // Apliciraj prevode polj za ?lang=
+        $reqLang = trim($_GET['lang'] ?? '');
+        $cfTrMap = [];
+        if ($reqLang && $customFields) {
+            try {
+                $fids = array_column($customFields, 'id');
+                $ph   = implode(',', array_fill(0, count($fids), '?'));
+                $tStmt = $pdo->prepare("SELECT field_id, label, options_json FROM restaurant_custom_field_translations WHERE field_id IN ($ph) AND lang_code = ?");
+                $tStmt->execute(array_merge($fids, [$reqLang]));
+                foreach ($tStmt->fetchAll() as $r) {
+                    $cfTrMap[(int)$r['field_id']] = [
+                        'label'   => $r['label'],
+                        'options' => $r['options_json'] ? (json_decode($r['options_json'], true) ?: null) : null,
+                    ];
+                }
+            } catch (PDOException $e) { /* tabela morda manjka */ }
+        }
+
         foreach ($customFields as &$cf) {
             $cf['options']     = $cf['options'] ? json_decode($cf['options'], true) : [];
             $cf['is_required'] = (bool)$cf['is_required'];
+            $tr = $cfTrMap[(int)$cf['id']] ?? null;
+            if ($tr) {
+                if (!empty($tr['label']))   $cf['label']   = $tr['label'];
+                if (!empty($tr['options'])) $cf['options'] = $tr['options'];
+            }
         }
     } catch (PDOException $e) { /* tabela morda še ne obstaja */ }
 
@@ -434,6 +471,15 @@ if ($method === 'POST') {
     $status      = $rest['booking_auto_confirm'] ? 'confirmed' : 'pending';
     $customFields = isset($body['custom_fields']) && is_array($body['custom_fields']) ? $body['custom_fields'] : [];
 
+    // Določi jezik gosta: body['lang'] (iz switcherja) > primary_language > 'sl'
+    $allowedLangs = ['sl','en','de','it','fr','hr','es','pt'];
+    $guestLang    = trim((string)($body['lang'] ?? ''));
+    if (!in_array($guestLang, $allowedLangs, true)) {
+        $guestLang = !empty($rest['booking_primary_language']) && in_array($rest['booking_primary_language'], $allowedLangs, true)
+            ? $rest['booking_primary_language']
+            : 'sl';
+    }
+
     try {
         $gdprIp  = $_SERVER['REMOTE_ADDR'] ?? null;
         $gdprNow = $gdprConsent ? date('Y-m-d H:i:s') : null;
@@ -461,31 +507,46 @@ if ($method === 'POST') {
             }
         }
 
-        $pdo->prepare("
-            INSERT INTO reservations
-                (restaurant_id, reservation_date, reservation_time, duration,
-                 guest_name, guest_count, email, phone, notes,
-                 status, source, created_by,
-                 gdpr_consent, gdpr_consent_at, gdpr_consent_ip, marketing_consent)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'public', ?,
-                    ?, ?, ?, ?)
-        ")->execute([
-            $rest['id'],
-            $date,
-            $time . ':00',
-            $durationMins,
-            $guestName,
-            $guestCount,
-            $email,
-            $phone ?: null,
-            $notes ?: null,
-            $status,
-            $rest['owner_id'],
-            $gdprConsent,
-            $gdprNow,
-            $gdprConsent ? $gdprIp : null,
-            $marketingConsent,
-        ]);
+        // Preveri če stolpec guest_language obstaja (po migraciji); če ne, fallback brez njega.
+        $hasLangCol = false;
+        try {
+            $colCheck = $pdo->query("SHOW COLUMNS FROM reservations LIKE 'guest_language'");
+            $hasLangCol = (bool)$colCheck->fetch();
+        } catch (PDOException $e) { /* ignore */ }
+
+        if ($hasLangCol) {
+            $pdo->prepare("
+                INSERT INTO reservations
+                    (restaurant_id, reservation_date, reservation_time, duration,
+                     guest_name, guest_count, email, phone, notes,
+                     status, source, created_by,
+                     gdpr_consent, gdpr_consent_at, gdpr_consent_ip, marketing_consent,
+                     guest_language)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'public', ?,
+                        ?, ?, ?, ?, ?)
+            ")->execute([
+                $rest['id'], $date, $time . ':00', $durationMins,
+                $guestName, $guestCount, $email, $phone ?: null, $notes ?: null,
+                $status, $rest['owner_id'],
+                $gdprConsent, $gdprNow, $gdprConsent ? $gdprIp : null, $marketingConsent,
+                $guestLang,
+            ]);
+        } else {
+            $pdo->prepare("
+                INSERT INTO reservations
+                    (restaurant_id, reservation_date, reservation_time, duration,
+                     guest_name, guest_count, email, phone, notes,
+                     status, source, created_by,
+                     gdpr_consent, gdpr_consent_at, gdpr_consent_ip, marketing_consent)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'public', ?,
+                        ?, ?, ?, ?)
+            ")->execute([
+                $rest['id'], $date, $time . ':00', $durationMins,
+                $guestName, $guestCount, $email, $phone ?: null, $notes ?: null,
+                $status, $rest['owner_id'],
+                $gdprConsent, $gdprNow, $gdprConsent ? $gdprIp : null, $marketingConsent,
+            ]);
+        }
 
         $newId = (int)$pdo->lastInsertId();
 
@@ -531,7 +592,8 @@ if ($method === 'POST') {
         $cEmail   = $rest['contact_email'] ?? '';
         $cPhone   = $rest['contact_phone'] ?? '';
         $cAddress = $rest['address']       ?? '';
-        $emLang   = _resolve_email_lang();
+        // Email v jeziku, ki ga je gost izbral pri rezervaciji.
+        $emLang   = $guestLang;
         if ($status === 'confirmed') {
             send_booking_confirmed_guest($email, $guestName, $rest['name'], $date, $time, $guestCount, (int)$rest['reservation_duration'], $editToken ?? '', $cEmail, $cPhone, $emLang, $cAddress);
         } else {
@@ -542,6 +604,7 @@ if ($method === 'POST') {
         $admin->execute([$rest['owner_id']]);
         $adminRow = $admin->fetch();
         if ($adminRow && $adminRow['email']) {
+            // Admin email v admin lang (ne v guest lang).
             send_booking_notify_admin(
                 $adminRow['email'], $adminRow['full_name'],
                 $rest['name'], $guestName, $email,
@@ -549,6 +612,19 @@ if ($method === 'POST') {
                 _resolve_email_lang()
             );
         }
+
+        // Analytics: server-side, ujame tudi widget (ki nima PostHog SDK).
+        require_once __DIR__ . '/../includes/analytics.php';
+        analytics_capture('reservation_created', null, [
+            'restaurant_id'    => (int)$rest['id'],
+            'owner_user_id'    => (int)$rest['owner_id'],
+            'guest_count'      => $guestCount,
+            'auto_confirmed'   => (bool)$rest['booking_auto_confirm'],
+            'has_area_pref'    => $preferredAreaId !== null,
+            'lang'             => $guestLang,
+            'source'           => 'public_booking',
+            'reservation_date' => $date,
+        ]);
 
         json_response(true, ['auto_confirm' => (bool)$rest['booking_auto_confirm']]);
 

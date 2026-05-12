@@ -30,6 +30,7 @@
   position: sticky;
   top: 0;
   height: 100vh;
+  z-index: 20; /* nad main contentom, da pop-out elementi (tooltipi, dropdown) niso skriti */
 }
 .rz-side-top {
   display: flex; align-items: center; justify-content: space-between;
@@ -179,8 +180,76 @@
 .rz-sidebar.is-collapsed .rz-nav-mark,
 .rz-sidebar.is-collapsed .rz-plan-badge,
 .rz-sidebar.is-collapsed .rz-rest-name,
-.rz-sidebar.is-collapsed .rz-user-info,
-.rz-sidebar.is-collapsed .rz-user-more { display: none; }
+.rz-sidebar.is-collapsed .rz-user-info { display: none; }
+
+/* ——— Collapsed: omogoči izstop tooltipov in dropdown menijev ven iz sidebara ——— */
+.rz-sidebar.is-collapsed { overflow: visible; }
+
+/* ——— Collapsed: logo swap + click-to-expand ——— */
+.rz-logo-img-icon { display: none; }
+.rz-sidebar.is-collapsed .rz-logo-img-full { display: none; }
+.rz-sidebar.is-collapsed .rz-logo-img-icon { display: inline-block; }
+.rz-sidebar.is-collapsed .rz-side-top { justify-content: center; padding: 6px 0 10px; }
+.rz-sidebar.is-collapsed .rz-logo {
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 8px;
+    transition: background .15s, transform .12s;
+}
+.rz-sidebar.is-collapsed .rz-logo:hover { background: var(--sidebar-hover); }
+.rz-sidebar.is-collapsed .rz-logo:active { transform: scale(.94); }
+.rz-sidebar.is-collapsed .rz-collapse { display: none; }
+
+/* ——— Collapsed: restaurant switcher (compact dot button) ——— */
+.rz-sidebar.is-collapsed .rz-restaurant-switcher { padding: 4px 8px 10px; }
+.rz-sidebar.is-collapsed .rz-rest-btn {
+    padding: 10px;
+    justify-content: center;
+}
+/* Chevron skrij na button (dropdown), na empty-state <a> obdrži '+' ikono */
+.rz-sidebar.is-collapsed button.rz-rest-btn > svg { display: none; }
+.rz-sidebar.is-collapsed button.rz-rest-btn .rz-rest-dot { width: 14px; height: 14px; }
+.rz-sidebar.is-collapsed a.rz-rest-btn .rz-rest-dot { display: none; }
+.rz-sidebar.is-collapsed a.rz-rest-btn > svg { width: 18px; height: 18px; opacity: 1; }
+.rz-sidebar.is-collapsed .rz-rest-menu {
+    left: calc(100% + 6px);
+    right: auto;
+    top: 0;
+    width: 240px;
+    max-height: 60vh;
+    z-index: 60;
+}
+
+/* ——— Tooltip (JS-rendered, fixed position za zanesljivost) ——— */
+.rz-tip-float {
+    position: fixed;
+    background: #1F2A26;
+    color: #fff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font: 500 12px var(--font, system-ui);
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 9999;
+    box-shadow: 0 6px 18px rgba(0,0,0,.22);
+    opacity: 0;
+    transform: translateY(-50%) translateX(-4px);
+    transition: opacity .12s ease-out, transform .12s ease-out;
+}
+.rz-tip-float.is-show {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+}
+.rz-tip-float::before {
+    content: '';
+    position: absolute;
+    left: -5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 0; height: 0;
+    border: 5px solid transparent;
+    border-right-color: #1F2A26;
+}
 
 .rz-side-spacer { flex: 1; }
 
@@ -206,7 +275,23 @@
 .rz-user-role { font-size: 11px; color: var(--sidebar-mute); }
 .rz-user-more { color: var(--sidebar-mute); padding: 6px; border-radius: 6px; }
 .rz-user-more:hover { background: var(--sidebar-hover); color: var(--sidebar-ink); }
-.rz-sidebar.is-collapsed .rz-user { justify-content: center; padding: 6px 0; }
+.rz-sidebar.is-collapsed .rz-user {
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 0;
+}
+/* V skritem stanju ne združuj hover-ja na parent — vsak gumb ima svoj */
+.rz-sidebar.is-collapsed .rz-user:hover { background: transparent; }
+.rz-sidebar.is-collapsed .rz-user-more {
+    display: grid;
+    place-items: center;
+    width: 34px; height: 34px;
+    border: 1px solid var(--sidebar-line);
+    border-radius: 50%;
+    color: var(--sidebar-mute);
+}
+.rz-sidebar.is-collapsed .rz-user-more:hover { background: var(--sidebar-hover); color: var(--sidebar-ink); }
 
 /* ——— Topbar ——— */
 .rz-topbar {
@@ -216,9 +301,114 @@
   border-bottom: 1px solid var(--line);
   margin-bottom: 24px;
 }
+.rz-topbar-main { min-width: 0; flex: 1; }
 .rz-h1 { font-size: 30px; font-weight: 700; margin: 0; letter-spacing: -0.025em; color: var(--ink); }
 .rz-top-sub { margin: 4px 0 0; font-size: 13px; color: var(--ink-mute); }
 .rz-top-actions { display: flex; gap: 8px; align-items: center; }
+
+/* Mobile top bar — fiksen pas čez celotno širino, vsebuje hamburger + brand. */
+.rz-mobile-bar {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 52px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+  z-index: 75;
+}
+.rz-mobile-toggle {
+  display: inline-flex;
+  width: 38px; height: 38px;
+  align-items: center; justify-content: center;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 0;
+  flex: none;
+  transition: border-color .15s, background .15s;
+}
+.rz-mobile-toggle:hover { border-color: var(--line-strong); background: var(--bg-sunken); }
+.rz-mobile-bar-brand {
+  display: inline-flex; align-items: center;
+  color: var(--ink);
+  flex: none;
+}
+.rz-mobile-bar-brand svg {
+  height: 22px;
+  width: auto;
+  display: block;
+}
+
+/* Restavracija selektor v mobile barju */
+.rz-mobile-rest {
+  margin-left: auto;
+  position: relative;
+  min-width: 0;
+}
+.rz-mobile-rest-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  border-radius: 8px;
+  color: var(--ink);
+  cursor: pointer;
+  font-size: 13px; font-weight: 600;
+  max-width: 180px;
+}
+.rz-mobile-rest-btn:hover { border-color: var(--line-strong); background: var(--bg-sunken); }
+.rz-mobile-rest-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex: none;
+}
+.rz-mobile-rest-name {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 130px;
+}
+.rz-mobile-rest--single {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-left: auto;
+  padding: 0 10px; height: 38px;
+  font-size: 13px; font-weight: 600;
+  color: var(--ink);
+}
+.rz-mobile-rest-menu {
+  position: absolute; top: calc(100% + 6px); right: 0;
+  min-width: 220px; max-width: 280px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 6px;
+  box-shadow: var(--shadow-pop, 0 8px 24px rgba(0,0,0,.12));
+  z-index: 76;
+  max-height: 60vh; overflow-y: auto;
+}
+.rz-mobile-rest-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  padding: 9px 10px;
+  border: 0; background: transparent;
+  border-radius: 7px;
+  text-align: left;
+  font-size: 13px; font-weight: 500;
+  color: var(--ink);
+  cursor: pointer;
+}
+.rz-mobile-rest-item:hover { background: var(--bg-sunken); }
+.rz-mobile-rest-item.is-active { background: var(--accent-soft); font-weight: 700; }
+
+.rz-mobile-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(28, 38, 32, 0.5);
+  backdrop-filter: blur(2px);
+  z-index: 79;
+  animation: rz-fadeIn .2s var(--ease) both;
+}
 
 .rz-kbd-hint {
   display: inline-flex; align-items: center; gap: 8px;
@@ -389,12 +579,14 @@
 }
 .rz-tl-zone-head {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 16px 6px;
+  height: 36px;
+  padding: 0 16px;
   font-size: 10px; font-weight: 700; letter-spacing: .1em;
   color: var(--ink-mute);
   text-transform: uppercase;
   background: var(--bg-elev);
   border-top: 1px solid var(--line);
+  box-sizing: border-box;
 }
 .rz-tl-zone:first-child .rz-tl-zone-head { border-top: 0; }
 .rz-tl-zone-count { background: var(--bg-sunken); padding: 1px 6px; border-radius: 3px; font-size: 10px; color: var(--ink-soft); }
@@ -419,7 +611,7 @@
   background: var(--canvas-grid);
 }
 .rz-tl-zone-body { position: relative; }
-.rz-tl-zone-spacer { height: 35px; background: var(--bg-sunken); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.rz-tl-zone-spacer { height: 36px; background: var(--bg-sunken); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); box-sizing: border-box; }
 .rz-tl-zone:first-child .rz-tl-zone-spacer { border-top: 0; }
 .rz-tl-row { position: relative; height: 56px; border-top: 1px solid var(--canvas-hair); }
 
@@ -594,7 +786,7 @@
   position: fixed; inset: 0;
   background: rgba(0,0,0,.22);
   display: flex; justify-content: flex-end;
-  z-index: 50;
+  z-index: 1000;
   animation: rz-fadeIn .2s var(--ease);
 }
 .rz-drawer {
@@ -605,6 +797,19 @@
   overflow-y: auto;
   box-shadow: -12px 0 60px -20px rgba(0,0,0,.25);
   animation: rz-slideRight .28s var(--ease);
+}
+/* Form drawer (wider, sticky footer, scrollable body) */
+.rz-drawer.rz-drawer-form { display: flex; flex-direction: column; padding: 0; width: 540px; }
+.rz-drawer.rz-drawer-wide { width: 720px; }
+.rz-drawer-form .rz-dr-form-head { padding: 20px 24px 16px; margin: 0; border-bottom: 1px solid var(--line); }
+.rz-drawer-form .rz-dr-form-head .rz-dr-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; }
+.rz-drawer-form .rz-dr-form-head .rz-dr-title { font-size: 20px; font-weight: 700; margin: 4px 0 0; letter-spacing: -.015em; color: var(--ink); }
+.rz-drawer-form-body { flex: 1; padding: 20px 24px; overflow-y: auto; }
+.rz-drawer-form-foot {
+  display: flex; gap: 8px; justify-content: flex-end;
+  padding: 14px 20px; border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+  position: sticky; bottom: 0;
 }
 .rz-dr-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 16px; }
 .rz-dr-eyebrow { font-size: 11px; font-weight: 600; color: var(--ink-mute); }
@@ -928,12 +1133,163 @@ textarea.rz-input { resize: vertical; font-family: var(--font-sans); }
 
 @media (max-width: 900px) {
   .rz-app { grid-template-columns: 1fr; }
-  .rz-sidebar { position: fixed; top: 0; left: -100%; width: 280px; z-index: 80; transition: left .28s var(--ease); }
+  .rz-sidebar {
+    position: fixed; top: 0; left: -100%; width: 280px; height: 100vh;
+    z-index: 80; transition: left .28s var(--ease);
+    box-shadow: 4px 0 20px rgba(0,0,0,.25);
+  }
   .rz-sidebar.is-mobile-open { left: 0; }
-  .rz-main { padding: 20px 16px 32px; }
+  .rz-sidebar.is-collapsed { width: 280px; }
+  /* Collapse gumb v sidebar headerju je za desktop širino — na mobile ni smisel */
+  .rz-collapse { display: none !important; }
+
+  /* Mobile top bar viden, body padded da bar ne prekriva vsebine.
+     Padding samo na straneh ki dejansko renderirajo .rz-mobile-bar (auth strani kot
+     register.php / login.php nimajo bara, zato ne smejo dobiti padding-a). */
+  .rz-mobile-bar { display: flex; }
+  body:has(.rz-mobile-bar) { padding-top: 52px !important; }
+  /* Glavni padding: poenoten 14px levo/desno; top spustimo na 16px ker mobile bar že potisne */
+  .rz-main { padding: 16px 14px 32px; }
+
+  /* Topbar: 2 vrstici — vrstica 1 = naslov, vrstica 2 = action gumbi (full width) */
+  .rz-topbar {
+    flex-wrap: wrap;
+    gap: 10px 12px;
+    padding-bottom: 14px;
+    margin-bottom: 18px;
+    align-items: flex-start;
+  }
+  .rz-topbar-main { flex: 1 1 100%; min-width: 0; order: 1; }
+  .rz-top-actions {
+    order: 2;
+    width: 100%;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .rz-h1 { font-size: 22px; line-height: 1.2; }
+  .rz-top-sub { white-space: normal; line-height: 1.4; font-size: 13px; }
+  .rz-kbd-hint .rz-kbd { display: none; }
+  .rz-kbd-hint { padding: 8px 10px; }
+  .rz-top-actions .rz-btn { padding: 8px 12px; font-size: 13px; }
+  .rz-top-actions .rz-btn--primary { flex: 1 1 auto; justify-content: center; }
+
   .rz-form-2 { grid-template-columns: 1fr; }
-  .rz-sched-row { grid-template-columns: 100px 1fr 90px 36px; padding: 12px; gap: 8px; }
+  /* Schedule row: 2 vrstici — vrstica 1 = day name + chip + edit, vrstica 2 = times (full width) */
+  .rz-sched-row {
+    grid-template-columns: 1fr auto auto !important;
+    grid-template-areas:
+      "day chip edit"
+      "summary summary summary" !important;
+    padding: 10px 12px;
+    gap: 6px 10px;
+    font-size: 13px;
+    row-gap: 6px;
+  }
+  .rz-sched-row > .rz-sched-day { grid-area: day; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .rz-sched-row > [id^="day-summary-"] { grid-area: summary; min-width: 0; }
+  .rz-sched-row > .rz-chip { grid-area: chip; justify-self: end; }
+  .rz-sched-row > .rz-iconbtn { grid-area: edit; }
   .rz-sched-settings { grid-template-columns: 1fr; }
+
+  .rz-kpis, .rz-kpi-lg-row { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .rz-grid-2, .rz-grid-3 { grid-template-columns: 1fr; }
+
+  .rz-card { padding: 16px; }
+  .rz-modal-content, .rz-modal { width: 100% !important; max-width: 100% !important; border-radius: 14px 14px 0 0 !important; }
+
+  /* Card heads stack vertically: title zgoraj, tools (gumbi/segments) spodaj full-width */
+  .rz-card-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .rz-card-tools { width: 100%; justify-content: space-between; flex-wrap: wrap; }
+  .rz-card-title { font-size: 17px; }
+
+  /* flex--equal panele (npr. v restaurant-edit) zloži vertikalno na mobile.
+     !important ker je base rule `.flex--equal > * { flex: 1 }` v istem fajlu kasneje.
+     flex-wrap obvezen ker nekateri wrapperji nimajo flex--wrap class-a. */
+  .flex.flex--equal { flex-wrap: wrap !important; }
+  .flex--equal > * { flex: 1 1 100% !important; min-width: 0 !important; }
+  .flex--gap20 { gap: 14px; }
+  .flex--gap40 { gap: 18px; }
+
+  /* Timeline: smaller left column, font; rezervacije imajo dovolj prostora preko horizontal scrolla */
+  .rz-tl-card .rz-card-head { padding: 16px 16px 12px; }
+  .rz-tl-card { margin-left: -14px; margin-right: -14px; border-radius: 0; }
+
+  /* Levi stolpec (mize) zožen + manjši font.
+     Višina 56px MORA ostati — schedule.js hardkodira 56 kot per-row enoto za stacking.
+     Zone-head in zone-spacer morata imeti enako višino (privzeto 36px). */
+  .rz-tl-head-wrap, .rz-tl-body { grid-template-columns: 84px 1fr; }
+  .rz-tl-row-label { padding: 0 6px 0 8px; font-size: 11px; height: 56px; gap: 4px; }
+  .rz-tl-zone-head { padding: 0 8px; font-size: 9px; height: 32px; }
+  .rz-tl-zone-spacer { height: 32px; }
+  /* .rz-tl-row pusti privzeto 56px — sinhrono z JS-jem */
+  /* Rezervacije: malo večji font za boljše branje na mobile */
+  .rz-res { padding: 6px 10px; }
+  .rz-res-name { font-size: 13px; }
+  .rz-res-time { font-size: 11.5px; }
+  .rz-res-guests { font-size: 11.5px; }
+
+  /* Desni del timeline-a dobi minimalno širino → .rz-tl-body že ima overflow:auto,
+     samo prisilimo grid notri da je širši od viewport-a. Levi stolpec ostane sticky. */
+  .rz-tl-hours-inner, .rz-tl-grid { min-width: 720px; }
+
+  /* Day nav + view segment: razporejena enakomerno */
+  .rz-day-nav { margin-right: 0 !important; }
+  .rz-card-tools .rz-seg { flex: 1; }
+  .rz-card-tools .rz-seg button { flex: 1; }
+
+  /* Calendar / schedule readability */
+  .rz-mc-cell { padding: 4px 5px; }
+  .rz-mc-num { font-size: 12px; }
+  .rz-mc-count { font-size: 9px; right: 4px; top: 4px; }
+
+  /* Up-next rows compact */
+  .rz-upn-row { grid-template-columns: 70px 1fr auto; padding: 10px 12px; gap: 8px; }
+
+  /* Tabele celice: nowrap, da se ne stiskajo, in tabela raste naravno čez viewport */
+  table.rz-table th, table.rz-table td,
+  table.guests-table th, table.guests-table td,
+  table.wl-table th, table.wl-table td,
+  table.history-table th, table.history-table td,
+  table.admin-table th, table.admin-table td { white-space: nowrap; }
+
+  /* Wrapper okoli tabele dobi overflow-x scroll. !important ker page-level inline
+     CSS (.guests-table-wrap { overflow:hidden }) je naložen ZA rezble.css. */
+  .rz-table-wrap, .rz-table-scroll,
+  .stats-table-wrap, .guests-table-wrap, .wl-table-wrap {
+    overflow-x: auto !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  /* Edge fade za horizontalni scroll */
+  .rz-h-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    position: relative;
+    mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 24px), transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, #000 0, #000 calc(100% - 24px), transparent 100%);
+  }
+  .rz-h-scroll.is-end {
+    mask-image: none;
+    -webkit-mask-image: none;
+  }
+
+  /* Buttons in topbar wrap */
+  .rz-btn { padding: 7px 10px; font-size: 13px; }
+}
+
+@media (max-width: 540px) {
+  .rz-main { padding: 12px 10px 24px; }
+  .rz-h1 { font-size: 19px; }
+  .rz-kpis, .rz-kpi-lg-row { grid-template-columns: 1fr; }
+  .rz-card { padding: 12px; border-radius: 12px; }
+  /* Sched-row že stacked iz 900px breakpoint-a, samo manjši padding/font na 540 */
+  .rz-sched-row { padding: 8px 10px; font-size: 12px; gap: 4px 8px; }
+  .rz-upn-row { grid-template-columns: 60px 1fr; }
+  .rz-upn-row > :nth-child(3) { grid-column: 1 / -1; justify-self: end; }
+  .rz-mc-cell { aspect-ratio: 1; padding: 3px; }
+  .rz-mc-num { font-size: 11px; }
+  body, html { -webkit-text-size-adjust: 100%; }
 }
 
 .flex {
@@ -980,3 +1336,68 @@ textarea.rz-input { resize: vertical; font-family: var(--font-sans); }
 .nastavitve-intro {
   font-size:13px;color:var(--ink-soft);margin:0 0 12px;
 }
+
+.rz-auth-switch .rz-btn {
+  background: transparent;
+}
+/* ── Translations UI: jezikovni chips + modal ─────────────────────────────── */
+.rz-tr-chips { display:inline-flex; flex-wrap:wrap; gap:4px; margin-top:4px; }
+.rz-tr-chip {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:2px 7px 2px 6px; height:22px;
+  border:1px solid var(--line); border-radius:999px;
+  background:#fff; font:600 10.5px/1 var(--font), system-ui, sans-serif;
+  letter-spacing:.04em; color:var(--ink-mute); cursor:pointer;
+  transition:border-color .15s, color .15s, background .15s;
+}
+.rz-tr-chip:hover { border-color:var(--ink-mute); color:var(--ink); }
+.rz-tr-chip.is-filled { color:var(--accent, #2563eb); border-color:rgba(37,99,235,.4); background:rgba(37,99,235,.06); }
+.rz-tr-chip .rz-tr-dot { width:6px; height:6px; border-radius:999px; background:#d1d5db; }
+.rz-tr-chip.is-filled .rz-tr-dot { background:#22c55e; }
+
+.rz-tr-modal-overlay {
+  position:fixed; inset:0; background:rgba(20,18,15,.55); z-index:9998;
+  display:flex; align-items:center; justify-content:center; padding:16px;
+  backdrop-filter:blur(2px);
+}
+.rz-tr-modal {
+  background:#fff; border-radius:14px; width:100%; max-width:520px;
+  box-shadow:0 24px 60px rgba(0,0,0,.25); display:flex; flex-direction:column;
+  max-height:90vh;
+}
+.rz-tr-modal-head {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:16px 20px; border-bottom:1px solid var(--line);
+}
+.rz-tr-modal-head h3 { margin:0; font-size:15px; font-weight:600; color:var(--ink); }
+.rz-tr-modal-close {
+  background:none; border:none; font-size:22px; line-height:1; cursor:pointer;
+  color:var(--ink-mute); padding:0 4px;
+}
+.rz-tr-modal-close:hover { color:var(--ink); }
+.rz-tr-modal-body { padding:18px 20px; overflow-y:auto; }
+.rz-tr-modal-body input,
+.rz-tr-modal-body textarea {
+  width:100%; border:1.5px solid var(--line); border-radius:8px;
+  padding:9px 12px; font:14px var(--font), system-ui, sans-serif; color:var(--ink);
+  outline:none; resize:vertical;
+}
+.rz-tr-modal-body input:focus,
+.rz-tr-modal-body textarea:focus { border-color:var(--accent, #2563eb); box-shadow:0 0 0 3px rgba(37,99,235,.12); }
+.rz-tr-master { margin-top:12px; padding:10px 12px; background:var(--bg-sunken, #f9fafb); border-radius:8px; }
+.rz-tr-master-label { font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-mute); }
+.rz-tr-master-text { font-size:13px; color:var(--ink); margin-top:4px; line-height:1.45; white-space:pre-wrap; word-break:break-word; }
+.rz-tr-modal-foot {
+  display:flex; gap:8px; align-items:center; padding:12px 20px;
+  border-top:1px solid var(--line);
+}
+.rz-tr-btn {
+  border:1px solid var(--line); border-radius:8px; padding:7px 14px;
+  font:600 13px var(--font), system-ui, sans-serif; cursor:pointer; background:#fff; color:var(--ink);
+}
+.rz-tr-btn:hover { background:var(--bg-sunken, #f9fafb); }
+.rz-tr-btn-primary { background:var(--accent, #2563eb); color:#fff; border-color:var(--accent, #2563eb); }
+.rz-tr-btn-primary:hover { background:#1d4ed8; }
+.rz-tr-btn-primary:disabled { opacity:.6; cursor:default; }
+.rz-tr-btn-ghost { border-color:transparent; color:var(--ink-mute); }
+.rz-tr-btn-ghost:hover { color:#dc2626; background:#fef2f2; }

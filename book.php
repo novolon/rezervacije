@@ -94,6 +94,17 @@ $apiBase = BASE_PATH . '/api/book.php';
         .cal-day.today { font-weight: 700; color: #C4704B; }
         .cal-day.today.selected { color: #fff; }
     </style>
+<?php
+require_once __DIR__ . '/includes/posthog_init.php';
+posthog_render_init([
+    'context'  => 'book_public',
+    'identify' => false,
+    'extra'    => [
+        'booking_token'   => $token,
+        'restaurant_name' => $rest['name'] ?? null,
+    ],
+]);
+?>
 </head>
 <body class="min-h-screen bg-cream font-sans">
 
@@ -507,7 +518,7 @@ const DAYS_SL = <?= lang_days_js() ?>;
 // ── Init ──────────────────────────────────────────────────────
 (async () => {
     try {
-        const res  = await fetch(`${API_URL}?t=${encodeURIComponent(TOKEN)}`);
+        const res  = await fetch(`${API_URL}?t=${encodeURIComponent(TOKEN)}&lang=${encodeURIComponent(USER_LANG)}`);
         const json = await res.json();
         if (!json.success) throw new Error(json.error || t('common.error'));
         state.restaurant = json.data;
@@ -730,7 +741,7 @@ async function loadSlots(date) {
     document.getElementById('slots-grid').classList.add('hidden');
 
     try {
-        const res  = await fetch(`${API_URL}?t=${encodeURIComponent(TOKEN)}&date=${date}&guest_count=${state.guests || 1}`);
+        const res  = await fetch(`${API_URL}?t=${encodeURIComponent(TOKEN)}&date=${date}&guest_count=${state.guests || 1}&lang=${encodeURIComponent(USER_LANG)}`);
         const json = await res.json();
         if (!json.success) throw new Error(json.error);
 
@@ -846,7 +857,7 @@ async function loadAreas(date, time) {
         `${dow}, ${d.getDate()}. ${MONTHS[d.getMonth()]} ${d.getFullYear()} · ${time} · ${state.guests} ${guestLabel(state.guests)}`;
 
     try {
-        const res  = await fetch(`${API_URL}?t=${encodeURIComponent(TOKEN)}&date=${date}&time=${time}&guest_count=${state.guests || 1}`);
+        const res  = await fetch(`${API_URL}?t=${encodeURIComponent(TOKEN)}&date=${date}&time=${time}&guest_count=${state.guests || 1}&lang=${encodeURIComponent(USER_LANG)}`);
         const json = await res.json();
         if (!json.success) throw new Error(json.error);
 
@@ -1174,6 +1185,14 @@ function showWaitlistConfirmation() {
 
 // ── Potrditev ─────────────────────────────────────────────────
 function showConfirmation(autoConfirm) {
+    if (window.posthog) {
+        window.posthog.capture('booking_completed', {
+            auto_confirmed: !!autoConfirm,
+            guests:         state.guests,
+            date:           state.date,
+            has_area:       !!state.areaId,
+        });
+    }
     const d   = new Date(state.date + 'T12:00:00');
     const dow = DAYS_SL[(d.getDay() + 6) % 7];
     const dateStr = `${dow}, ${d.getDate()}. ${MONTHS[d.getMonth()]} ${d.getFullYear()}`;
@@ -1194,6 +1213,9 @@ function showConfirmation(autoConfirm) {
 function goStep(n) {
     document.querySelectorAll('.step').forEach(el => el.classList.remove('active'));
     document.getElementById(`step-${n}`).classList.add('active');
+    if (window.posthog) {
+        window.posthog.capture('booking_step_viewed', { step: String(n) });
+    }
 
     // Step '3b' se mapira na vizualni korak 3 v progress indikatorju
     const progressStep = (n === '3b') ? 3 : n;
@@ -1258,6 +1280,9 @@ function guestLabel(n) {
 
 <?php endif; ?>
 <script>window.BASE_PATH = '<?= BASE_PATH ?>';</script>
-<script src="<?= BASE_PATH ?>/assets/js/cookie-consent.js"></script>
+<?php
+require_once __DIR__ . '/includes/cookie_consent.php';
+rez_consent_render(['surface' => 'book_public']);
+?>
 </body>
 </html>

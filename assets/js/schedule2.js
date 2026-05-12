@@ -3,11 +3,23 @@
  * Mize so vrstice, čas gre od leve proti desni (procentualno).
  */
 const Schedule = (() => {
+  // SL fallbacks (genitive months are SL-only grammar; other langs use nominative).
   const MONTHS_SL = [
     'januarja','februarja','marca','aprila','maja','junija',
     'julija','avgusta','septembra','oktobra','novembra','decembra',
   ];
   const DAYS_SL = ['Nedelja','Ponedeljek','Torek','Sreda','Četrtek','Petek','Sobota'];
+
+  function dayName(jsDayIdx) {
+    const monIdx = (jsDayIdx + 6) % 7;
+    const v = window.__T__ && window.__T__['days.' + monIdx];
+    return v || DAYS_SL[jsDayIdx];
+  }
+  function monthName(i) {
+    if ((window.__LANG__ || 'sl') === 'sl') return MONTHS_SL[i];
+    const v = window.__T__ && window.__T__['months.' + (i + 1)];
+    return v || MONTHS_SL[i];
+  }
 
   const ROW_HEIGHT = 48; // px
   let nowTimer = null;
@@ -23,7 +35,7 @@ const Schedule = (() => {
   }
 
   function formatDateLabel(date) {
-    return `${DAYS_SL[date.getDay()]}, ${date.getDate()}. ${MONTHS_SL[date.getMonth()]} ${date.getFullYear()}`;
+    return `${dayName(date.getDay())}, ${date.getDate()}. ${monthName(date.getMonth())} ${date.getFullYear()}`;
   }
 
   function dateToStr(d) {
@@ -560,8 +572,8 @@ const Schedule = (() => {
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>
         </svg>
-        <p>Ni rezervacij za ta dan</p>
-        ${!isPast ? '<small style="color:var(--color-muted);font-size:.75rem">Kliknite na razpored za novo rezervacijo</small>' : ''}
+        <p>${window.t('upnext.no_reservations_for_day').replace(/\.$/, '')}</p>
+        ${!isPast ? `<small style="color:var(--color-muted);font-size:.75rem">${window.t('schedule.click_to_add_hint')}</small>` : ''}
       `;
       body.appendChild(empty);
     }

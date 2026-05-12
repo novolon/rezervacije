@@ -12,6 +12,12 @@ require_once __DIR__ . '/../includes/lang.php';
 require_once __DIR__ . '/../includes/blog_helpers.php';
 
 // URL pot je avtoritativna — .htaccess pošlje ?lang=$1, /booked/ default = 'sl'.
+// Če uporabnik prihaja z app rzlang cookie-jem (npr. 'de'), in URL nima lang prefixa,
+// preusmeri na /{lang}/booked, da je UI in vsebina v istem jeziku.
+if (!isset($_GET['lang'])) {
+    $pref = blog_user_preferred_lang();
+    if ($pref) { header('Location: ' . blog_listing_url($pref), true, 302); exit; }
+}
 $lang = $_GET['lang'] ?? 'sl';
 if (!in_array($lang, BLOG_LANGS, true)) $lang = 'sl';
 $page = max(1, (int)($_GET['page'] ?? 1));

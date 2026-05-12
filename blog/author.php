@@ -9,6 +9,10 @@ require_once __DIR__ . '/../includes/lang.php';
 require_once __DIR__ . '/../includes/blog_helpers.php';
 
 $slug = trim($_GET['slug'] ?? '');
+if (!isset($_GET['lang']) && $slug !== '') {
+    $pref = blog_user_preferred_lang();
+    if ($pref) { header('Location: ' . blog_author_url($slug, $pref), true, 302); exit; }
+}
 $lang = $_GET['lang'] ?? 'sl';
 if (!in_array($lang, BLOG_LANGS, true)) $lang = 'sl';
 $page = max(1, (int)($_GET['page'] ?? 1));

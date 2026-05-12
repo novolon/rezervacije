@@ -99,7 +99,8 @@ input, textarea, select { font: inherit; }
 .mobile-nav { display: none !important; }
 
 /* ── App layout ─────────────────────────────────────────────── */
-body { padding-top: 0 !important; }
+body { padding-top: 0; }
+@media (max-width: 900px) { body:has(.rz-mobile-bar) { padding-top: 52px; } }
 
 .rz-app {
   display: grid;
@@ -141,6 +142,22 @@ body { padding-top: 0 !important; }
   top: 0;
   height: 100vh;
   transition: width .28s var(--ease);
+}
+/* Mobile: rz-app gre v 1 stolpec, sidebar plava ven (drawer), main poenoten padding. */
+@media (max-width: 900px) {
+  .rz-app, .rz-app.is-collapsed { grid-template-columns: 1fr !important; }
+  .rz-main { padding: 16px 14px 32px !important; }
+  .rz-sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: -100% !important;
+    width: 280px !important;
+    height: 100vh !important;
+    z-index: 80;
+    transition: left .28s var(--ease) !important;
+    box-shadow: 4px 0 20px rgba(0,0,0,.25);
+  }
+  .rz-sidebar.is-mobile-open { left: 0 !important; }
 }
 
 .rz-side-top {

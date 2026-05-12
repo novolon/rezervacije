@@ -59,11 +59,11 @@ $user = $stmt->fetch();
     <title><?= t('profile.page_title') ?> – <?= h(APP_NAME) ?></title>
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/main.css">
     <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/admin.css">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/rezble.css">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/rezble.css?v=<?= @filemtime(__DIR__ . '/../assets/css/rezble.css') ?>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/design.css?v=1">
+    <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/design.css?v=2">
     <script>
     window.__T__ = <?= json_encode(get_lang_strings(), JSON_UNESCAPED_UNICODE) ?>;
     window.t = function(k, p) { var s = window.__T__[k] || k; if (p) { for (var x in p) s = s.split('{'+x+'}').join(p[x]); } return s; };

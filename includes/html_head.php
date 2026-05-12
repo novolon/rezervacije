@@ -32,10 +32,22 @@ $_extraCss  = $extraCss ?? [];
 <?php foreach ($_extraCss as $_cssFile): ?>
   <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/<?= htmlspecialchars($_cssFile) ?>">
 <?php endforeach; ?>
-  <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/rezble.css">
+  <link rel="stylesheet" href="<?= BASE_PATH ?>/assets/css/rezble.css?v=<?= @filemtime(__DIR__ . '/../assets/css/rezble.css') ?>">
+<?php
+// PostHog analytics (admin app context) – init je gated za 'analytics' consent
+require_once __DIR__ . '/posthog_init.php';
+posthog_render_init(['context' => 'admin']);
+
+// Cookie consent banner – head-safe (samo <link> + <script>, banner DOM lazy build).
+// Surface 'app' za interne strani, 'affiliate' za /affiliate/* strani (avtomatska detekcija).
+$_ccSurface = (strpos($_SERVER['SCRIPT_NAME'] ?? '', '/affiliate/') !== false) ? 'affiliate' : 'app';
+require_once __DIR__ . '/cookie_consent.php';
+rez_consent_render(['surface' => $_ccSurface]);
+?>
   <script>
   window.__LANG__ = '<?= get_lang() ?>';
   window.__T__ = <?= json_encode(get_lang_strings(), JSON_UNESCAPED_UNICODE) ?>;
+  window.__T_FALLBACK__ = <?= get_lang() === 'sl' ? '{}' : json_encode(json_decode((string)@file_get_contents(__DIR__ . '/../lang/sl.json'), true) ?: [], JSON_UNESCAPED_UNICODE) ?>;
   window.__MONTHS__ = <?= lang_months_js() ?>;
   window.__DAYS__ = <?= lang_days_js() ?>;
   </script>
