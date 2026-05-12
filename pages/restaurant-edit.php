@@ -178,6 +178,9 @@ require_once '../includes/html_head.php';
         <?php if ($hasBrandingTab): ?>
             <button class="re-tab" data-tab="branding"><?= t('re.tab_branding') ?></button>
         <?php endif; ?>
+        <?php if ($hasCustomEmail): ?>
+            <button class="re-tab" data-tab="email"><?= t('re.tab_email') ?></button>
+        <?php endif; ?>
     </div>
 
     <!-- ── Tab: Splošno ────────────────────────────────────── -->
@@ -986,6 +989,107 @@ require_once '../includes/html_head.php';
                 <p style="font-size:11.5px;color:var(--ink-mute);margin:8px 0 0;line-height:1.5">
                     <?= t('re.brand_preview_note') ?>
                 </p>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <!-- ── Tab: Email ────────────────────────────────────────── -->
+    <?php if ($hasCustomEmail): ?>
+    <div id="panel-email" class="re-panel">
+        <div class="re-section">
+            <?= card_head(t('re.email_title'), t('re.email_desc'), false, 'premium') ?>
+            <div class="admin-form" style="display:flex;flex-direction:column;gap:14px">
+
+                <div class="admin-field">
+                    <label><?= t('re.email_provider') ?></label>
+                    <select id="email-provider" style="max-width:280px">
+                        <option value="default"><?= t('re.email_provider_default') ?></option>
+                        <option value="mailgun"><?= t('re.email_provider_mailgun') ?></option>
+                        <option value="smtp"><?= t('re.email_provider_smtp') ?></option>
+                    </select>
+                </div>
+
+                <div class="admin-field-row" id="email-from-row">
+                    <div class="admin-field">
+                        <label><?= t('re.email_from_name') ?></label>
+                        <input id="email-from-name" type="text" placeholder="<?= h($rest['name']) ?>">
+                    </div>
+                    <div class="admin-field">
+                        <label><?= t('re.email_from_address') ?> *</label>
+                        <input id="email-from-address" type="email" placeholder="info@vasa-domena.si">
+                    </div>
+                </div>
+
+                <!-- Mailgun fields -->
+                <div id="email-mailgun-fields" style="display:none">
+                    <div class="re-note re-note-blue" style="margin-bottom:10px"><?= t('re.email_mailgun_help') ?></div>
+                    <div class="admin-field-row">
+                        <div class="admin-field">
+                            <label><?= t('re.email_mailgun_domain') ?> *</label>
+                            <input id="email-mailgun-domain" type="text" placeholder="mg.vasa-domena.si">
+                        </div>
+                        <div class="admin-field" style="max-width:120px">
+                            <label><?= t('re.email_mailgun_region') ?></label>
+                            <select id="email-mailgun-region">
+                                <option value="eu">EU</option>
+                                <option value="us">US</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="admin-field">
+                        <label><?= t('re.email_mailgun_api_key') ?> *</label>
+                        <input id="email-mailgun-api-key" type="password" placeholder="key-xxxxxxxx" autocomplete="new-password">
+                    </div>
+                </div>
+
+                <!-- SMTP fields -->
+                <div id="email-smtp-fields" style="display:none">
+                    <div class="re-note re-note-blue" style="margin-bottom:10px"><?= t('re.email_smtp_help') ?></div>
+                    <div class="admin-field-row">
+                        <div class="admin-field">
+                            <label><?= t('re.email_smtp_host') ?> *</label>
+                            <input id="email-smtp-host" type="text" placeholder="smtp.gmail.com">
+                        </div>
+                        <div class="admin-field" style="max-width:120px">
+                            <label><?= t('re.email_smtp_port') ?></label>
+                            <input id="email-smtp-port" type="number" value="587" min="1" max="65535">
+                        </div>
+                    </div>
+                    <div class="admin-field-row">
+                        <div class="admin-field">
+                            <label><?= t('re.email_smtp_user') ?> *</label>
+                            <input id="email-smtp-user" type="text" placeholder="info@vasa-domena.si" autocomplete="new-password">
+                        </div>
+                        <div class="admin-field" style="max-width:160px">
+                            <label><?= t('re.email_smtp_secure') ?></label>
+                            <select id="email-smtp-secure">
+                                <option value="tls">STARTTLS (587)</option>
+                                <option value="ssl">SSL/TLS (465)</option>
+                                <option value="none"><?= t('re.email_smtp_none') ?></option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="admin-field">
+                        <label><?= t('re.email_smtp_pass') ?> *</label>
+                        <input id="email-smtp-pass" type="password" autocomplete="new-password">
+                    </div>
+                </div>
+
+                <div id="email-verified" style="display:none;padding:10px 14px;background:#D1FAE5;color:#065F46;border-radius:8px;font-size:13px">
+                    <strong><?= t('re.email_verified') ?>:</strong> <span id="email-verified-at"></span>
+                </div>
+                <div id="email-not-verified" style="display:none;padding:10px 14px;background:#FFFBEB;color:#92400E;border-radius:8px;font-size:13px">
+                    <?= t('re.email_not_verified') ?>
+                </div>
+
+                <div id="email-err" style="display:none;padding:10px 14px;background:#FEE2E2;color:#991B1B;border-radius:8px;font-size:13px"></div>
+
+                <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+                    <button type="button" id="email-save" class="btn btn-primary"><?= t('common.save') ?></button>
+                    <button type="button" id="email-test" class="btn btn-ghost"><?= t('re.email_send_test') ?></button>
+                    <button type="button" id="email-reset" class="btn btn-ghost btn-danger-sm" style="margin-left:auto"><?= t('re.email_reset_default') ?></button>
+                </div>
             </div>
         </div>
     </div>
@@ -2701,9 +2805,142 @@ function loadTables() { tablesLoaded = true; }
 // Ob zagonu aktiviraj tab iz hash-a
 (function() {
     const hash = location.hash.replace('#', '');
-    const valid = ['splosno','urnik','booking','zaposleni','polja','anketa','mize','branding'];
+    const valid = ['splosno','urnik','booking','zaposleni','polja','anketa','mize','branding','email'];
     if (hash && valid.includes(hash)) activateTab(hash);
 })();
+
+<?php if ($hasCustomEmail): ?>
+// ── EMAIL tab ────────────────────────────────────────────────
+(function() {
+    const REST_ID = <?= (int)$rest['id'] ?>;
+    const BASE = '<?= BASE_PATH ?>';
+    const providerSel = document.getElementById('email-provider');
+    const mgFields = document.getElementById('email-mailgun-fields');
+    const smtpFields = document.getElementById('email-smtp-fields');
+    const errBox = document.getElementById('email-err');
+
+    function updateProviderUI() {
+        const p = providerSel.value;
+        mgFields.style.display   = p === 'mailgun' ? '' : 'none';
+        smtpFields.style.display = p === 'smtp'    ? '' : 'none';
+    }
+    providerSel?.addEventListener('change', updateProviderUI);
+
+    async function loadCurrent() {
+        try {
+            const r = await fetch(`${BASE}/api/email_settings.php?id=${REST_ID}`, { credentials: 'same-origin' });
+            const j = await r.json();
+            if (!j.success) return;
+            providerSel.value = j.data.provider || 'default';
+            document.getElementById('email-from-name').value    = j.data.from_name    || '';
+            document.getElementById('email-from-address').value = j.data.from_address || '';
+            const creds = j.data.creds || {};
+            if (j.data.provider === 'mailgun') {
+                document.getElementById('email-mailgun-domain').value  = creds.domain || '';
+                document.getElementById('email-mailgun-region').value  = creds.region || 'eu';
+                document.getElementById('email-mailgun-api-key').value = creds.api_key === '••••••••' ? '••••••••' : (creds.api_key || '');
+            } else if (j.data.provider === 'smtp') {
+                document.getElementById('email-smtp-host').value   = creds.host || '';
+                document.getElementById('email-smtp-port').value   = creds.port || 587;
+                document.getElementById('email-smtp-user').value   = creds.user || '';
+                document.getElementById('email-smtp-secure').value = creds.secure || 'tls';
+                document.getElementById('email-smtp-pass').value   = creds.pass === '••••••••' ? '••••••••' : (creds.pass || '');
+            }
+            const v = j.data.verified_at;
+            document.getElementById('email-verified').style.display     = v ? '' : 'none';
+            document.getElementById('email-not-verified').style.display = (!v && j.data.provider !== 'default') ? '' : 'none';
+            if (v) document.getElementById('email-verified-at').textContent = new Date(v).toLocaleString();
+            updateProviderUI();
+        } catch (e) {}
+    }
+    loadCurrent();
+
+    function getPayload() {
+        const provider = providerSel.value;
+        const base = {
+            provider,
+            from_name:    document.getElementById('email-from-name').value.trim() || null,
+            from_address: document.getElementById('email-from-address').value.trim() || null,
+        };
+        if (provider === 'mailgun') {
+            return Object.assign(base, {
+                domain:  document.getElementById('email-mailgun-domain').value.trim(),
+                api_key: document.getElementById('email-mailgun-api-key').value,
+                region:  document.getElementById('email-mailgun-region').value,
+            });
+        }
+        if (provider === 'smtp') {
+            return Object.assign(base, {
+                host:   document.getElementById('email-smtp-host').value.trim(),
+                port:   parseInt(document.getElementById('email-smtp-port').value, 10),
+                user:   document.getElementById('email-smtp-user').value.trim(),
+                pass:   document.getElementById('email-smtp-pass').value,
+                secure: document.getElementById('email-smtp-secure').value,
+            });
+        }
+        return base;
+    }
+
+    document.getElementById('email-save')?.addEventListener('click', async (e) => {
+        errBox.style.display = 'none';
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        const old = btn.textContent;
+        btn.textContent = window.t('common.saving') || 'Shranjujem...';
+        try {
+            const r = await fetch(`${BASE}/api/email_settings.php?id=${REST_ID}`, {
+                method: 'PUT', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(getPayload()),
+            });
+            const j = await r.json();
+            if (!j.success) throw new Error(j.error || 'Napaka');
+            showSuccess(window.t('re.email_saved') || 'Shranjeno. Pošljite testni email za verifikacijo.');
+            document.getElementById('email-verified').style.display     = 'none';
+            document.getElementById('email-not-verified').style.display = j.data.provider !== 'default' ? '' : 'none';
+        } catch (err) {
+            errBox.textContent = err.message; errBox.style.display = 'block';
+        } finally {
+            btn.disabled = false; btn.textContent = old;
+        }
+    });
+
+    document.getElementById('email-test')?.addEventListener('click', async (e) => {
+        errBox.style.display = 'none';
+        const to = prompt(window.t('re.email_test_prompt') || 'Email naslov za testni email:', '<?= h($_SESSION['email'] ?? '') ?>');
+        if (!to) return;
+        const btn = e.currentTarget;
+        btn.disabled = true;
+        const old = btn.textContent;
+        btn.textContent = window.t('re.email_sending') || 'Pošiljam...';
+        try {
+            const r = await fetch(`${BASE}/api/email_settings.php?id=${REST_ID}&action=test`, {
+                method: 'POST', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ to }),
+            });
+            const j = await r.json();
+            if (!j.success) throw new Error(j.error || 'Napaka');
+            showSuccess(window.t('re.email_test_sent') || 'Test poslan in verificiran.');
+            document.getElementById('email-verified').style.display     = '';
+            document.getElementById('email-not-verified').style.display = 'none';
+            document.getElementById('email-verified-at').textContent = new Date(j.data.verified_at).toLocaleString();
+        } catch (err) {
+            errBox.textContent = err.message; errBox.style.display = 'block';
+        } finally {
+            btn.disabled = false; btn.textContent = old;
+        }
+    });
+
+    document.getElementById('email-reset')?.addEventListener('click', async () => {
+        if (!confirm(window.t('re.email_confirm_reset') || 'Resetiraj na privzeti Rezble email?')) return;
+        try {
+            await fetch(`${BASE}/api/email_settings.php?id=${REST_ID}`, { method: 'DELETE', credentials: 'same-origin' });
+            location.reload();
+        } catch (err) { errBox.textContent = err.message; errBox.style.display = 'block'; }
+    });
+})();
+<?php endif; ?>
 
 <?php if ($hasBrandingTab): ?>
 // ── BRANDING tab ─────────────────────────────────────────────

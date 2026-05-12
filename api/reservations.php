@@ -748,17 +748,20 @@ if ($method === 'POST') {
                 $cAddress    = $restRow2['address']       ?? '';
                 $autoConfirm = !empty($restRow2['auto_confirm']);
                 $emLang = _resolve_email_lang();
-                if ($autoConfirm) {
-                    send_booking_confirmed_guest(
-                        $guestEmail, $name, $restName2, $date, substr($time, 0, 5),
-                        $count, $effectiveDuration, '', $cEmail, $cPhone, $emLang, $cAddress
-                    );
-                } else {
-                    send_booking_pending_guest(
-                        $guestEmail, $name, $restName2, $date, substr($time, 0, 5),
-                        $count, '', $cEmail, $cPhone, $emLang, $cAddress
-                    );
-                }
+                mailer_use_restaurant($pdo, (int)$rest_id);
+                try {
+                    if ($autoConfirm) {
+                        send_booking_confirmed_guest(
+                            $guestEmail, $name, $restName2, $date, substr($time, 0, 5),
+                            $count, $effectiveDuration, '', $cEmail, $cPhone, $emLang, $cAddress
+                        );
+                    } else {
+                        send_booking_pending_guest(
+                            $guestEmail, $name, $restName2, $date, substr($time, 0, 5),
+                            $count, '', $cEmail, $cPhone, $emLang, $cAddress
+                        );
+                    }
+                } finally { mailer_use_default(); }
             } catch (Throwable $e) {
                 error_log('Admin create reservation email error: ' . $e->getMessage());
             }
@@ -837,14 +840,17 @@ if ($method === 'PUT') {
             }
             if ($existing['email']) {
                 $duration = (int)($existing['duration'] ?? $existing['restaurant_duration'] ?? 60);
-                send_booking_confirmed_guest(
-                    $existing['email'], $existing['guest_name'],
-                    $existing['restaurant_name'],
-                    $resDate, $resTime, (int)$existing['guest_count'], $duration, $editToken,
-                    $existing['contact_email'] ?? '', $existing['contact_phone'] ?? '',
-                    _resolve_email_lang(),
-                    $existing['restaurant_address'] ?? ''
-                );
+                mailer_use_restaurant($pdo, (int)$existing['restaurant_id']);
+                try {
+                    send_booking_confirmed_guest(
+                        $existing['email'], $existing['guest_name'],
+                        $existing['restaurant_name'],
+                        $resDate, $resTime, (int)$existing['guest_count'], $duration, $editToken,
+                        $existing['contact_email'] ?? '', $existing['contact_phone'] ?? '',
+                        _resolve_email_lang(),
+                        $existing['restaurant_address'] ?? ''
+                    );
+                } finally { mailer_use_default(); }
             }
             json_response(true, ['status' => 'confirmed']);
         } catch (PDOException $e) {
@@ -862,14 +868,17 @@ if ($method === 'PUT') {
             $pdo->prepare("UPDATE reservations SET status = 'rejected' WHERE id = ?")->execute([$id]);
             if ($existing['email']) {
                 $time = substr($existing['reservation_time'], 0, 5);
-                send_booking_rejected_guest(
-                    $existing['email'], $existing['guest_name'],
-                    $existing['restaurant_name'],
-                    $existing['reservation_date'], $time, (int)$existing['guest_count'],
-                    $existing['contact_email'] ?? '', $existing['contact_phone'] ?? '',
-                    _resolve_email_lang(),
-                    $existing['restaurant_address'] ?? ''
-                );
+                mailer_use_restaurant($pdo, (int)$existing['restaurant_id']);
+                try {
+                    send_booking_rejected_guest(
+                        $existing['email'], $existing['guest_name'],
+                        $existing['restaurant_name'],
+                        $existing['reservation_date'], $time, (int)$existing['guest_count'],
+                        $existing['contact_email'] ?? '', $existing['contact_phone'] ?? '',
+                        _resolve_email_lang(),
+                        $existing['restaurant_address'] ?? ''
+                    );
+                } finally { mailer_use_default(); }
             }
             // Zavrnjena rezervacija = sproščen termin → obvesti čakalno listo
             try { notify_waitlist($pdo, (int)$existing['restaurant_id'], $existing['reservation_date']); } catch (Throwable $e) { /* tiho */ }

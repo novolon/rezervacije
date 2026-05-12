@@ -596,17 +596,23 @@ if ($method === 'POST') {
         $cAddress = $rest['address']       ?? '';
         // Email v jeziku, ki ga je gost izbral pri rezervaciji.
         $emLang   = $guestLang;
-        if ($status === 'confirmed') {
-            send_booking_confirmed_guest($email, $guestName, $rest['name'], $date, $time, $guestCount, (int)$rest['reservation_duration'], $editToken ?? '', $cEmail, $cPhone, $emLang, $cAddress);
-        } else {
-            send_booking_pending_guest($email, $guestName, $rest['name'], $date, $time, $guestCount, $editToken ?? '', $cEmail, $cPhone, $emLang, $cAddress);
+        // Premium: pošlji preko restaurant-specific email providerja (custom Mailgun/SMTP), če verificiran.
+        mailer_use_restaurant($pdo, (int)$rest['id']);
+        try {
+            if ($status === 'confirmed') {
+                send_booking_confirmed_guest($email, $guestName, $rest['name'], $date, $time, $guestCount, (int)$rest['reservation_duration'], $editToken ?? '', $cEmail, $cPhone, $emLang, $cAddress);
+            } else {
+                send_booking_pending_guest($email, $guestName, $rest['name'], $date, $time, $guestCount, $editToken ?? '', $cEmail, $cPhone, $emLang, $cAddress);
+            }
+        } finally {
+            mailer_use_default();
         }
 
         $admin = $pdo->prepare("SELECT email, full_name FROM users WHERE id = ?");
         $admin->execute([$rest['owner_id']]);
         $adminRow = $admin->fetch();
         if ($adminRow && $adminRow['email']) {
-            // Admin email v admin lang (ne v guest lang).
+            // Admin email gre PRIVZETO (notify_admin = platform-level obvestilo, ne gostu).
             send_booking_notify_admin(
                 $adminRow['email'], $adminRow['full_name'],
                 $rest['name'], $guestName, $email,

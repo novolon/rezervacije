@@ -102,11 +102,14 @@ if ($action === 'approve') {
     }
 
     if ($res['email']) {
-        send_booking_confirmed_guest(
-            $res['email'], $res['guest_name'], $res['restaurant_name'],
-            $date, $time, (int)$res['guest_count'], $duration, $editToken, $cEmail, $cPhone,
-            _resolve_email_lang(), $cAddress
-        );
+        mailer_use_restaurant($pdo, (int)$res['restaurant_id']);
+        try {
+            send_booking_confirmed_guest(
+                $res['email'], $res['guest_name'], $res['restaurant_name'],
+                $date, $time, (int)$res['guest_count'], $duration, $editToken, $cEmail, $cPhone,
+                _resolve_email_lang(), $cAddress
+            );
+        } finally { mailer_use_default(); }
     }
 
     render_result('✅', 'Rezervacija potrjena',
@@ -118,11 +121,14 @@ if ($action === 'reject') {
     $pdo->prepare("UPDATE reservations SET status = 'rejected' WHERE id = ?")->execute([$id]);
 
     if ($res['email']) {
-        send_booking_rejected_guest(
-            $res['email'], $res['guest_name'], $res['restaurant_name'],
-            $date, $time, (int)$res['guest_count'], $cEmail, $cPhone,
-            _resolve_email_lang(), $cAddress
-        );
+        mailer_use_restaurant($pdo, (int)$res['restaurant_id']);
+        try {
+            send_booking_rejected_guest(
+                $res['email'], $res['guest_name'], $res['restaurant_name'],
+                $date, $time, (int)$res['guest_count'], $cEmail, $cPhone,
+                _resolve_email_lang(), $cAddress
+            );
+        } finally { mailer_use_default(); }
     }
 
     render_result('❌', 'Rezervacija zavrnjena',

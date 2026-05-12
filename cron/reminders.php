@@ -17,7 +17,7 @@ $tomorrow = date('Y-m-d', strtotime('+1 day'));
 
 // Pridobi vse potrjene rezervacije z emailom za jutri skupaj z lastnik adminom restavracije
 $stmt = $pdo->prepare("
-    SELECT r.id, r.guest_name, r.email, r.reservation_date, r.reservation_time, r.guest_count,
+    SELECT r.id, r.restaurant_id, r.guest_name, r.email, r.reservation_date, r.reservation_time, r.guest_count,
            res.name AS restaurant_name,
            COALESCE(r.duration, res.reservation_duration, 60) AS effective_duration,
            res.contact_email AS restaurant_contact_email,
@@ -49,19 +49,22 @@ foreach ($reservations as $r) {
     }
 
     $time = substr($r['reservation_time'], 0, 5);
-    $ok = send_booking_reminder_guest(
-        $r['email'],
-        $r['guest_name'],
-        $r['restaurant_name'],
-        $r['reservation_date'],
-        $time,
-        (int) $r['guest_count'],
-        (int) $r['effective_duration'],
-        (string)($r['restaurant_contact_email'] ?? ''),
-        (string)($r['restaurant_contact_phone'] ?? ''),
-        'sl',
-        (string)($r['restaurant_address'] ?? '')
-    );
+    mailer_use_restaurant($pdo, (int)$r['restaurant_id']);
+    try {
+        $ok = send_booking_reminder_guest(
+            $r['email'],
+            $r['guest_name'],
+            $r['restaurant_name'],
+            $r['reservation_date'],
+            $time,
+            (int) $r['guest_count'],
+            (int) $r['effective_duration'],
+            (string)($r['restaurant_contact_email'] ?? ''),
+            (string)($r['restaurant_contact_phone'] ?? ''),
+            'sl',
+            (string)($r['restaurant_address'] ?? '')
+        );
+    } finally { mailer_use_default(); }
     if ($ok) {
         $sent++;
     } else {

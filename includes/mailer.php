@@ -2,9 +2,31 @@
 /**
  * Mailgun HTTP API wrapper – pošilja email brez zunanjih knjižnic.
  * Zahteva konstante: MAILGUN_API_KEY, MAILGUN_DOMAIN, MAIL_FROM
+ *
+ * Per-restaurant override: mailer_use_restaurant($pdo, $restId) pred klici
+ * (custom Mailgun domena ali SMTP). mailer_use_default() po koncu sklopa.
  */
 
+require_once __DIR__ . '/email_provider.php';
+
+// Override config (thread-local).
+$GLOBALS['_mailer_override'] = null;
+
+function mailer_use_restaurant(PDO $pdo, int $restId): void {
+    $GLOBALS['_mailer_override'] = get_restaurant_email_config($pdo, $restId);
+}
+function mailer_use_default(): void {
+    $GLOBALS['_mailer_override'] = null;
+}
+
 function send_email(string $to, string $subject, string $html, string $text = ''): bool {
+    // Per-restaurant override (samo Premium z verificiranim email-om).
+    $override = $GLOBALS['_mailer_override'] ?? null;
+    if ($override && !empty($override['verified_at'])) {
+        return email_send_via_provider($override, $to, $subject, $html, $text);
+    }
+
+    // Privzeti Rezble Mailgun.
     if (!defined('MAILGUN_API_KEY') || !MAILGUN_API_KEY) {
         error_log('Mailer: MAILGUN_API_KEY ni nastavljen.');
         return false;
