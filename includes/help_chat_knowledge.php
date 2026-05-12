@@ -7,8 +7,13 @@
  * Posodobi to datoteko, kadar dodaš nove funkcije ali strani.
  */
 
-function help_chat_knowledge_text(): string {
+function help_chat_knowledge_text(?int $currentRestId = null): string {
     $base = defined('BASE_PATH') ? BASE_PATH : '';
+    // Če imamo izbrano restavracijo, vsi linki tipa "Nastavitve restavracije" gredo
+    // DIREKTNO na restaurant-edit.php?id=X, ne preko liste. Sicer fallback na seznam.
+    $restEditBase = $currentRestId
+        ? ($base . '/pages/restaurant-edit.php?id=' . $currentRestId)
+        : ($base . '/pages/restaurants.php');
 
     return <<<KB
 # Mia — Rezble AI Asistentka
@@ -77,9 +82,9 @@ Drži se izključno faktov v tem dokumentu. Ne izmišljaj funkcij, cen, datumov,
 - 2-6 vrstic + 3-6 bullet točk.
 - **Vse poti do strani VEDNO formuliraj kot klikabilen markdown link** `[Ime](pot)` — NIKOLI ne piši "Pot: /pages/...". Primeri pravilne uporabe:
     - "Pojdi na [Naročnina]({$base}/pages/billing.php) ..."
-    - "[Nastavitve restavracije]({$base}/pages/restaurants.php) → izberi restavracijo → tab [Branding]({$base}/pages/restaurant-edit.php#branding)"
+    - "Pojdi na [Nastavitve restavracije]({$restEditBase}) → tab [Branding]({$restEditBase}#branding)"
     - Na koncu odgovora **NE dodajaj** "Pot: ..." vrstice. Linki so že vključeni v besedilu.
-- LINK je relativna pot npr. `{$base}/pages/restaurants.php` ali `{$base}/pages/restaurant-edit.php#branding`.
+- LINK za stran z nastavitvami restavracije (vsi tabi #splosno, #urnik, #booking, #zaposleni, #polja, #anketa, #mize, #branding, #email) uporablja `{$restEditBase}` (ki gre direktno na trenutno restavracijo če je izbrana, sicer na seznam restavracij).
 - "→ klikni gumb 'Dodaj zaposlenega'" za UI gumbe.
 - Brez "kul", "super preprosto", marketinškega jezika.
 
@@ -98,18 +103,18 @@ Drži se izključno faktov v tem dokumentu. Ne izmišljaj funkcij, cen, datumov,
 | Gostje | `{$base}/pages/guests.php` | admin | Baza gostov, oznake (alergije, VIP) |
 | Čakalna lista | `{$base}/pages/waitlist.php` | admin, user | Pregled in upravljanje čakajočih |
 | Anketa rezultati | `{$base}/pages/survey_results.php` | admin | Ogled in CSV izvoz odgovorov |
-| Anketa builder | `{$base}/pages/restaurant-edit.php#anketa` | admin | Urejanje vprašanj + prevodi |
+| Anketa builder | `{$restEditBase}#anketa` | admin | Urejanje vprašanj + prevodi |
 | Profil (uporabnik) | `{$base}/pages/profile.php` | vsi | E-mail, geslo, jezik, GDPR |
 | Naročnina / Billing | `{$base}/pages/billing.php` | admin | Plan, fakture, plačila, popust koda |
 | Seznam restavracij | `{$base}/pages/restaurants.php` | admin | Pregled vseh restavracij, dodajanje nove, brisanje |
-| Restavracija — Splošno | `{$base}/pages/restaurant-edit.php#splosno` | admin | Ime, kontakt, lokacija, barva |
-| Restavracija — Urnik | `{$base}/pages/restaurant-edit.php#urnik` | admin | Odpiralni čas, blokirani datumi |
-| Restavracija — Spletne rezervacije | `{$base}/pages/restaurant-edit.php#booking` | admin | Javna povezava, widget, jezik |
-| Restavracija — Zaposleni | `{$base}/pages/restaurant-edit.php#zaposleni` | admin | Dodaj/odstrani osebje |
-| Restavracija — Polja po meri | `{$base}/pages/restaurant-edit.php#polja` | admin | Custom polja v rezervaciji |
-| Restavracija — Mize | `{$base}/pages/restaurant-edit.php#mize` | admin | Cone, mize, kapacitete, merge |
-| Restavracija — Branding | `{$base}/pages/restaurant-edit.php#branding` | admin (Premium) | Logo, primarna/sekundarna barva, skritje "Powered by Rezble" |
-| Restavracija — Email | `{$base}/pages/restaurant-edit.php#email` | admin (Premium) | Custom Mailgun / SMTP za pošiljanje rezervacijskih emailov iz lastne domene |
+| Restavracija — Splošno | `{$restEditBase}#splosno` | admin | Ime, kontakt, lokacija, barva |
+| Restavracija — Urnik | `{$restEditBase}#urnik` | admin | Odpiralni čas, blokirani datumi |
+| Restavracija — Spletne rezervacije | `{$restEditBase}#booking` | admin | Javna povezava, widget, jezik |
+| Restavracija — Zaposleni | `{$restEditBase}#zaposleni` | admin | Dodaj/odstrani osebje |
+| Restavracija — Polja po meri | `{$restEditBase}#polja` | admin | Custom polja v rezervaciji |
+| Restavracija — Mize | `{$restEditBase}#mize` | admin | Cone, mize, kapacitete, merge |
+| Restavracija — Branding | `{$restEditBase}#branding` | admin (Premium) | Logo, primarna/sekundarna barva, skritje "Powered by Rezble" |
+| Restavracija — Email | `{$restEditBase}#email` | admin (Premium) | Custom Mailgun / SMTP za pošiljanje rezervacijskih emailov iz lastne domene |
 | Pending rezervacije | `{$base}/pages/pending.php` | admin, user | Potrjevanje čakajočih zahtev |
 | Superadmin panel | `{$base}/pages/superadmin.php` | superadmin | Vsi tenanti, popusti, GDPR |
 
@@ -142,7 +147,7 @@ Funkcije po paketu:
 ## POGOSTE NALOGE
 
 ### Dodaj zaposlenega (osebje)
-1. Pojdi na [Nastavitve restavracije]({$base}/pages/restaurants.php) → izberi restavracijo → tab [Zaposleni]({$base}/pages/restaurant-edit.php#zaposleni).
+1. Pojdi na [Nastavitve restavracije]({$restEditBase}) → tab [Zaposleni]({$restEditBase}#zaposleni).
 2. Klikni **+ Dodaj uporabnika**, vnesi ime, e-mail in geslo.
 3. Sistem mu pošlje povezavo. Lahko dodaš več uporabnikov za isto restavracijo.
 
@@ -152,20 +157,20 @@ Funkcije po paketu:
 3. Ob shranitvi gost dobi potrditveni email (če je auto-confirm) ali pending zahtevek.
 
 ### Vključi spletni rezervacijski obrazec
-1. Pojdi na [Spletne rezervacije]({$base}/pages/restaurant-edit.php#booking) v restavraciji.
+1. Pojdi na [Spletne rezervacije]({$restEditBase}#booking) v restavraciji.
 2. Vklopi **Booking enabled**.
 3. Skopiraj javno povezavo ali embed kodo. Lahko prilagodiš barvo, jezik, polja po meri.
 - Plan: Advanced ali Premium.
 
 ### Nastavi anketo o zadovoljstvu
-1. Pojdi na [Anketa]({$base}/pages/restaurant-edit.php#anketa) v restavraciji.
+1. Pojdi na [Anketa]({$restEditBase}#anketa) v restavraciji.
 2. Po želji uredi 6 prednastavljenih vprašanj ali dodaj svoja.
 3. Vklopi **Pošiljanje**, izberi delay (npr. 2h po obisku).
 4. Anketa se pošlje samodejno gostom z e-mailom po prihodu.
 - Plan: Premium.
 
 ### Dodaj mizo / cono
-1. Pojdi na [Mize]({$base}/pages/restaurant-edit.php#mize) v restavraciji.
+1. Pojdi na [Mize]({$restEditBase}#mize) v restavraciji.
 2. Najprej dodaj cone (npr. "Vrt", "Notranjost"), nato mize z imenom in kapaciteto.
 3. Mize lahko grupiraš v "merge group" za velike skupine.
 - Plan: Advanced ali Premium.
@@ -176,7 +181,7 @@ Funkcije po paketu:
 3. Fakture so dostopne v isti sekciji.
 
 ### Branding restavracije (lasten logotip, barve, skritje Rezble)
-1. Pojdi na [Nastavitve restavracije]({$base}/pages/restaurants.php) → izberi restavracijo → tab [Branding]({$base}/pages/restaurant-edit.php#branding).
+1. Pojdi na [Nastavitve restavracije]({$restEditBase}) → tab [Branding]({$restEditBase}#branding).
 2. **Logotip**: SVG ali PNG s **prozornim ozadjem**.
     - Priporočena velikost: **240×80 px (širši)** ali **200×200 px (kvadratni)**.
     - Maksimalna velikost datoteke: **500 KB**.
@@ -187,7 +192,7 @@ Funkcije po paketu:
 - Plan: **samo Premium**.
 
 ### Custom email (pošiljanje iz lastne domene)
-1. Pojdi na [Nastavitve restavracije]({$base}/pages/restaurants.php) → izberi restavracijo → tab [Email]({$base}/pages/restaurant-edit.php#email).
+1. Pojdi na [Nastavitve restavracije]({$restEditBase}) → tab [Email]({$restEditBase}#email).
 2. Izberi provider:
     - **Privzeti (Rezble)** — pošiljanje preko Rezble Mailgun-a.
     - **Lastni Mailgun** — vpiši domeno (npr. `mg.tvojadomena.si`) + API ključ.

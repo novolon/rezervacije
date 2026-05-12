@@ -48,11 +48,11 @@ function _hc_calc_cost(int $in, int $out, int $cw, int $cr): float {
     return round($cost, 6);
 }
 
-function _hc_call_api(array $messages, string $userLang): array {
+function _hc_call_api(array $messages, string $userLang, ?int $currentRestId = null): array {
     if (!defined('ANTHROPIC_API_KEY') || !ANTHROPIC_API_KEY) {
         throw new RuntimeException('ANTHROPIC_API_KEY ni nastavljen.');
     }
-    $kb = help_chat_knowledge_text();
+    $kb = help_chat_knowledge_text($currentRestId);
     // Sistemski promt z cache_control za prompt caching.
     $payload = [
         'model'      => HELP_CHAT_MODEL,
@@ -207,9 +207,19 @@ if ($method === 'POST' && $action === 'send') {
     $pdo->prepare("INSERT INTO help_chat_messages (conversation_id, role, content) VALUES (?, 'user', ?)")
         ->execute([$convId, $message]);
 
-    // AI klic
+    // AI klic — Mia prejme ID trenutno izbrane restavracije, da linki gredo direktno na edit page.
+    $currentRestId = null;
+    if (!empty($_SESSION['restaurant_id'])) {
+        $currentRestId = (int)$_SESSION['restaurant_id'];
+    } elseif (!empty($session['user_id']) && ($session['role'] ?? '') === 'admin') {
+        // Admin brez session.restaurant_id — vzemi prvo restavracijo, ki jo lasti.
+        $rstmt = $pdo->prepare("SELECT restaurant_id FROM restaurant_admins WHERE user_id = ? ORDER BY restaurant_id ASC LIMIT 1");
+        $rstmt->execute([$session['user_id']]);
+        $rid = (int)$rstmt->fetchColumn();
+        if ($rid) $currentRestId = $rid;
+    }
     try {
-        $r = _hc_call_api($apiMessages, $userLang);
+        $r = _hc_call_api($apiMessages, $userLang, $currentRestId);
     } catch (Throwable $e) {
         error_log('help_chat AI error: ' . $e->getMessage());
         json_response(false, ['conversation_id' => $convId], 'AI ni dosegljiv. Poskusite znova.', 502);
