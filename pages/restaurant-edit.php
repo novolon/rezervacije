@@ -154,12 +154,8 @@ require_once '../includes/html_head.php';
     $topbarTitle    = $rest['name'];
     $topbarSubtitle = t('re.topbar_subtitle') . ' <span class="rest-color-dot" id="hdr-color-dot" style="background:' . h($rest['color']) . '"></span>'
                     . ' <span class="badge ' . ($rest['is_active'] ? 'badge-active' : 'badge-inactive') . '">' . ($rest['is_active'] ? t('re.status_active') : t('re.status_inactive')) . '</span>';
-    ob_start(); ?>
-    <a href="<?= BASE_PATH ?>/pages/restaurants.php" class="rz-btn">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m15 18-6-6 6-6"/></svg>
-        <span><?= t('common.back') ?></span>
-    </a>
-<?php $topbarActions = ob_get_clean(); require_once '../includes/topbar.php'; ?>
+    require_once '../includes/topbar.php';
+?>
 
 <div class="rest-edit-wrap">
 
@@ -976,11 +972,8 @@ require_once '../includes/html_head.php';
 
             <!-- Desno: preview -->
             <div class="re-section" style="position:sticky;top:14px;min-width:0">
-                <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px">
+                <div style="margin-bottom:10px">
                     <h3 style="font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-mute);margin:0"><?= t('re.brand_preview') ?></h3>
-                    <a href="<?= BASE_PATH ?>/book.php?t=<?= htmlspecialchars($rest['booking_token']) ?>" target="_blank" rel="noopener" style="font-size:12px;color:var(--accent);text-decoration:none">
-                        <?= t('re.brand_preview_open') ?> →
-                    </a>
                 </div>
                 <iframe id="brand-preview"
                         src="<?= BASE_PATH ?>/book.php?t=<?= htmlspecialchars($rest['booking_token']) ?>&preview=1"
