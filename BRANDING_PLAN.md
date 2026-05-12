@@ -190,8 +190,17 @@ SMTP geslo + Mailgun API ključ se shranita šifrirano:
 
 ## Status
 
-- [ ] Phase 1.1 — "by Rezble" link
-- [ ] Phase 1.2 — Logo upload
-- [ ] Phase 1.3 — Brand colors
-- [ ] Phase 1.4 — Live preview
-- [ ] Phase 2 — Custom email (Mailgun + SMTP)
+- [x] Phase 1.1 — "by Rezble" link (widget + book.php, hide via premium toggle)
+- [x] Phase 1.2 — Logo upload (api/upload_logo.php, 500KB max, MIME + SVG sanitizer)
+- [x] Phase 1.3 — Brand colors (primary + secondary, CSS variable injection)
+- [x] Phase 1.4 — Live preview (postMessage iframe, ?preview=1)
+- [x] Phase 2 — Custom email (Mailgun custom + SMTP), with verified-test workflow
+
+## TODO (manual deployment steps)
+
+1. Apply migration on prod: `sql/migrate_branding.sql`
+2. Set `APP_SECRET` constant in `config.php` (random 32+ char string) for proper AES key
+3. Create `uploads/logos/` directory writable by PHP user (apache/www-data)
+4. Translate `re.brand_*` and `re.email_*` keys to en/de/es/fr/hr/it/pt
+   (sl.json fallback works but native translations preferred)
+5. Test booking flow with: default Mailgun, Mailgun custom, SMTP (Gmail w/ App Pass)
