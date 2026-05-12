@@ -1878,6 +1878,7 @@
   "help_chat.send": "Pošlji",
   "help_chat.new_chat": "Nov pogovor",
   "help_chat.error": "Napaka pri komunikaciji",
+  "help_chat.locked_until": "Limit dosežen, počakajte",
   "help_chat.footer": "Pomoč ponuja virtualna asistentka Mia",
   "nav.help": "Pomoč",
   "landing_aff.meta_title": "Affiliate program – Rezble",

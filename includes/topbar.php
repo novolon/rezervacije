@@ -47,5 +47,5 @@ $_hcSession = $_SESSION ?? [];
 if (!empty($_hcSession['user_id']) && ($_hcSession['role'] ?? '') !== 'superadmin'):
 ?>
 <script>window.APP_BASE = window.APP_BASE || <?= json_encode(BASE_PATH) ?>;</script>
-<script src="<?= BASE_PATH ?>/assets/js/help_chat.js?v=2" defer></script>
+<script src="<?= BASE_PATH ?>/assets/js/help_chat.js?v=3" defer></script>
 <?php endif; ?>

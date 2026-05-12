@@ -35,6 +35,20 @@ const HELP_CHAT_PRICE_OUTPUT_MTK        = 5.00;
 const HELP_CHAT_PRICE_CACHE_WRITE_MTK   = 1.25;
 const HELP_CHAT_PRICE_CACHE_READ_MTK    = 0.10;
 
+// ─── Rate limiti (anti-zloraba) ────────────────────────────────────────
+// Dnevna kapaciteta po paketih (število user sporočil/dan).
+const HELP_CHAT_DAILY_LIMIT = [
+    'trial'    => 15,
+    'basic'    => 15,
+    'advanced' => 30,
+    'premium'  => 60,
+];
+// Burst: max sporočil v X-sekundnem oknu (proti scriptanim spam napadom).
+const HELP_CHAT_BURST_LIMIT     = 10;
+const HELP_CHAT_BURST_WINDOW_S  = 60;
+// Cost cap per uporabnik/dan (varnostna mreža za primer dolgih sporočil ali model anomalij).
+const HELP_CHAT_DAILY_COST_USD  = 0.50;
+
 $session = require_auth(); // tudi user lahko, ne le admin
 $pdo     = getDB();
 $method  = $_SERVER['REQUEST_METHOD'];
@@ -46,6 +60,132 @@ function _hc_calc_cost(int $in, int $out, int $cw, int $cr): float {
     $cost += ($cw  * HELP_CHAT_PRICE_CACHE_WRITE_MTK)  / 1_000_000;
     $cost += ($cr  * HELP_CHAT_PRICE_CACHE_READ_MTK)   / 1_000_000;
     return round($cost, 6);
+}
+
+// ─── Rate limit helper ────────────────────────────────────────────────
+// Preveri kvoto za uporabnika; vrne:
+//   ['ok'=>true,  'limit'=>N, 'used'=>K, 'remaining'=>N-K, 'cost_today'=>F]
+//   ['ok'=>false, 'reason'=>'daily_limit'|'cost_limit'|'burst', 'retry_in_s'=>S, ...]
+function _hc_check_quota(PDO $pdo, int $userId, string $role): array {
+    // Superadmin nima limita (interni testing).
+    if ($role === 'superadmin') {
+        return ['ok' => true, 'limit' => -1, 'used' => 0, 'remaining' => -1, 'cost_today' => 0.0];
+    }
+
+    // Plan-based dnevni limit
+    require_once __DIR__ . '/../includes/plans.php';
+    $sub  = get_active_subscription($pdo, $userId);
+    $slug = $sub['plan_slug'] ?? 'basic';
+    $dailyLimit = HELP_CHAT_DAILY_LIMIT[$slug] ?? HELP_CHAT_DAILY_LIMIT['basic'];
+
+    // Štetje user sporočil + cost summary za dnešnji dan
+    $stmt = $pdo->prepare("
+        SELECT
+            SUM(CASE WHEN m.role = 'user' THEN 1 ELSE 0 END)            AS user_msgs,
+            COALESCE(SUM(m.cost_usd), 0)                                AS cost_today
+        FROM help_chat_messages m
+        JOIN help_chat_conversations c ON m.conversation_id = c.id
+        WHERE c.user_id = ?
+          AND m.created_at >= CURDATE()
+          AND m.created_at <  CURDATE() + INTERVAL 1 DAY
+    ");
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch();
+    $usedToday  = (int)($row['user_msgs']  ?? 0);
+    $costToday  = (float)($row['cost_today'] ?? 0);
+    $secsUntilMidnight = strtotime('tomorrow 00:00:00') - time();
+
+    if ($usedToday >= $dailyLimit) {
+        return [
+            'ok'         => false,
+            'reason'     => 'daily_limit',
+            'limit'      => $dailyLimit,
+            'used'       => $usedToday,
+            'retry_in_s' => $secsUntilMidnight,
+        ];
+    }
+    if ($costToday >= HELP_CHAT_DAILY_COST_USD) {
+        return [
+            'ok'         => false,
+            'reason'     => 'cost_limit',
+            'cost_today' => $costToday,
+            'retry_in_s' => $secsUntilMidnight,
+        ];
+    }
+
+    // Burst preverjanje (zadnjih HELP_CHAT_BURST_WINDOW_S sekund)
+    $bstmt = $pdo->prepare("
+        SELECT COUNT(*) FROM help_chat_messages m
+        JOIN help_chat_conversations c ON m.conversation_id = c.id
+        WHERE c.user_id = ?
+          AND m.role = 'user'
+          AND m.created_at > NOW() - INTERVAL ? SECOND
+    ");
+    $bstmt->execute([$userId, HELP_CHAT_BURST_WINDOW_S]);
+    $burstCnt = (int)$bstmt->fetchColumn();
+    if ($burstCnt >= HELP_CHAT_BURST_LIMIT) {
+        return [
+            'ok'         => false,
+            'reason'     => 'burst',
+            'retry_in_s' => HELP_CHAT_BURST_WINDOW_S,
+        ];
+    }
+
+    return [
+        'ok'         => true,
+        'limit'      => $dailyLimit,
+        'used'       => $usedToday,
+        'remaining'  => $dailyLimit - $usedToday,
+        'cost_today' => round($costToday, 4),
+    ];
+}
+
+// Lokalizirana sporočila za kvoto (fallback na SL).
+function _hc_quota_message(string $reason, string $lang, array $ctx = []): string {
+    $msgs = [
+        'sl' => [
+            'daily_limit' => 'Dosegli ste dnevno omejitev za Mio (' . ($ctx['limit'] ?? '?') . ' vprašanj). Vrnete se jutri.',
+            'cost_limit'  => 'Dosegli ste dnevno omejitev za Mio. Vrnete se jutri.',
+            'burst'       => 'Preveč vprašanj v kratkem času. Počakajte 1 minuto, prosim.',
+        ],
+        'en' => [
+            'daily_limit' => 'You have reached the daily Mia limit (' . ($ctx['limit'] ?? '?') . ' questions). Try again tomorrow.',
+            'cost_limit'  => 'You have reached the daily Mia limit. Try again tomorrow.',
+            'burst'       => 'Too many questions in a short time. Please wait 1 minute.',
+        ],
+        'de' => [
+            'daily_limit' => 'Sie haben das tägliche Mia-Limit erreicht (' . ($ctx['limit'] ?? '?') . ' Fragen). Versuchen Sie es morgen erneut.',
+            'cost_limit'  => 'Sie haben das tägliche Mia-Limit erreicht. Versuchen Sie es morgen erneut.',
+            'burst'       => 'Zu viele Anfragen in kurzer Zeit. Bitte warten Sie 1 Minute.',
+        ],
+        'it' => [
+            'daily_limit' => 'Hai raggiunto il limite giornaliero di Mia (' . ($ctx['limit'] ?? '?') . ' domande). Riprova domani.',
+            'cost_limit'  => 'Hai raggiunto il limite giornaliero di Mia. Riprova domani.',
+            'burst'       => 'Troppe domande in poco tempo. Attendi 1 minuto.',
+        ],
+        'fr' => [
+            'daily_limit' => 'Vous avez atteint la limite quotidienne de Mia (' . ($ctx['limit'] ?? '?') . ' questions). Réessayez demain.',
+            'cost_limit'  => 'Vous avez atteint la limite quotidienne de Mia. Réessayez demain.',
+            'burst'       => 'Trop de questions en peu de temps. Attendez 1 minute.',
+        ],
+        'hr' => [
+            'daily_limit' => 'Dosegli ste dnevni limit za Miu (' . ($ctx['limit'] ?? '?') . ' pitanja). Pokušajte ponovno sutra.',
+            'cost_limit'  => 'Dosegli ste dnevni limit za Miu. Pokušajte ponovno sutra.',
+            'burst'       => 'Previše pitanja u kratkom vremenu. Pričekajte 1 minutu.',
+        ],
+        'es' => [
+            'daily_limit' => 'Ha alcanzado el límite diario de Mia (' . ($ctx['limit'] ?? '?') . ' preguntas). Vuelva a intentarlo mañana.',
+            'cost_limit'  => 'Ha alcanzado el límite diario de Mia. Vuelva a intentarlo mañana.',
+            'burst'       => 'Demasiadas preguntas en poco tiempo. Espere 1 minuto.',
+        ],
+        'pt' => [
+            'daily_limit' => 'Atingiu o limite diário da Mia (' . ($ctx['limit'] ?? '?') . ' perguntas). Tente novamente amanhã.',
+            'cost_limit'  => 'Atingiu o limite diário da Mia. Tente novamente amanhã.',
+            'burst'       => 'Demasiadas perguntas em pouco tempo. Aguarde 1 minuto.',
+        ],
+    ];
+    if (!isset($msgs[$lang])) $lang = 'sl';
+    return $msgs[$lang][$reason] ?? $msgs[$lang]['daily_limit'];
 }
 
 function _hc_call_api(array $messages, string $userLang, ?int $currentRestId = null): array {
@@ -115,6 +255,13 @@ function _hc_user_owns_conversation(PDO $pdo, array $session, int $convId): bool
     return $owner !== false && (int)$owner === (int)$session['user_id'];
 }
 
+// ─── GET ?action=quota ────────────────────────────────────────────────────────
+// Vrne trenutno stanje kvote uporabnika (za prikaz "X/Y vprašanj danes" v UI).
+if ($method === 'GET' && $action === 'quota') {
+    $q = _hc_check_quota($pdo, (int)$session['user_id'], $session['role'] ?? '');
+    json_response(true, $q);
+}
+
 // ─── GET ?action=list ─────────────────────────────────────────────────────────
 if ($method === 'GET' && $action === 'list') {
     $stmt = $pdo->prepare("
@@ -159,6 +306,18 @@ if ($method === 'POST' && $action === 'send') {
 
     // Določi/ustvari pogovor
     $userLang = !empty($_COOKIE['rzlang']) ? (string)$_COOKIE['rzlang'] : 'sl';
+
+    // ── Rate limit check (PRED kakršnimkoli DB inserts ali API call-om) ──
+    $quota = _hc_check_quota($pdo, (int)$session['user_id'], $session['role'] ?? '');
+    if (!$quota['ok']) {
+        $msg = _hc_quota_message($quota['reason'], $userLang, $quota);
+        json_response(false, [
+            'reason'     => $quota['reason'],
+            'retry_in_s' => $quota['retry_in_s'] ?? 0,
+            'limit'      => $quota['limit']      ?? null,
+            'used'       => $quota['used']       ?? null,
+        ], $msg, 429);
+    }
     if ($convId > 0) {
         if (!_hc_user_owns_conversation($pdo, $session, $convId)) {
             json_response(false, null, 'Dostop zavrnjen.', 403);

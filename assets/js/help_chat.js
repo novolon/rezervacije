@@ -193,6 +193,35 @@
     ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
   }
 
+  // Zaklene input/send za N sekund (rate limit). Po koncu samodejno odklene.
+  let _lockTimer = null;
+  let _lockUntil = 0;
+  function lockInputFor(seconds) {
+    const ta  = document.getElementById('rz-hc-input');
+    const btn = document.getElementById('rz-hc-send');
+    if (!ta || !btn) return;
+    _lockUntil = Date.now() + seconds * 1000;
+    const orig = ta.placeholder;
+    function tick() {
+      const left = Math.max(0, Math.ceil((_lockUntil - Date.now()) / 1000));
+      if (left <= 0) {
+        ta.disabled = false; btn.disabled = false;
+        ta.placeholder = orig;
+        clearInterval(_lockTimer); _lockTimer = null;
+        return;
+      }
+      let fmt;
+      if (left > 3600)   fmt = Math.ceil(left / 3600) + 'h';
+      else if (left > 60) fmt = Math.ceil(left / 60) + 'min';
+      else                fmt = left + 's';
+      ta.placeholder = (T('help_chat.locked_until') || 'Limit dosežen, počakajte') + ' ' + fmt;
+    }
+    ta.disabled = true; btn.disabled = true;
+    tick();
+    if (_lockTimer) clearInterval(_lockTimer);
+    _lockTimer = setInterval(tick, 1000);
+  }
+
   // ── Sending message ───────────────────────────────────────────────────
   async function send() {
     if (state.busy) return;
@@ -218,6 +247,13 @@
       hideTyping();
       if (!j.success) {
         if (j.data && j.data.conversation_id) state.conversationId = j.data.conversation_id;
+        // Rate limit (429): pokaži samo direct sporočilo + disable inputa za retry_in_s
+        if (r.status === 429) {
+          appendMessage('assistant', j.error || T('help_chat.error'));
+          const retryIn = (j.data && j.data.retry_in_s) || 0;
+          if (retryIn > 0 && retryIn < 7200) lockInputFor(retryIn);
+          return;
+        }
         appendMessage('assistant', T('help_chat.error') + (j.error ? ': ' + j.error : ''));
         return;
       }
