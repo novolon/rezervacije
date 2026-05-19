@@ -7,6 +7,7 @@ require_once '../includes/guest_helper.php';
 require_once '../includes/waitlist_notifier.php';
 require_once '../includes/plans.php';
 require_once '../includes/table_helper.php';
+require_once '../includes/realtime.php';
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -433,11 +434,17 @@ if ($method === 'POST' && ($_GET['action'] ?? '') === 'mark_arrived') {
     if ($undo) {
         $pdo->prepare("UPDATE reservations SET arrived_at = NULL WHERE id = ?")->execute([$id]);
         $pdo->prepare("DELETE FROM survey_responses WHERE reservation_id = ? AND email_sent_at IS NULL")->execute([$id]);
+        insert_realtime_event($pdo, (int)$res['restaurant_id'], 'reservation_updated', [
+            'id' => $id, 'arrived_at' => null,
+        ]);
         json_response(true, ['arrived_at' => null]);
     }
 
     $pdo->prepare("UPDATE reservations SET arrived_at = NOW() WHERE id = ?")->execute([$id]);
     $arrivedAt = date('Y-m-d H:i:s');
+    insert_realtime_event($pdo, (int)$res['restaurant_id'], 'reservation_arrived', [
+        'id' => $id, 'arrived_at' => $arrivedAt,
+    ]);
 
     $surveyCreated = false;
     if (!empty($res['email']) && user_has_feature($pdo, (int)$session['user_id'], 'survey')) {
@@ -506,11 +513,17 @@ if ($method === 'POST' && ($_GET['action'] ?? '') === 'mark_no_show') {
             $val   = $res['email'] ? strtolower($res['email']) : $res['phone'];
             $pdo->prepare("UPDATE guests SET no_shows = GREATEST(0, no_shows - 1) WHERE restaurant_id = ? AND {$where}")->execute([(int)$res['restaurant_id'], $val]);
         }
+        insert_realtime_event($pdo, (int)$res['restaurant_id'], 'reservation_status_changed', [
+            'id' => $id, 'status' => 'confirmed', 'no_show_at' => null,
+        ]);
         json_response(true, ['no_show_at' => null]);
     }
 
     $pdo->prepare("UPDATE reservations SET no_show_at = NOW(), status = 'no_show' WHERE id = ?")->execute([$id]);
     $noShowAt = date('Y-m-d H:i:s');
+    insert_realtime_event($pdo, (int)$res['restaurant_id'], 'reservation_noshow', [
+        'id' => $id, 'status' => 'no_show', 'no_show_at' => $noShowAt,
+    ]);
 
     // Posodobi profil gosta
     $guestEmail = strtolower(trim($res['guest_email'] ?? $res['email'] ?? ''));
@@ -784,6 +797,14 @@ if ($method === 'POST') {
         attach_table_assignments_bulk($pdo, $rows);
         $responseData = $rows[0];
         if ($tableWarning) $responseData['table_warning'] = $tableWarning;
+        insert_realtime_event($pdo, (int)$rest_id, 'reservation_added', [
+            'id'               => $id,
+            'reservation_date' => $date,
+            'reservation_time' => substr($time, 0, 5),
+            'guest_count'      => $count,
+            'guest_name'       => $name,
+            'status'           => $row['status'] ?? null,
+        ]);
         json_response(true, $responseData, '', 201);
 
     } catch (Throwable $e) {
@@ -852,6 +873,9 @@ if ($method === 'PUT') {
                     );
                 } finally { mailer_use_default(); }
             }
+            insert_realtime_event($pdo, (int)$existing['restaurant_id'], 'reservation_status_changed', [
+                'id' => $id, 'status' => 'confirmed',
+            ]);
             json_response(true, ['status' => 'confirmed']);
         } catch (PDOException $e) {
             error_log('Approve error: ' . $e->getMessage());
@@ -882,6 +906,9 @@ if ($method === 'PUT') {
             }
             // Zavrnjena rezervacija = sproščen termin → obvesti čakalno listo
             try { notify_waitlist($pdo, (int)$existing['restaurant_id'], $existing['reservation_date']); } catch (Throwable $e) { /* tiho */ }
+            insert_realtime_event($pdo, (int)$existing['restaurant_id'], 'reservation_status_changed', [
+                'id' => $id, 'status' => 'rejected',
+            ]);
             json_response(true, ['status' => 'rejected']);
         } catch (PDOException $e) {
             error_log('Reject error: ' . $e->getMessage());
@@ -990,6 +1017,13 @@ if ($method === 'PUT') {
         attach_table_assignments_bulk($pdo, $rows);
         $putResponseData = $rows[0];
         if ($putTableWarning) $putResponseData['table_warning'] = $putTableWarning;
+        insert_realtime_event($pdo, (int)$existing['restaurant_id'], 'reservation_updated', [
+            'id'               => $id,
+            'reservation_date' => $date,
+            'reservation_time' => substr($time, 0, 5),
+            'guest_count'      => $count,
+            'guest_name'       => $name,
+        ]);
         json_response(true, $putResponseData);
 
     } catch (Throwable $e) {
@@ -1034,6 +1068,9 @@ if ($method === 'DELETE') {
         $pdo->prepare("DELETE FROM reservations WHERE id = ?")->execute([$id]);
         // Obvesti čakalno listo (ko se termin sprosti)
         try { notify_waitlist($pdo, $restId, $date); } catch (Throwable $e) { /* tiho */ }
+        insert_realtime_event($pdo, $restId, 'reservation_deleted', [
+            'id' => $id, 'reservation_date' => $date,
+        ]);
         json_response(true);
     } catch (PDOException $e) {
         error_log('Reservation delete error: ' . $e->getMessage());

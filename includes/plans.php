@@ -30,6 +30,7 @@ define('PLANS', [
                               'guest_emails', 'guest_reminders',
                               'public_booking', 'booking_approval',
                               'guest_database',
+                              'realtime_sync',
                               'table_management'],
     ],
     'premium' => [
@@ -45,6 +46,7 @@ define('PLANS', [
                               'auto_confirm', 'sms_notifications',
                               'survey', 'survey_edit', 'survey_export',
                               'guest_database', 'waitlist',
+                              'realtime_sync',
                               'table_management'],
     ],
 ]);
@@ -70,6 +72,7 @@ const FEATURE_LABELS = [
     'survey_export'   => 'CSV izvoz anket',
     'guest_database'  => 'Baza gostov z zgodovino',
     'waitlist'        => 'Čakalna lista',
+    'realtime_sync'   => 'Sinhronizacija v živo (večnaprava)',
     'table_management'=> 'Upravljanje miz in zmogljivosti',
     'custom_logo'     => 'Lasten logotip v widget/booking',
     'custom_colors'   => 'Lastne barve widget/booking',

@@ -58,16 +58,22 @@ if ($isAdmin && empty($restId) && !empty($restaurants)) {
 
 // Za hasTableMgmt: admin preverimo po user_id, user vloga po owner_id restavracije
 $hasTableMgmt = false;
+$hasRealtime  = false;
 if ($_SESSION['role'] === 'superadmin') {
     $hasTableMgmt = true;
+    $hasRealtime  = true;
 } elseif ($isAdmin) {
     $hasTableMgmt = user_has_feature($pdo, (int)$_SESSION['user_id'], 'table_management');
+    $hasRealtime  = user_has_feature($pdo, (int)$_SESSION['user_id'], 'realtime_sync');
 } elseif ($_SESSION['role'] === 'user' && $restId) {
     try {
         $owQ = $pdo->prepare("SELECT owner_id FROM restaurants WHERE id = ? LIMIT 1");
         $owQ->execute([$restId]);
         $owId = (int)$owQ->fetchColumn();
-        if ($owId) $hasTableMgmt = user_has_feature($pdo, $owId, 'table_management');
+        if ($owId) {
+            $hasTableMgmt = user_has_feature($pdo, $owId, 'table_management');
+            $hasRealtime  = user_has_feature($pdo, $owId, 'realtime_sync');
+        }
     } catch (PDOException $e) { /* tiho */ }
 }
 
@@ -407,6 +413,7 @@ window.APP_STATE = <?= json_encode([
     'hasSurvey'       => $isAdmin ? user_has_feature($pdo, (int)$_SESSION['user_id'], 'survey') : false,
     'hasGuestDatabase'=> $isAdmin ? user_has_feature($pdo, (int)$_SESSION['user_id'], 'guest_database') : false,
     'hasTableMgmt'    => $hasTableMgmt,
+    'hasRealtime'     => $hasRealtime,
 ], JSON_UNESCAPED_UNICODE) ?>;
 </script>
 
@@ -508,6 +515,33 @@ if (new URLSearchParams(location.search).get('new') === '1') {
 <script src="<?= BASE_PATH ?>/assets/js/modal.js?v=<?= $cv ?>"></script>
 <script src="<?= BASE_PATH ?>/assets/js/daily-report.js?v=<?= $cv ?>"></script>
 <script src="<?= BASE_PATH ?>/assets/js/app.js?v=<?= $cv ?>"></script>
+<?php if ($hasRealtime): ?>
+<script src="<?= BASE_PATH ?>/assets/js/realtime.js?v=<?= $cv ?>"></script>
+<script>
+// Bootstrap real-time SSE — počakaj na App.init() in nato connect
+(function() {
+    function bootRealtime() {
+        if (!window.Realtime || !window.App || typeof App.getState !== 'function') {
+            return setTimeout(bootRealtime, 150);
+        }
+        const st = App.getState();
+        if (st && st.restaurantId) {
+            Realtime.connect(st.restaurantId);
+        }
+        // Spremljaj menjavo restavracije v dropdown-u
+        const sel = document.getElementById('restaurant-select');
+        if (sel) {
+            sel.addEventListener('change', () => {
+                const rid = parseInt(sel.value, 10);
+                if (rid) Realtime.connect(rid);
+                else Realtime.disconnect();
+            });
+        }
+    }
+    document.addEventListener('DOMContentLoaded', () => setTimeout(bootRealtime, 200));
+})();
+</script>
+<?php endif; ?>
 <script src="<?= BASE_PATH ?>/assets/js/rezble-shell.js?v=<?= $cv ?>"></script>
 
 </main>
